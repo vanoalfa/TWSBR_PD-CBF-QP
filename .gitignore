@@ -1,0 +1,58 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# acados build/generated files
+c_generated_code/
+acados_ocp.json
+*.o
+*.a
+build_acados/
+
+# pybullet / simulation artifacts
+*.bullet
+*.urdf.bak
+
+# Logs & hasil eksperimen besar (opsional, aktifkan kalau file besar)
+# results/
+# *.csv
+# *.npy
+# *.npz
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment variables / secrets
+.env

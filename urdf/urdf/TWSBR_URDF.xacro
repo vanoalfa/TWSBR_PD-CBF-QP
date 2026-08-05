@@ -1,0 +1,84 @@
+<?xml version="1.0" ?>
+<robot name="TWSBR_URDF" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+<xacro:include filename="$(find TWSBR_URDF_description)/urdf/materials.xacro" />
+<xacro:include filename="$(find TWSBR_URDF_description)/urdf/TWSBR_URDF.trans" />
+<xacro:include filename="$(find TWSBR_URDF_description)/urdf/TWSBR_URDF.gazebo" />
+<link name="base_link">
+  <inertial>
+    <origin xyz="4.076852299762098e-17 0.17403727808522892 4.132000390427517e-11" rpy="0 0 0"/>
+    <mass value="28.01978736128011"/>
+    <inertia ixx="0.371608" iyy="0.182032" izz="0.516734" ixy="-0.0" iyz="-0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://TWSBR_URDF_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://TWSBR_URDF_description/meshes/base_link.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="wheelL_link_1">
+  <inertial>
+    <origin xyz="0.038200681271520986 -1.3711254354120683e-14 1.7894748445548314e-15" rpy="0 0 0"/>
+    <mass value="2.9583477547255947"/>
+    <inertia ixx="0.003509" iyy="0.002359" izz="0.002359" ixy="-0.0" iyz="0.0" ixz="0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="-0.112008 -0.03 -0.0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://TWSBR_URDF_description/meshes/wheelL_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="-0.112008 -0.03 -0.0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://TWSBR_URDF_description/meshes/wheelL_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<link name="wheelR_link_1">
+  <inertial>
+    <origin xyz="-0.0382006812715209 3.122502256758253e-17 1.3852638420119615e-14" rpy="0 0 0"/>
+    <mass value="2.9583477547255947"/>
+    <inertia ixx="0.003509" iyy="0.002359" izz="0.002359" ixy="-0.0" iyz="-0.0" ixz="-0.0"/>
+  </inertial>
+  <visual>
+    <origin xyz="0.112008 -0.03 -0.0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://TWSBR_URDF_description/meshes/wheelR_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+    <material name="silver"/>
+  </visual>
+  <collision>
+    <origin xyz="0.112008 -0.03 -0.0" rpy="0 0 0"/>
+    <geometry>
+      <mesh filename="package://TWSBR_URDF_description/meshes/wheelR_link_1.stl" scale="0.001 0.001 0.001"/>
+    </geometry>
+  </collision>
+</link>
+
+<joint name="Revolute 1" type="continuous">
+  <origin xyz="0.112008 0.03 0.0" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="wheelL_link_1"/>
+  <axis xyz="-1.0 0.0 0.0"/>
+</joint>
+
+<joint name="Revolute 2" type="continuous">
+  <origin xyz="-0.112008 0.03 0.0" rpy="0 0 0"/>
+  <parent link="base_link"/>
+  <child link="wheelR_link_1"/>
+  <axis xyz="-1.0 0.0 0.0"/>
+</joint>
+
+</robot>
