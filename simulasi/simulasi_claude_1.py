@@ -41,12 +41,12 @@ SIM_TIMESTEP = 1.0 / SIM_FREQUENCY
 LOG_INTERVAL_STEPS = 120   # cetak log tiap 120 step (~0.5 detik pada 240 Hz)
 
 # --- Posisi & orientasi awal robot ---
-START_POS = [0, 0, 0.3]                                    # (x, y, z) meter -- sesuaikan tinggi robot Anda
+START_POS = [0, 0, 0.04]                                    # (x, y, z) meter -- sesuaikan tinggi robot Anda
 START_ORIENTATION = p.getQuaternionFromEuler([math.pi/2, 0, 0])  # koreksi Y-up (Fusion) -> Z-up (PyBullet)
 
 # --- Konfigurasi sumbu tilt (ASUMSI AWAL, lihat panduan debugging di akhir file) ---
-AXIS_TILT_INDEX = 1        # index sudut Euler yang mewakili sudut tilt robot (0=roll, 1=pitch, 2=yaw)
-TORQUE_SIGN = 1            # kalikan -1 di sini kalau arah torsi terbukti terbalik saat uji coba
+AXIS_TILT_INDEX = 0        # index sudut Euler yang mewakili sudut tilt robot (0=roll, 1=pitch, 2=yaw)
+TORQUE_SIGN = -1            # kalikan -1 di sini kalau arah torsi terbukti terbalik saat uji coba
 
 # --- Pattern nama child_link untuk deteksi otomatis joint roda ---
 LEFT_WHEEL_PATTERN = "wheelL"
