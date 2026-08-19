@@ -57,6 +57,7 @@ Thumbs.db
 # Environment variables / secrets
 .env
 acados/
+program/ddsm115_python/
 
 # RPi-specific
 *.pid
