@@ -3,12 +3,14 @@ contourpy==1.3.2
 crcmod==1.7
 cycler==0.12.1
 Cython==3.2.9
+ddsm115 @ file:///home/atera/projects/skripsi/program/ddsm115_python
 Deprecated==1.3.1
 fonttools==4.63.0
 kiwisolver==1.5.0
 MathLab==0.1.0
 matlab==0.1
 matplotlib==3.10.9
+mpu6050-raspberrypi==1.2
 numpy==2.2.6
 packaging==26.2
 pandas==2.3.3
