@@ -23,5 +23,6 @@ python-dateutil==2.9.0.post0
 pytz==2026.3.post1
 scipy==1.15.3
 six==1.17.0
+smbus2==0.6.1
 tzdata==2026.3
 wrapt==2.3.0
