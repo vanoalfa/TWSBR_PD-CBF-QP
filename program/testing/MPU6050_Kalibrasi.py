@@ -17,7 +17,7 @@
 #   - Bergerak ke arah -  -> sudut turun dari 0 menuju -180
 
 from Kalman import KalmanAngle
-import smbus            #import SMBus module of I2C
+import smbus2 as smbus
 import time
 import math
 import sys
