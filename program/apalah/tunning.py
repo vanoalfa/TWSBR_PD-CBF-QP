@@ -5,6 +5,21 @@ kalibrasi, dan tuning di lapangan.
 """
 
 # =========================
+# Tunning Control
+# =========================
+# Output kontrol dinormalisasi ke -1.0 .. +1.0
+Kp = 0.080
+Kd = 0.014
+Alpha_1 = 0.0
+Alpha_2 = 0.0
+OUTPUT_LIMIT = 1.0
+CONTROLLER_DEADBAND_DEG = 0.05
+
+# Perintah manual saat balancing aktif
+MANUAL_FORWARD_TARGET_DEG = 1.20
+MANUAL_BACKWARD_TARGET_DEG = -1.20
+
+# =========================
 # Motor / serial parameters
 # =========================
 LEFT_MOTOR_PORT = "/dev/ttyACM0"
@@ -55,19 +70,6 @@ GYRO_CALIBRATION_DELAY_S = 0.002
 
 ZERO_CALIBRATION_SAMPLES = 350
 ZERO_CALIBRATION_DELAY_S = 0.004
-
-# =========================
-# PD controller tuning
-# =========================
-# Output kontrol dinormalisasi ke -1.0 .. +1.0
-Kp = 0.080
-Kd = 0.014
-OUTPUT_LIMIT = 1.0
-CONTROLLER_DEADBAND_DEG = 0.05
-
-# Perintah manual saat balancing aktif
-MANUAL_FORWARD_TARGET_DEG = 1.20
-MANUAL_BACKWARD_TARGET_DEG = -1.20
 
 # =========================
 # Runtime / UI / safety
