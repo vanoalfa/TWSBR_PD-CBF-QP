@@ -1,9 +1,5 @@
-"""Kontrol PD untuk two-wheeled self-balancing robot."""
-
 from __future__ import annotations
-
 from dataclasses import dataclass
-
 import tunning
 
 
