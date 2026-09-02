@@ -37,8 +37,8 @@ MOTOR_TIMEOUT_S = 0.03
 MOTOR_CONTROL_MODE = "current"
 
 # Jika arah putaran salah, ubah salah satu sign ini.
-LEFT_MOTOR_SIGN = 1.0
-RIGHT_MOTOR_SIGN = -1.0
+LEFT_MOTOR_SIGN = -1.0
+RIGHT_MOTOR_SIGN = 1.0
 
 # Jika robot justru makin jatuh saat balancing mulai aktif,
 # ubah jadi -1.0.
