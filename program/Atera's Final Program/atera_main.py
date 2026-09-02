@@ -1,277 +1,416 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from enum import Enum, auto
-from typing import List
+import math
+import sys
+import threading
 import time
+from dataclasses import dataclass
+from enum import Enum
+from typing import Optional
+
+import config
+from ddsm115 import DualDDSM115
+from mpu6050 import MPU6050Reader
+from pd_control import PDController, PDControlState
+
+try:
+    import keyboard as keyboard_lib  # type: ignore
+except Exception:
+    keyboard_lib = None
+
+try:
+    import msvcrt  # type: ignore
+except Exception:
+    msvcrt = None
+
+try:
+    from cbf_qp import CBFQPController  # type: ignore
+except Exception:
+    CBFQPController = None
 
 
-class AppMode(Enum):
-    IDLE = auto()
-    BALANCING = auto()
-    STOPPED = auto()
+class ActiveMode(str, Enum):
+    PD_ONLY = "PD_ONLY"
+    PD_PLUS_CBF_QP = "PD_PLUS_CBF_QP"
 
 
-class ControlMode(Enum):
-    PD_ONLY = auto()
-    PD_PLUS_CBF_QP = auto()
+class RobotMode(str, Enum):
+    BALANCE = "BALANCE"
+    KALIBRASI = "KALIBRASI"
+    MONO = "MONO"
+    NUGGET = "NUGGET"
 
 
 @dataclass
-class ControllerState:
-    mode: AppMode = AppMode.IDLE
-    control_mode: ControlMode = ControlMode.PD_ONLY
+class MotionCommand:
+    forward: int = 0
+    turn: int = 0
+    active: bool = False
+    last_update: float = 0.0
+
+
+@dataclass
+class RuntimeState:
+    active_mode: ActiveMode = ActiveMode.PD_ONLY
+    robot_mode: RobotMode = RobotMode.BALANCE
     running: bool = True
-
-    # Existing/common runtime state
-    theta: float = 0.0
-    theta_dot: float = 0.0
-    x: float = 0.0
-    x_dot: float = 0.0
-    target_theta: float = 0.0
-    target_x: float = 0.0
-    last_control: float = 0.0
-
-    # Requested fields
-    cbf_qp_available: bool = True
-    cbf_qp_effective: bool = False
-    last_control_path: str = "none"
-    last_cbf_qp_status: str = "not_used"
-
-    logs: List[str] = field(default_factory=list)
+    theta_deg: float = 0.0
+    theta_dot_deg_s: float = 0.0
+    psi_deg: float = 0.0
+    psi_dot_deg_s: float = 0.0
+    left_motor: float = 0.0
+    right_motor: float = 0.0
+    total_motor: float = 0.0
+    cbf_status: str = "INACTIVE"
+    control_path: str = "PD_ONLY"
+    setpoint_psi: float = 0.0
+    setpoint_theta: float = 0.0
+    turn_command: float = 0.0
+    last_error: str = ""
 
 
-class AteraMaint:
+class KeyboardManager:
+    def __init__(self, motion: MotionCommand, runtime: RuntimeState) -> None:
+        self.motion = motion
+        self.runtime = runtime
+        self._lock = threading.Lock()
+        self._thread: Optional[threading.Thread] = None
+        self._stop_event = threading.Event()
+        self._supports_keyboard = keyboard_lib is not None
+        self._supports_msvcrt = (msvcrt is not None) and sys.platform.startswith("win")
+
+    def start(self) -> None:
+        if self._supports_keyboard:
+            self._thread = threading.Thread(target=self._keyboard_loop, daemon=True)
+            self._thread.start()
+        elif self._supports_msvcrt:
+            self._thread = threading.Thread(target=self._msvcrt_loop, daemon=True)
+            self._thread.start()
+        else:
+            raise RuntimeError("keyboard library tidak tersedia dan fallback msvcrt tidak bisa dipakai di platform ini")
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=0.5)
+
+    def _handle_key(self, key: str) -> None:
+        now = time.time()
+        key = key.lower()
+        with self._lock:
+            if key == "1":
+                self.runtime.active_mode = ActiveMode.PD_ONLY
+            elif key == "2":
+                self.runtime.active_mode = ActiveMode.PD_PLUS_CBF_QP
+            elif key == "b":
+                self.runtime.robot_mode = RobotMode.BALANCE
+            elif key == "k":
+                self.runtime.robot_mode = RobotMode.KALIBRASI
+            elif key == "m":
+                self.runtime.robot_mode = RobotMode.MONO
+            elif key == "n":
+                self.runtime.robot_mode = RobotMode.NUGGET
+            elif key == "w":
+                self.motion.forward = 1
+                self.motion.active = True
+                self.motion.last_update = now
+            elif key == "s":
+                self.motion.forward = -1
+                self.motion.active = True
+                self.motion.last_update = now
+            elif key == "a":
+                self.motion.turn = -1
+                self.motion.active = True
+                self.motion.last_update = now
+            elif key == "d":
+                self.motion.turn = 1
+                self.motion.active = True
+                self.motion.last_update = now
+            elif key in ("x", "z"):
+                self.motion.forward = 0
+                self.motion.turn = 0
+                self.motion.active = False
+                self.motion.last_update = now
+            elif key == "r":
+                self.motion.forward = 0
+                self.motion.turn = 0
+                self.motion.active = False
+                self.motion.last_update = now
+                self.runtime.setpoint_psi = 0.0
+                self.runtime.setpoint_theta = 0.0
+                self.runtime.turn_command = 0.0
+
+    def _keyboard_loop(self) -> None:
+        assert keyboard_lib is not None
+        watched = ["1", "2", "b", "k", "m", "n", "w", "a", "s", "d", "x", "z", "r"]
+        while not self._stop_event.is_set():
+            handled = False
+            for key in watched:
+                try:
+                    if keyboard_lib.is_pressed(key):
+                        self._handle_key(key)
+                        handled = True
+                except Exception:
+                    pass
+            if not handled:
+                time.sleep(0.01)
+            else:
+                time.sleep(0.02)
+
+    def _msvcrt_loop(self) -> None:
+        assert msvcrt is not None
+        while not self._stop_event.is_set():
+            if msvcrt.kbhit():
+                try:
+                    raw = msvcrt.getwch()
+                except Exception:
+                    raw = ""
+                if raw:
+                    self._handle_key(raw)
+            else:
+                time.sleep(0.01)
+
+
+class AteraMainController:
     def __init__(self) -> None:
-        self.state = ControllerState()
-        self.kp = 24.0
-        self.kd = 4.5
-        self.max_control = 18.0
+        self.runtime = RuntimeState()
+        self.motion = MotionCommand()
+        self.imu = MPU6050Reader()
+        self.motors = DualDDSM115()
+        self.pd = PDController()
+        self.cbf = CBFQPController() if CBFQPController is not None else None
+        self.keyboard = KeyboardManager(self.motion, self.runtime)
+        self.prev_time: Optional[float] = None
+        self.prev_theta: Optional[float] = None
+        self.prev_psi: Optional[float] = None
+        self.last_ui = 0.0
+        self._last_positions_deg = {"left": 0.0, "right": 0.0}
 
-    def log(self, message: str) -> None:
-        stamp = time.strftime("%H:%M:%S")
-        line = f"[{stamp}] {message}"
-        self.state.logs.append(line)
-        if len(self.state.logs) > 12:
-            self.state.logs = self.state.logs[-12:]
+    def setup(self) -> None:
+        self.motors.open()
+        self.motors.initialize()
+        self.imu.ensure_open()
 
-    def help_text(self) -> str:
-        active = self.state.control_mode.name
-        return (
-            "Atera Maintenance Console\n"
-            "\n"
-            "Commands:\n"
-            "  h / help         Tampilkan bantuan ini\n"
-            "  b / balance      Masuk ke mode BALANCING\n"
-            "  i / idle         Kembali ke mode IDLE\n"
-            "  t / toggle       Ganti mode kontrol aktif\n"
-            "  m pd             Pakai kontrol PD_ONLY\n"
-            "  m cbf            Pakai kontrol PD_PLUS_CBF_QP\n"
-            "  s / step         Jalankan satu siklus kontrol\n"
-            "  p / perturb      Tambahkan gangguan kecil\n"
-            "  q / quit         Keluar\n"
-            "\n"
-            "Control modes:\n"
-            "  - PD_ONLY: pakai pengendali PD saja\n"
-            "  - PD_PLUS_CBF_QP: pakai PD lalu disaring/dikoreksi oleh CBF-QP jika tersedia\n"
-            "\n"
-            "Cara ganti mode kontrol:\n"
-            "  - ketik 't' untuk toggle cepat\n"
-            "  - ketik 'm pd' untuk pilih PD_ONLY\n"
-            "  - ketik 'm cbf' untuk pilih PD_PLUS_CBF_QP\n"
-            f"\nMode kontrol aktif saat ini: {active}\n"
+    def safe_stop(self) -> None:
+        try:
+            self.motors.stop_all()
+        except Exception as exc:
+            self.runtime.last_error = str(exc)
+
+    def close(self) -> None:
+        try:
+            self.safe_stop()
+        finally:
+            try:
+                self.motors.close()
+            finally:
+                try:
+                    self.keyboard.stop()
+                except Exception:
+                    pass
+
+    def apply_key_timeout(self, now: float) -> None:
+        if self.motion.active and (now - self.motion.last_update) > float(config.KEY_HOLD_TIMEOUT_S):
+            self.motion.forward = 0
+            self.motion.turn = 0
+            self.motion.active = False
+
+    def read_theta(self, motor_feedback: Optional[dict]) -> float:
+        if motor_feedback:
+            left_deg = float(motor_feedback["left"].position_deg)
+            right_deg = float(motor_feedback["right"].position_deg)
+            self._last_positions_deg["left"] = left_deg
+            self._last_positions_deg["right"] = right_deg
+        return (self._last_positions_deg["left"] + self._last_positions_deg["right"]) * 0.5
+
+    def compute_rates(self, theta_deg: float, psi_deg: float, now: float) -> tuple[float, float, float]:
+        if self.prev_time is None:
+            self.prev_time = now
+            self.prev_theta = theta_deg
+            self.prev_psi = psi_deg
+            return 0.0, 0.0, 1.0 / float(config.CONTROL_HZ)
+
+        dt = max(1e-4, now - self.prev_time)
+        theta_dot = (theta_deg - float(self.prev_theta)) / dt
+        psi_dot = (psi_deg - float(self.prev_psi)) / dt
+        self.prev_time = now
+        self.prev_theta = theta_deg
+        self.prev_psi = psi_deg
+        return theta_dot, psi_dot, dt
+
+    def resolve_setpoints(self) -> tuple[float, float, float]:
+        setpoint_psi = 0.0
+        setpoint_theta = 0.0
+        turn_command = 0.0
+
+        if self.runtime.robot_mode == RobotMode.BALANCE:
+            if self.motion.forward > 0:
+                setpoint_psi = float(config.MANUAL_FORWARD_TARGET_DEG)
+            elif self.motion.forward < 0:
+                setpoint_psi = float(config.MANUAL_BACKWARD_TARGET_DEG)
+            if self.motion.turn != 0:
+                turn_command = float(self.motion.turn)
+
+        elif self.runtime.robot_mode == RobotMode.KALIBRASI:
+            setpoint_psi = 0.0
+            setpoint_theta = 0.0
+            turn_command = 0.0
+
+        elif self.runtime.robot_mode == RobotMode.MONO:
+            if self.motion.forward > 0:
+                setpoint_psi = float(config.MANUAL_FORWARD_TARGET_DEG)
+            elif self.motion.forward < 0:
+                setpoint_psi = float(config.MANUAL_BACKWARD_TARGET_DEG)
+            turn_command = 0.0
+
+        elif self.runtime.robot_mode == RobotMode.NUGGET:
+            setpoint_psi = 0.0
+            setpoint_theta = 0.0
+            turn_command = float(self.motion.turn)
+
+        return setpoint_psi, setpoint_theta, turn_command
+
+    def apply_safety(self, psi_deg: float) -> bool:
+        if abs(psi_deg) >= float(config.HARD_SAFE_TILT_DEG):
+            self.runtime.cbf_status = "HARD_SAFE_TILT"
+            self.runtime.control_path = "SAFETY_STOP"
+            self.runtime.left_motor = 0.0
+            self.runtime.right_motor = 0.0
+            self.runtime.total_motor = 0.0
+            self.safe_stop()
+            return False
+        return True
+
+    def run_pd(self, psi: float, psi_dot: float, theta: float, theta_dot: float, setpoint_psi: float, setpoint_theta: float, turn_command: float) -> PDControlState:
+        return self.pd.PD_compute(
+            psi=psi,
+            dot_psi=psi_dot,
+            theta=theta,
+            dot_theta=theta_dot,
+            setpoint_psi=setpoint_psi,
+            setpoint_theta=setpoint_theta,
+            turn_command=turn_command,
         )
 
-    def ui_indicator(self) -> str:
-        if self.state.control_mode is ControlMode.PD_ONLY:
-            mode_badge = "PD_ONLY"
-            mode_desc = "PD controller only"
-        else:
-            mode_badge = "PD_PLUS_CBF_QP"
-            mode_desc = "PD with CBF-QP safety filter"
+    def maybe_apply_cbf(self, pd_state: PDControlState, psi: float, psi_dot: float) -> tuple[float, float, str, str]:
+        if self.runtime.active_mode != ActiveMode.PD_PLUS_CBF_QP:
+            return pd_state.left_output, pd_state.right_output, "INACTIVE", "PD_ONLY"
 
-        availability = "READY" if self.state.cbf_qp_available else "UNAVAILABLE"
-        effective = "ACTIVE" if self.state.cbf_qp_effective else "BYPASSED"
+        if self.cbf is None:
+            return pd_state.left_output, pd_state.right_output, "UNAVAILABLE", "PD_FALLBACK"
 
-        return (
-            f"[STATE:{self.state.mode.name}] "
-            f"[CONTROL:{mode_badge}] "
-            f"[CBF-QP:{availability}/{effective}] "
-            f"[PATH:{self.state.last_control_path}] "
-            f"[STATUS:{self.state.last_cbf_qp_status}] "
-            f"[INFO:{mode_desc}]"
-        )
-
-    def toggle_control_mode(self) -> None:
-        if self.state.control_mode is ControlMode.PD_ONLY:
-            self.state.control_mode = ControlMode.PD_PLUS_CBF_QP
-        else:
-            self.state.control_mode = ControlMode.PD_ONLY
-        self.log(f"Control mode diubah ke {self.state.control_mode.name}")
-
-    def set_control_mode(self, mode: ControlMode) -> None:
-        self.state.control_mode = mode
-        self.log(f"Control mode di-set ke {mode.name}")
-
-    def pd_control(self) -> float:
-        error = self.state.target_theta - self.state.theta
-        error_dot = -self.state.theta_dot
-        u = (self.kp * error) + (self.kd * error_dot)
-        u = max(-self.max_control, min(self.max_control, u))
-        return u
-
-    def apply_cbf_qp(self, nominal_u: float) -> float:
-        if not self.state.cbf_qp_available:
-            self.state.cbf_qp_effective = False
-            self.state.last_cbf_qp_status = "solver_unavailable"
-            self.state.last_control_path = "pd_fallback"
-            return nominal_u
-
-        safe_limit = 10.0
-        filtered_u = max(-safe_limit, min(safe_limit, nominal_u))
-        self.state.cbf_qp_effective = filtered_u != nominal_u
-        if self.state.cbf_qp_effective:
-            self.state.last_cbf_qp_status = "clamped_for_safety"
-        else:
-            self.state.last_cbf_qp_status = "pass_through"
-        self.state.last_control_path = "pd_plus_cbf_qp"
-        return filtered_u
-
-    def compute_control(self) -> float:
-        nominal_u = self.pd_control()
-
-        if self.state.control_mode is ControlMode.PD_ONLY:
-            self.state.cbf_qp_effective = False
-            self.state.last_cbf_qp_status = "disabled_by_mode"
-            self.state.last_control_path = "pd_only"
-            return nominal_u
-
-        return self.apply_cbf_qp(nominal_u)
-
-    def integrate_dynamics(self, control_u: float, dt: float = 0.02) -> None:
-        disturbance = 0.15 * self.state.x_dot
-        theta_acc = (control_u * 0.11) - (self.state.theta * 1.7) - (self.state.theta_dot * 0.42) - disturbance
-        x_acc = (control_u * 0.05) - (self.state.x_dot * 0.18)
-
-        self.state.theta_dot += theta_acc * dt
-        self.state.theta += self.state.theta_dot * dt
-        self.state.x_dot += x_acc * dt
-        self.state.x += self.state.x_dot * dt
-        self.state.last_control = control_u
-
-    def step_balancing(self) -> None:
-        control_u = self.compute_control()
-        self.integrate_dynamics(control_u)
-        self.log(
-            "BALANCING tick | "
-            f"mode={self.state.control_mode.name} | "
-            f"u={control_u:.3f} | "
-            f"theta={self.state.theta:.3f} | "
-            f"path={self.state.last_control_path} | "
-            f"cbf={self.state.last_cbf_qp_status}"
-        )
-
-    def state_machine_step(self) -> None:
-        if self.state.mode is AppMode.IDLE:
-            self.state.last_control_path = "idle"
-            self.state.last_cbf_qp_status = "not_running"
-            self.state.cbf_qp_effective = False
-            return
-
-        if self.state.mode is AppMode.BALANCING:
-            # Requested behavior: use the selected control_mode while balancing.
-            self.step_balancing()
-            return
-
-        if self.state.mode is AppMode.STOPPED:
-            self.state.running = False
-            self.state.last_control_path = "stopped"
-            self.state.last_cbf_qp_status = "stopped"
-            self.state.cbf_qp_effective = False
-
-    def perturb(self) -> None:
-        self.state.theta += 0.18
-        self.state.theta_dot += 0.05
-        self.log("Gangguan kecil ditambahkan ke plant")
+        try:
+            result = self.cbf.filter(
+                nominal_left=float(pd_state.left_output),
+                nominal_right=float(pd_state.right_output),
+                psi=float(psi),
+                psi_dot=float(psi_dot),
+                alpha_1=float(config.ALPHA_1),
+                alpha_2=float(config.ALPHA_2),
+            )
+            left = float(result.get("left", pd_state.left_output))
+            right = float(result.get("right", pd_state.right_output))
+            return left, right, "ACTIVE", "PD_PLUS_CBF_QP"
+        except Exception as exc:
+            self.runtime.last_error = str(exc)
+            return pd_state.left_output, pd_state.right_output, "ERROR", "PD_FALLBACK"
 
     def print_status(self) -> None:
-        print()
-        print(self.ui_indicator())
-        print(
-            "theta={:.3f} theta_dot={:.3f} x={:.3f} x_dot={:.3f} u={:.3f}".format(
-                self.state.theta,
-                self.state.theta_dot,
-                self.state.x,
-                self.state.x_dot,
-                self.state.last_control,
-            )
+        line = (
+            f"mode={self.runtime.active_mode.value} | "
+            f"robot={self.runtime.robot_mode.value} | "
+            f"theta={self.runtime.theta_deg:+7.3f} deg | "
+            f"theta_dot={self.runtime.theta_dot_deg_s:+8.3f} deg/s | "
+            f"psi={self.runtime.psi_deg:+7.3f} deg | "
+            f"psi_dot={self.runtime.psi_dot_deg_s:+8.3f} deg/s | "
+            f"left={self.runtime.left_motor:+6.3f} | "
+            f"right={self.runtime.right_motor:+6.3f} | "
+            f"total={self.runtime.total_motor:+6.3f} | "
+            f"cbf={self.runtime.cbf_status} | "
+            f"path={self.runtime.control_path}"
         )
-        if self.state.logs:
-            print("Recent logs:")
-            for line in self.state.logs[-5:]:
-                print(f"  {line}")
+        if self.runtime.last_error:
+            line += f" | err={self.runtime.last_error}"
+        print(line)
 
-    def handle_command(self, raw: str) -> None:
-        cmd = raw.strip().lower()
-        if not cmd:
-            return
+    def loop(self) -> None:
+        control_period = 1.0 / float(config.CONTROL_HZ)
+        ui_period = 1.0 / float(config.UI_HZ)
 
-        if cmd in {"h", "help"}:
-            print(self.help_text())
-            return
+        self.keyboard.start()
+        motor_feedback = None
 
-        if cmd in {"b", "balance"}:
-            self.state.mode = AppMode.BALANCING
-            self.log("Masuk ke mode BALANCING")
-            return
+        while self.runtime.running:
+            start = time.time()
+            self.apply_key_timeout(start)
 
-        if cmd in {"i", "idle"}:
-            self.state.mode = AppMode.IDLE
-            self.log("Masuk ke mode IDLE")
-            return
+            imu_state = self.imu.read_angles()
+            psi_deg = float(imu_state.angle_deg)
 
-        if cmd in {"t", "toggle"}:
-            self.toggle_control_mode()
-            return
+            if not self.apply_safety(psi_deg):
+                time.sleep(control_period)
+                continue
 
-        if cmd == "m pd":
-            self.set_control_mode(ControlMode.PD_ONLY)
-            return
+            if motor_feedback is None:
+                try:
+                    motor_feedback = self.motors.query_both()
+                except Exception:
+                    motor_feedback = None
 
-        if cmd == "m cbf":
-            self.set_control_mode(ControlMode.PD_PLUS_CBF_QP)
-            return
+            theta_deg = self.read_theta(motor_feedback)
+            theta_dot, psi_dot, _dt = self.compute_rates(theta_deg, psi_deg, start)
+            setpoint_psi, setpoint_theta, turn_command = self.resolve_setpoints()
 
-        if cmd in {"s", "step"}:
-            self.state_machine_step()
-            self.print_status()
-            return
+            pd_state = self.run_pd(
+                psi=psi_deg,
+                psi_dot=psi_dot,
+                theta=theta_deg,
+                theta_dot=theta_dot,
+                setpoint_psi=setpoint_psi,
+                setpoint_theta=setpoint_theta,
+                turn_command=turn_command,
+            )
 
-        if cmd in {"p", "perturb"}:
-            self.perturb()
-            self.print_status()
-            return
+            left_cmd, right_cmd, cbf_status, control_path = self.maybe_apply_cbf(pd_state, psi_deg, psi_dot)
 
-        if cmd in {"q", "quit"}:
-            self.state.mode = AppMode.STOPPED
-            self.state_machine_step()
-            return
+            motor_feedback = self.motors.command_normalized(left_cmd, right_cmd)
 
-        print("Perintah tidak dikenal. Ketik 'help' untuk bantuan.")
+            self.runtime.theta_deg = theta_deg
+            self.runtime.theta_dot_deg_s = theta_dot
+            self.runtime.psi_deg = psi_deg
+            self.runtime.psi_dot_deg_s = psi_dot
+            self.runtime.left_motor = left_cmd
+            self.runtime.right_motor = right_cmd
+            self.runtime.total_motor = 0.5 * (left_cmd + right_cmd)
+            self.runtime.cbf_status = cbf_status
+            self.runtime.control_path = control_path
+            self.runtime.setpoint_psi = setpoint_psi
+            self.runtime.setpoint_theta = setpoint_theta
+            self.runtime.turn_command = turn_command
+
+            now = time.time()
+            if (now - self.last_ui) >= ui_period:
+                self.print_status()
+                self.last_ui = now
+
+            elapsed = time.time() - start
+            sleep_time = max(0.0, control_period - elapsed)
+            time.sleep(sleep_time)
 
     def run(self) -> None:
-        print(self.help_text())
-        self.print_status()
-        while self.state.running:
-            try:
-                raw = input("atera> ")
-            except (EOFError, KeyboardInterrupt):
-                print()
-                raw = "quit"
-            self.handle_command(raw)
+        try:
+            self.setup()
+            self.loop()
+        except KeyboardInterrupt:
+            self.runtime.running = False
+        finally:
+            self.close()
 
-        print("Atera maintenance console selesai.")
+
+def main() -> None:
+    app = AteraMainController()
+    app.run()
 
 
 if __name__ == "__main__":
-    AteraMaint().run()
+    main()
