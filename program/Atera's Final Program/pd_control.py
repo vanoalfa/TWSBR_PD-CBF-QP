@@ -69,13 +69,13 @@ class PDController:
         right_output = self.clamp(base_output + turn_term, -self.output_limit, self.output_limit)
 
         return PDControlState(
-            error_IMU_psi=error_psi,
-            error_IMU_dot_psi=error_dot_psi,
-            error_DDSM_theta=error_theta,
-            error_DDSM_dot_theta=error_dot_theta,
-            setpoint_IMU=float(setpoint_psi),
-            setpoint_DDSM: float(setpoint_theta),
-            base_output=base_output,
-            left_output=left_output,
-            right_output=right_output,
+            error_IMU_psi = error_psi,
+            error_IMU_dot_psi = error_dot_psi,
+            error_DDSM_theta = error_theta,
+            error_DDSM_dot_theta = error_dot_theta,
+            setpoint_IMU = float(setpoint_psi),
+            setpoint_DDSM = float(setpoint_theta),
+            u_PD = base_output,
+            left_output = left_output,
+            right_output = right_output,
         )

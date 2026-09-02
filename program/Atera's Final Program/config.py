@@ -11,8 +11,8 @@ ALPHA_2 = 0.0     # Value for QP
 
 
 # Setpoint
-SETPOINT_IMU = 0 # Set point IMU's Y axis degree
-SETPOINT_WHEEL = 0 # Set point DDSM's Y axis degree
+#SETPOINT_IMU = 0 # Set point IMU's Y axis degree
+#SETPOINT_MOTOR = 0 # Set point DDSM's Y axis degree
 
 #Safety
 OUTPUT_LIMIT = 1.0
@@ -49,7 +49,7 @@ RIGHT_MOTOR_PORT = "/dev/ttyACM0"  #Right Port
 LEFT_MOTOR_PORT = "/dev/ttyACM1" #Left Port
 
 # Baudrates
-WHEEL_BAUDRATE = 115200  #Baudrate for motor controller
+MOTOR_BAUDRATE = 115200  #Baudrate for motor controller
 
 # Karena tiap motor memakai USB-RS485 terpisah, ID bisa sama-sama 1.
 LEFT_MOTOR_ID = 1
@@ -74,6 +74,9 @@ MOTOR_ACCEL_TIME = 3
 MAX_CURRENT_A = 1.80
 MAX_SPEED_RPM = 120.0
 TURN_OUTPUT_FRACTION = 0.18
+
+# Timeout serial motor
+MOTOR_TIMEOUT_S = 0.02
 
 # =========================
 # Runtime / UI / safety

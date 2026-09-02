@@ -16,7 +16,7 @@ from typing import Optional, Dict, Any
 
 import serial
 
-import tunning
+import config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -65,11 +65,11 @@ class DDSM115Motor:
         self,
         port: str,
         motor_id: int = 1,
-        baudrate: int = tunning.MOTOR_BAUDRATE,
-        timeout: float = tunning.MOTOR_TIMEOUT_S,
+        baudrate: int = config.MOTOR_BAUDRATE,
+        timeout: float = config.MOTOR_TIMEOUT_S,
         sign: float = 1.0,
         control_mode: str = "current",
-        accel_time: int = tunning.MOTOR_ACCEL_TIME,
+        accel_time: int = config.MOTOR_ACCEL_TIME,
         name: str = "motor",
     ) -> None:
         self.port = port
@@ -298,9 +298,9 @@ class DDSM115Motor:
         normalized = max(-1.0, min(1.0, float(normalized)))
         normalized *= self.sign
         if self.control_mode == "current":
-            return self.command_current_amp(normalized * tunning.MAX_CURRENT_A)
+            return self.command_current_amp(normalized * config.MAX_CURRENT_A)
         if self.control_mode == "speed":
-            return self.command_speed_rpm(normalized * tunning.MAX_SPEED_RPM)
+            return self.command_speed_rpm(normalized * config.MAX_SPEED_RPM)
         raise ValueError(f"Unsupported control_mode for balancing: {self.control_mode}")
 
     def initialize(self) -> None:
@@ -322,23 +322,23 @@ class DDSM115Motor:
 class DualDDSM115:
     def __init__(self) -> None:
         self.left = DDSM115Motor(
-            port=tunning.LEFT_MOTOR_PORT,
-            motor_id=tunning.LEFT_MOTOR_ID,
-            baudrate=tunning.MOTOR_BAUDRATE,
-            timeout=tunning.MOTOR_TIMEOUT_S,
-            sign=tunning.LEFT_MOTOR_SIGN,
-            control_mode=tunning.MOTOR_CONTROL_MODE,
-            accel_time=tunning.MOTOR_ACCEL_TIME,
+            port=config.LEFT_MOTOR_PORT,
+            motor_id=config.LEFT_MOTOR_ID,
+            baudrate=config.MOTOR_BAUDRATE,
+            timeout=config.MOTOR_TIMEOUT_S,
+            sign=config.LEFT_MOTOR_SIGN,
+            control_mode=config.MOTOR_CONTROL_MODE,
+            accel_time=config.MOTOR_ACCEL_TIME,
             name="left_motor",
         )
         self.right = DDSM115Motor(
-            port=tunning.RIGHT_MOTOR_PORT,
-            motor_id=tunning.RIGHT_MOTOR_ID,
-            baudrate=tunning.MOTOR_BAUDRATE,
-            timeout=tunning.MOTOR_TIMEOUT_S,
-            sign=tunning.RIGHT_MOTOR_SIGN,
-            control_mode=tunning.MOTOR_CONTROL_MODE,
-            accel_time=tunning.MOTOR_ACCEL_TIME,
+            port=config.RIGHT_MOTOR_PORT,
+            motor_id=config.RIGHT_MOTOR_ID,
+            baudrate=config.MOTOR_BAUDRATE,
+            timeout=config.MOTOR_TIMEOUT_S,
+            sign=config.RIGHT_MOTOR_SIGN,
+            control_mode=config.MOTOR_CONTROL_MODE,
+            accel_time=config.MOTOR_ACCEL_TIME,
             name="right_motor",
         )
 
