@@ -1,19 +1,9 @@
-"""Pembacaan MPU6050 dengan KalmanAngle.
-
-Modul ini diasumsikan berjalan di Raspberry Pi dengan I2C aktif.
-Pemrosesan sudut memakai Kalman filter dari modul eksternal:
-    from kalman import KalmanAngle
-"""
-
 from __future__ import annotations
-
 import math
 import time
 from dataclasses import dataclass
 from typing import Dict
-
 from smbus2 import SMBus
-
 from kalman import KalmanAngle
 import tunning
 

@@ -15,7 +15,7 @@ from typing import Dict
 from smbus2 import SMBus
 
 from kalman import KalmanAngle
-import tunning
+import config
 
 PWR_MGMT_1 = 0x6B
 SMPLRT_DIV = 0x19
@@ -42,7 +42,7 @@ class AngleState:
 
 
 class MPU6050Reader:
-    def __init__(self, bus_id: int = tunning.I2C_BUS, address: int = tunning.MPU6050_ADDRESS) -> None:
+    def __init__(self, bus_id: int = config.I2C_BUS, address: int = config.MPU6050_ADDRESS) -> None:
         self.bus_id = int(bus_id)
         self.address = int(address)
         self.bus: SMBus | None = None
@@ -105,7 +105,7 @@ class MPU6050Reader:
         if self.bus is None:
             self.bus = SMBus(self.bus_id)
 
-    def calibrate_gyro_bias(self, samples: int = tunning.GYRO_CALIBRATION_SAMPLES, delay_s: float = tunning.GYRO_CALIBRATION_DELAY_S) -> Dict[str, float]:
+    def calibrate_gyro_bias(self, samples: int = config.GYRO_CALIBRATION_SAMPLES, delay_s: float = config.GYRO_CALIBRATION_DELAY_S) -> Dict[str, float]:
         self.ensure_open()
         sum_x = 0.0
         sum_y = 0.0
@@ -146,14 +146,14 @@ class MPU6050Reader:
         kalman_x = self.kalman_x.getAngle(acc_angle_x, gyro_rate_x, dt)
         kalman_y = self.kalman_y.getAngle(acc_angle_y, gyro_rate_y, dt)
 
-        axis = tunning.IMU_AXIS.strip().lower()
+        axis = config.IMU_AXIS.strip().lower()
         if axis == "roll":
             angle_deg = kalman_x
         else:
             angle_deg = kalman_y
             axis = "pitch"
 
-        angle_deg = (angle_deg - self.zero_offset_deg) * float(tunning.IMU_SIGN)
+        angle_deg = (angle_deg - self.zero_offset_deg) * float(config.IMU_SIGN)
 
         return AngleState(
             timestamp=now,
@@ -168,7 +168,7 @@ class MPU6050Reader:
             axis_used=axis,
         )
 
-    def calibrate_zero_angle(self, samples: int = tunning.ZERO_CALIBRATION_SAMPLES, delay_s: float = tunning.ZERO_CALIBRATION_DELAY_S) -> float:
+    def calibrate_zero_angle(self, samples: int = config.ZERO_CALIBRATION_SAMPLES, delay_s: float = config.ZERO_CALIBRATION_DELAY_S) -> float:
         self.ensure_open()
         total = 0.0
         for _ in range(int(samples)):

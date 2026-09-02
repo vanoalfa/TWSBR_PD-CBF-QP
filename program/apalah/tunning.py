@@ -1,9 +1,3 @@
-"""Parameter tuning untuk self balancing robot.
-
-File ini sengaja hanya berisi parameter yang sering diubah saat bring-up,
-kalibrasi, dan tuning di lapangan.
-"""
-
 # =========================
 # Tunning Control
 # =========================
