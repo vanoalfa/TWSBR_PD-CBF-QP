@@ -1,0 +1,1 @@
+JOYSTICK_PATH = '/dev/input/event5'

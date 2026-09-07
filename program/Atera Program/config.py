@@ -79,6 +79,11 @@ TURN_OUTPUT_FRACTION = 0.18
 MOTOR_TIMEOUT_S = 0.02
 
 # =========================
+# JOYSTICK
+# =========================
+JOYSTICK_PATH = '/dev/input/event5'
+
+# =========================
 # Runtime / UI / safety
 # =========================
 CONTROL_HZ = 200.0
