@@ -66,6 +66,11 @@ ZERO_CALIBRATION_SAMPLES = 350
 ZERO_CALIBRATION_DELAY_S = 0.004
 
 # =========================
+# JOYSTICK
+# =========================
+JOYSTICK_PATH = '/dev/input/event5'
+
+# =========================
 # Runtime / UI / safety
 # =========================
 CONTROL_HZ = 200.0

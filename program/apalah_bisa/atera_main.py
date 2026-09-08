@@ -1,42 +1,56 @@
-"""Program utama self-balancing robot ATERA.
+"""Program utama self-balancing robot ATERA (Versi Kontrol Joystick).
 
 Fitur utama:
 - Integrasi MPU6050 + Kalman filter + PD controller + dua motor DDSM115
 - State machine sederhana: IDLE, CALIBRATING, READY, BALANCING, FAULT, EXITING
-- Keyboard non-blocking di terminal
-- UI terminal sederhana dengan beberapa halaman (TAB untuk pindah)
+- Pembacaan Joystick non-blocking dari Linux event device (/dev/input/event*)
+- UI terminal sederhana dengan beberapa halaman (Tombol L3 untuk pindah)
 - Shutdown aman: motor dihentikan saat fault, tilt berlebih, atau quit
 
-Kontrol keyboard:
-- K : kalibrasi gyro + zero angle
-- M : start/stop balancing
-- W : maju (memberi target angle kecil ke depan)
-- S : mundur
-- A : belok kiri
-- D : belok kanan
-- TAB : ganti halaman UI
-- SPACE/X : stop balancing
-- Q : quit aman
+Kontrol Joystick:
+- Tombol A            : Kalibrasi gyro + zero angle
+- Tombol START/MULAI  : Start / stop balancing
+- D-Pad / Analog Y    : Maju (Stick Atas / D-Pad Atas) / Mundur (Stick Bawah / D-Pad Bawah)
+- D-Pad / Analog X    : Belok Kiri (Stick Kiri) / Belok Kanan (Stick Kanan)
+- Tombol X            : Stop balancing manual
+- Tombol L3           : Ganti halaman UI
+- Tombol SELECT/QUIT  : Quit aman
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import select
+import struct
 import sys
-import termios
 import time
-import tty
 from dataclasses import dataclass, field
-from typing import Dict, Optional
+from typing import Dict, Optional, List
+
+# Coba impor evdev jika tersedia
+try:
+    import evdev
+except ImportError:
+    evdev = None
 
 import tunning
 from ddsm115 import DDSM115Error, DualDDSM115, MotorFeedback
 from mpu6050 import AngleState, MPU6050Reader
 from pd_control import BalancePDController, PDControlState
+from joystick_mapping import ABS_MAP, BTN_MAP, DPAD_MAP
+from tunning import JOYSTICK_PATH
 
 LOGGER = logging.getLogger("atera")
 PAGES = ("status", "motor", "help")
+
+
+@dataclass
+class InputEventData:
+    """Struktur data sederhana penampung event joystick."""
+    type: int
+    code: int
+    value: int
 
 
 @dataclass
@@ -45,7 +59,7 @@ class RuntimeState:
     calibrated: bool = False
     exit_requested: bool = False
     page_index: int = 0
-    last_message: str = "Tekan K untuk kalibrasi, lalu M untuk mulai balancing."
+    last_message: str = "Tekan Tombol A untuk kalibrasi, lalu MULAI untuk balancing."
     fault_reason: str = ""
     latest_angle: Optional[AngleState] = None
     latest_pd: Optional[PDControlState] = None
@@ -63,44 +77,94 @@ class RuntimeState:
     last_status_log_ts: float = 0.0
 
 
-class TerminalKeyboard:
-    """Keyboard non-blocking untuk terminal Linux/Raspberry Pi."""
+class JoystickReader:
+    """Pembaca Joystick non-blocking untuk Linux/Raspberry Pi (/dev/input/event*)."""
 
-    def __init__(self) -> None:
+    def __init__(self, device_path: str = JOYSTICK_PATH) -> None:
+        self.device_path = device_path
+        self.evdev_device = None
         self.fd: Optional[int] = None
-        self.old_settings = None
         self.enabled = False
+        self.use_evdev = False
 
-    def __enter__(self) -> "TerminalKeyboard":
-        if not sys.stdin.isatty():
-            raise RuntimeError("stdin bukan TTY; jalankan script ini langsung dari terminal.")
-        self.fd = sys.stdin.fileno()
-        self.old_settings = termios.tcgetattr(self.fd)
-        tty.setcbreak(self.fd)
-        self.enabled = True
+    def __enter__(self) -> "JoystickReader":
+        # 1. Coba buka menggunakan modul evdev jika tersedia
+        if evdev is not None:
+            try:
+                self.evdev_device = evdev.InputDevice(self.device_path)
+                self.use_evdev = True
+                self.enabled = True
+                LOGGER.info("Joystick terhubung via evdev di %s (%s)", self.device_path, self.evdev_device.name)
+                return self
+            except Exception as exc:
+                LOGGER.warning("Gagal membuka joystick via evdev di %s: %s", self.device_path, exc)
+
+        # 2. Fallback: Buka secara langsung file descriptor /dev/input/event*
+        try:
+            self.fd = os.open(self.device_path, os.O_RDONLY | os.O_NONBLOCK)
+            self.use_evdev = False
+            self.enabled = True
+            LOGGER.info("Joystick terhubung via raw event device di %s", self.device_path)
+        except Exception as exc:
+            LOGGER.error("Gagal membuka joystick di %s: %s", self.device_path, exc)
+            self.enabled = False
+
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
         self.restore()
 
     def restore(self) -> None:
-        if self.enabled and self.fd is not None and self.old_settings is not None:
-            termios.tcsetattr(self.fd, termios.TCSADRAIN, self.old_settings)
+        if self.use_evdev and self.evdev_device:
+            try:
+                self.evdev_device.close()
+            except Exception:
+                pass
+            self.evdev_device = None
+        elif self.fd is not None:
+            try:
+                os.close(self.fd)
+            except Exception:
+                pass
+            self.fd = None
         self.enabled = False
 
-    def read_keys(self) -> list[str]:
-        if not self.enabled or self.fd is None:
+    def read_events(self) -> List[InputEventData]:
+        """Membaca daftar event joystick yang masuk tanpa menghentikan (non-blocking) eksekusi program."""
+        if not self.enabled:
             return []
-        keys: list[str] = []
-        while True:
-            ready, _, _ = select.select([sys.stdin], [], [], 0)
-            if not ready:
-                break
-            ch = sys.stdin.read(1)
-            if not ch:
-                break
-            keys.append(ch)
-        return keys
+
+        events: List[InputEventData] = []
+
+        if self.use_evdev and self.evdev_device:
+            try:
+                for ev in self.evdev_device.read():
+                    events.append(InputEventData(ev.type, ev.code, ev.value))
+            except BlockingIOError:
+                pass
+            except Exception as exc:
+                LOGGER.error("Error membaca event joystick evdev: %s", exc)
+
+        elif self.fd is not None:
+            # Format struct input_event Linux: time (sec, usec), type (H), code (H), value (i)
+            is_64bit = sys.maxsize > 2**32
+            event_format = "llHHi" if is_64bit else "iiHHi"
+            event_size = struct.calcsize(event_format)
+
+            while True:
+                ready, _, _ = select.select([self.fd], [], [], 0)
+                if not ready:
+                    break
+                try:
+                    data = os.read(self.fd, event_size)
+                    if not data or len(data) < event_size:
+                        break
+                    _, _, ev_type, ev_code, ev_value = struct.unpack(event_format, data[:event_size])
+                    events.append(InputEventData(ev_type, ev_code, ev_value))
+                except (BlockingIOError, OSError):
+                    break
+
+        return events
 
 
 class AteraMainApp:
@@ -112,12 +176,12 @@ class AteraMainApp:
         self._running = False
         self._motors_stopped = False
         self._last_ui_ts = 0.0
-        self._last_key_ts = {
-            "w": 0.0,
-            "s": 0.0,
-            "a": 0.0,
-            "d": 0.0,
-        }
+
+        # Penampung status perintah joystick
+        self._joy_dpad_fb = 0.0      # -1.0 (mundur) .. +1.0 (maju) dari D-Pad
+        self._joy_dpad_turn = 0.0    # -1.0 (kiri) .. +1.0 (kanan) dari D-Pad
+        self._joy_analog_fb = 0.0    # -1.0 (mundur) .. +1.0 (maju) dari Analog
+        self._joy_analog_turn = 0.0  # -1.0 (kiri) .. +1.0 (kanan) dari Analog
 
     def setup(self) -> None:
         self.motors.open()
@@ -125,7 +189,7 @@ class AteraMainApp:
         self.imu.open()
         self._motors_stopped = True
         self.state.mode = "IDLE"
-        self.state.last_message = "Hardware siap. Tekan K untuk kalibrasi."
+        self.state.last_message = "Hardware siap. Tekan Tombol A untuk kalibrasi."
         LOGGER.info("ATERA main setup complete")
 
     def cleanup(self) -> None:
@@ -201,7 +265,7 @@ class AteraMainApp:
 
     def start_balancing(self) -> None:
         if not self.state.calibrated:
-            self.set_message("Belum dikalibrasi. Tekan K dulu.")
+            self.set_message("Belum dikalibrasi. Tekan Tombol A dulu.")
             return
         try:
             angle = self.imu.read_angles()
@@ -226,52 +290,78 @@ class AteraMainApp:
         else:
             self.start_balancing()
 
-    def process_key(self, ch: str) -> None:
-        key = ch.lower()
-        now = time.monotonic()
+    def process_joystick_event(self, event: InputEventData) -> None:
+        """Memproses sinyal event tombol & axis dari Joystick."""
+        # 1. EV_KEY = 1 (Tombol Biner / Digital)
+        if event.type == 1:
+            if event.value == 1:  # Tombol ditekan (Press)
+                btn_name = BTN_MAP.get(event.code, "")
 
-        if ch == "\t":
-            self.state.page_index = (self.state.page_index + 1) % len(PAGES)
-            return
+                if btn_name == "L3":
+                    self.state.page_index = (self.state.page_index + 1) % len(PAGES)
+                elif btn_name == "QUIT":
+                    self.state.exit_requested = True
+                    self.set_message("Quit diminta via joystick.")
+                elif btn_name == "A":
+                    self.calibrate()
+                elif btn_name == "MULAI":
+                    self.toggle_balancing()
+                elif btn_name == "X":
+                    self.stop_balancing("Stop manual joystick.")
 
-        if key == "q":
-            self.state.exit_requested = True
-            self.set_message("Quit diminta user.")
-            return
+        # 2. EV_ABS = 3 (Sumbu Analog & D-Pad)
+        elif event.type == 3:
+            # A. Pemetaan D-Pad (Diskrit -1, 0, 1)
+            if event.code in DPAD_MAP:
+                if event.code == 17:  # D-Pad Y (PAD Atas / PAD Bawah)
+                    if event.value < 0:
+                        self._joy_dpad_fb = 1.0   # PAD Atas -> Maju
+                    elif event.value > 0:
+                        self._joy_dpad_fb = -1.0  # PAD Bawah -> Mundur
+                    else:
+                        self._joy_dpad_fb = 0.0
 
-        if key == "k":
-            self.calibrate()
-            return
+                elif event.code == 16:  # D-Pad X (PAD Kiri / PAD Kanan)
+                    if event.value < 0:
+                        self._joy_dpad_turn = -1.0  # PAD Kiri -> Belok Kiri
+                    elif event.value > 0:
+                        self._joy_dpad_turn = 1.0   # PAD Kanan -> Belok Kanan
+                    else:
+                        self._joy_dpad_turn = 0.0
 
-        if key == "m":
-            self.toggle_balancing()
-            return
+            # B. Pemetaan Analog Stick (Kontinu -32768 s.d 32767)
+            elif event.code in ABS_MAP:
+                abs_name = ABS_MAP.get(event.code, "")
+                raw_val = float(event.value)
+                max_val = 32767.0 if abs(raw_val) > 255 else 127.0
+                norm_val = raw_val / max_val
 
-        if key in ("x", " "):
-            self.stop_balancing("Stop manual.")
-            return
+                # Deadzone handling untuk mencegah kemudi bergeser saat stick idle
+                deadzone = 0.15
+                if abs(norm_val) < deadzone:
+                    norm_val = 0.0
 
-        if key in self._last_key_ts:
-            self._last_key_ts[key] = now
+                # Analog Kiri Y (Code 0): Dorong ke atas bernilai negatif (Maju)
+                if event.code == 0 or "Analog Kiri (Y)" in abs_name:
+                    self._joy_analog_fb = -norm_val
 
-    def get_manual_commands(self, now_ts: float) -> tuple[float, float]:
-        timeout = float(tunning.KEY_HOLD_TIMEOUT_S)
-        forward = (now_ts - self._last_key_ts["w"]) <= timeout
-        backward = (now_ts - self._last_key_ts["s"]) <= timeout
-        left = (now_ts - self._last_key_ts["a"]) <= timeout
-        right = (now_ts - self._last_key_ts["d"]) <= timeout
+                # Analog Kiri/Kanan X (Code 1/5): Dorong ke kanan bernilai positif (Kanan)
+                elif event.code in (1, 5) or "Analog Kiri (X)" in abs_name or "Analog Kanan (X)" in abs_name:
+                    self._joy_analog_turn = norm_val
+
+    def get_manual_commands() -> tuple[float, float]:
+        """Menggabungkan masukan D-Pad dan Analog Stick menjadi perintah gerak."""
+        # Utamakan masukan D-Pad jika aktif, jika tidak gunakan Analog Stick
+        cmd_fb = self._joy_dpad_fb if abs(self._joy_dpad_fb) > 0.0 else self._joy_analog_fb
+        cmd_turn = self._joy_dpad_turn if abs(self._joy_dpad_turn) > 0.0 else self._joy_analog_turn
 
         target_angle = 0.0
-        if forward and not backward:
-            target_angle = float(tunning.MANUAL_FORWARD_TARGET_DEG)
-        elif backward and not forward:
-            target_angle = float(tunning.MANUAL_BACKWARD_TARGET_DEG)
+        if cmd_fb > 0:
+            target_angle = float(tunning.MANUAL_FORWARD_TARGET_DEG) * abs(cmd_fb)
+        elif cmd_fb < 0:
+            target_angle = float(tunning.MANUAL_BACKWARD_TARGET_DEG) * abs(cmd_fb)
 
-        turn_command = 0.0
-        if left and not right:
-            turn_command = -1.0
-        elif right and not left:
-            turn_command = 1.0
+        turn_command = max(-1.0, min(1.0, cmd_turn))
 
         return target_angle, turn_command
 
@@ -293,8 +383,7 @@ class AteraMainApp:
             )
             return
 
-        now = time.monotonic()
-        target_angle, turn_command = self.get_manual_commands(now)
+        target_angle, turn_command = self.get_manual_commands()
         angular_rate = self.get_angular_rate_from_state(angle_state)
 
         pd_state = self.controller.compute(
@@ -343,7 +432,7 @@ class AteraMainApp:
 
         lines = []
         lines.append("\x1b[2J\x1b[H")
-        lines.append("ATERA SELF-BALANCING ROBOT")
+        lines.append("ATERA SELF-BALANCING ROBOT (JOYSTICK CONTROL)")
         lines.append("=" * 72)
         lines.append(
             f"Mode: {self.state.mode:<12} | Calibrated: {str(self.state.calibrated):<5} | "
@@ -408,24 +497,23 @@ class AteraMainApp:
             lines.append(f"  safe_tilt_deg     : {tunning.SAFE_TILT_DEG:.2f}")
 
         else:
-            lines.append("BANTUAN KONTROL")
-            lines.append("  K      : kalibrasi gyro + zero angle")
-            lines.append("  M      : start / stop balancing")
-            lines.append("  W / S  : maju / mundur (hold via timeout key)")
-            lines.append("  A / D  : belok kiri / kanan")
-            lines.append("  SPACE  : stop balancing")
-            lines.append("  TAB    : pindah halaman")
-            lines.append("  Q      : quit aman")
+            lines.append("BANTUAN KONTROL JOYSTICK")
+            lines.append("  Tombol A          : Kalibrasi gyro + zero angle")
+            lines.append("  Tombol MULAI      : Start / stop balancing")
+            lines.append("  D-Pad / Analog Y  : Maju / Mundur")
+            lines.append("  D-Pad / Analog X  : Belok kiri / kanan")
+            lines.append("  Tombol X          : Stop balancing manual")
+            lines.append("  Tombol L3         : Pindah halaman UI")
+            lines.append("  Tombol QUIT       : Quit aman")
             lines.append("")
             lines.append("CATATAN")
             lines.append("  - Saat kalibrasi, robot harus diam.")
             lines.append("  - Jika robot malah jatuh saat balancing mulai aktif,")
             lines.append("    cek BALANCE_DIRECTION_SIGN di tunning.py.")
             lines.append("  - Jika arah roda terbalik, cek LEFT_MOTOR_SIGN / RIGHT_MOTOR_SIGN.")
-            lines.append("  - Jika steering terbalik, tukar makna A/D atau ubah sign turn di logika.")
 
         lines.append("-" * 72)
-        lines.append("Keys: K calibrate | M balance | W/A/S/D move | TAB page | Q quit")
+        lines.append("Joystick: A calibrate | MULAI balance | D-Pad/Stick move | L3 page | QUIT quit")
 
         sys.stdout.write("\n".join(lines) + "\n")
         sys.stdout.flush()
@@ -436,12 +524,13 @@ class AteraMainApp:
         self._running = True
         next_tick = time.monotonic()
 
-        with TerminalKeyboard() as keyboard:
+        with JoystickReader(JOYSTICK_PATH) as joystick:
             while self._running and not self.state.exit_requested:
                 loop_start = time.monotonic()
 
-                for ch in keyboard.read_keys():
-                    self.process_key(ch)
+                # Membaca event dari Joystick
+                for event in joystick.read_events():
+                    self.process_joystick_event(event)
 
                 try:
                     self.control_step()
