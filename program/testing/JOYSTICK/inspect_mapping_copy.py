@@ -16,16 +16,16 @@ BTN_MAP = {
 
 # Pemetaan Sumbu Analog Kontinu (Code EV_ABS)
 ABS_MAP = {
-    0: "Analog Kiri (Y)",
-    1: "Analog Kiri (X)",
-    2: "Analog Kanan (Y)",
-    5: "Analog Kanan (X)",
+    #0: "Analog Kiri (Y)",
+    #1: "Analog Kiri (X)",
+    #2: "Analog Kanan (Y)",
+    #5: "Analog Kanan (X)",
     #9: "Analog RT",
     #10: "Analog LT",
 }
 
 # Pemetaan D-Pad / PAD (Code EV_ABS dengan Nilai Diskrit)
 DPAD_MAP = {
-    16: {-1: "PAD Kiri", 1: "PAD Kanan"},
-    17: {-1: "PAD Atas", 1: "PAD Bawah"},
+    #16: {-1: "PAD Kiri", 1: "PAD Kanan"},
+    #17: {-1: "PAD Atas", 1: "PAD Bawah"},
 }

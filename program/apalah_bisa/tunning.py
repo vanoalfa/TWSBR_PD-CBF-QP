@@ -2,7 +2,7 @@
 # Tunning Control
 # =========================
 # Output kontrol dinormalisasi ke -1.0 .. +1.0
-Kp = 0.080
+Kp = 0.100
 Kd = 0.014
 Alpha_1 = 0.0
 Alpha_2 = 0.0

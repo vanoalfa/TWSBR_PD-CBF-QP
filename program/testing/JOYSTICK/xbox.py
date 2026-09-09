@@ -1,6 +1,6 @@
 import sys
 from evdev import InputDevice, ecodes
-from inspect_mapping import BTN_MAP, ABS_MAP, DPAD_MAP
+from inspect_mapping_copy import BTN_MAP, ABS_MAP, DPAD_MAP
 from config import JOYSTICK_PATH
 
 

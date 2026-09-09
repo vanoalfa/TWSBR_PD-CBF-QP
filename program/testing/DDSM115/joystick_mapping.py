@@ -20,8 +20,8 @@ ABS_MAP = {
     1: "Analog Kiri (X)",
     2: "Analog Kanan (Y)",
     5: "Analog Kanan (X)",
-    #9: "Analog RT",
-    #10: "Analog LT",
+    9: "Analog RT",
+    10: "Analog LT",
 }
 
 # Pemetaan D-Pad / PAD (Code EV_ABS dengan Nilai Diskrit)

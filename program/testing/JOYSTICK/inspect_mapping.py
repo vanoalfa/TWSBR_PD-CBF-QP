@@ -1,17 +1,17 @@
 # Pemetaan Tombol Digital (Code EV_KEY)
 BTN_MAP = {
-    304: "Tombol A",
-    305: "Tombol B",
-    307: "Tombol X",
-    308: "Tombol Y",
-    310: "LB",
-    311: "RB",
-    312: "LT (Digital)",
-    313: "RT (Digital)",
-    314: "QUIT",
-    315: "MULAI",
-    317: "L3",
-    318: "R3",
+    305: "Tombol A",
+    306: "Tombol B",
+    304: "Tombol X",
+    307: "Tombol Y",
+    308: "LB",
+    309: "RB",
+    310: "LT (Digital)",
+    311: "RT (Digital)",
+    312: "QUIT",
+    313: "MULAI",
+    314: "L3",
+    315: "R3",
 }
 
 # Pemetaan Sumbu Analog Kontinu (Code EV_ABS)
@@ -20,8 +20,8 @@ ABS_MAP = {
     1: "Analog Kiri (X)",
     2: "Analog Kanan (Y)",
     5: "Analog Kanan (X)",
-    9: "Analog RT",
-    10: "Analog LT",
+    #9: "Analog RT",
+    #10: "Analog LT",
 }
 
 # Pemetaan D-Pad / PAD (Code EV_ABS dengan Nilai Diskrit)
