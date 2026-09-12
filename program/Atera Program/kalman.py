@@ -1,83 +1,58 @@
+# kalman.py
 class KalmanAngle:
-    def __init__(self):
-        self.QAngle = 0.001
-        self.QBias = 0.003
-        self.RMeasure = 0.03
-        self.angle = 0.0
-        self.bias = 0.0
-        self.rate = 0.0
-        self.P=[[0.0,0.0],[0.0,0.0]]
+    """1D Kalman Filter untuk mengombinasikan respon frekuensi tinggi dari Gyroscope
 
-    '''def kalman():
-        QAngle = 0.001
-        QBias = 0.003
-        RMeasure = 0.03
+    dan respon frekuensi rendah dari Accelerometer.
+    """
 
-        angle = 0.0
-        bias = 0.0
+    def __init__(self) -> None:
+        self.Q_angle: float = 0.001
+        self.Q_bias: float = 0.003
+        self.R_measure: float = 0.03
 
-        P[0][0] = 0.0
-        P[0][1] = 0.0
-        P[1][0] = 0.0
-        P[1][1] = 0.0'''
+        self.angle: float = 0.0
+        self.bias: float = 0.0
+        self.rate: float = 0.0
+        self.P: list[list[float]] = [[0.0, 0.0], [0.0, 0.0]]
 
-    def getAngle(self,newAngle, newRate,dt):
-        #step 1:
-        self.rate = newRate - self.bias;    #new_rate is the latest Gyro measurement
-        self.angle += dt * self.rate;
+    def get_angle(self, new_angle: float, new_rate: float, dt: float) -> float:
+        """Menghitung estimasi sudut baru menggunakan algoritma Kalman Filter."""
+        # Tahap 1: Prediksi Status (State Prediction)
+        self.rate = new_rate - self.bias
+        self.angle += dt * self.rate
 
-        #Step 2:
-        self.P[0][0] += dt * (dt*self.P[1][1] -self.P[0][1] - self.P[1][0] + self.QAngle)
+        # Tahap 2: Matriks Kovarians Error (Error Covariance Update)
+        self.P[0][0] += dt * (dt * self.P[1][1] - self.P[0][1] - self.P[1][0] + self.Q_angle)
         self.P[0][1] -= dt * self.P[1][1]
         self.P[1][0] -= dt * self.P[1][1]
-        self.P[1][1] += self.QBias * dt
+        self.P[1][1] += self.Q_bias * dt
 
-        #Step 3: Innovation
-        y = newAngle - self.angle
+        # Tahap 3: Perhitungan Inovasi Kunci
+        y = new_angle - self.angle
+        s = self.P[0][0] + self.R_measure
 
-        #Step 4: Innovation covariance
-        s = self.P[0][0] + self.RMeasure
+        # Tahap 4: Gain Kalman Matrix
+        K = [self.P[0][0] / s, self.P[1][0] / s]
 
-        #Step 5:    Kalman Gain
-        K=[0.0,0.0]
-        K[0] = self.P[0][0]/s
-        K[1] = self.P[1][0]/s
-
-        #Step 6: Update the Angle
+        # Tahap 5: Update Estimasi Status Sudut & Bias
         self.angle += K[0] * y
-        self.bias  += K[1] * y
+        self.bias += K[1] * y
 
-        #Step 7: Calculate estimation error covariance - Update the error covariance
-        P00Temp = self.P[0][0]
-        P01Temp = self.P[0][1]
+        # Tahap 6: Update Matriks Kovarians
+        P00_temp = self.P[0][0]
+        P01_temp = self.P[0][1]
 
-        self.P[0][0] -= K[0] * P00Temp;
-        self.P[0][1] -= K[0] * P01Temp;
-        self.P[1][0] -= K[1] * P00Temp;
-        self.P[1][1] -= K[1] * P01Temp;
+        self.P[0][0] -= K[0] * P00_temp
+        self.P[0][1] -= K[0] * P01_temp
+        self.P[1][0] -= K[1] * P00_temp
+        self.P[1][1] -= K[1] * P01_temp
 
         return self.angle
 
-    def setAngle(self,angle):
+    def set_angle(self, angle: float) -> None:
+        """Mengatur sudut acuan awal."""
         self.angle = angle
 
-    def setQAngle(self,QAngle):
-        self.QAngle = QAngle
-
-    def setQBias(self,QBias):
-        self.QBias = QBias
-
-    def setRMeasure(self,RMeasure):
-        self.RMeasure = RMeasure
-
-    def getRate():
+    def get_rate(self) -> float:
+        """Mengembalikan laju kecepatan sudut (gyro rate)."""
         return self.rate
-
-    def getQAngle():
-        return self.QAngle
-
-    def getQBias():
-        return self.QBias
-
-    def  getRMeasure():
-        return self.RMeasure

@@ -11,8 +11,8 @@ ALPHA_2 = 0.0     # Value for QP
 
 
 # Setpoint
-#SETPOINT_IMU = 0 # Set point IMU's Y axis degree
-#SETPOINT_MOTOR = 0 # Set point DDSM's Y axis degree
+SETPOINT_IMU = 0 # Set point IMU's Y axis degree
+SETPOINT_MOTOR = 0 # Set point DDSM's Y axis degree
 
 #Safety
 OUTPUT_LIMIT = 1.0
