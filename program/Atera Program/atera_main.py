@@ -21,6 +21,7 @@ from ddsm115 import Angle_THETA, DDSM115Dual, DDSM115Error, MotorFeedback
 from joystick_mapping import ABS_MAP, BTN_MAP, DPAD_MAP
 from mpu6050 import AngleState, MPU6050Sensor
 from pd_control import BalancePDController, PDControlState
+form ise import ISE_CBFQP, ISE_PD, reset_ise_evaluator
 
 # Impor opsional evdev untuk fleksibilitas pembacaan joystick
 try:
@@ -450,7 +451,24 @@ class AteraMainApp:
                 turn_command=turn_cmd,
             )
 
-        # 5. Kirim Perintah ke Aktuator DDSM115
+        # 5. Eksekusi Evaluasi ISE
+        dt = angle_state.dt
+        err_psi = pd_state.error_psi
+        err_theta = pd_state.error_theta
+
+        if self.state.control_algorithm == "PD":
+            ise_res = ISE_PD(dt=dt, error_psi=err_psi, error_theta=err_theta)
+        else:  # Mode PD + CBF-QP
+            ise_res = ISE_CBFQP(dt=dt, error_psi=err_psi, error_theta=err_theta)
+
+        # Jika waktu evaluasi (EVALUATION_TIME) selesai, tampilkan notifikasi di UI
+        if ise_res["completed"]:
+            self.set_message(
+                f"Evaluasi ISE {self.state.control_algorithm} Selesai! "
+                f"ISE_Psi: {ise_res['ise_psi']:.3f} | ISE_Theta: {ise_res['ise_theta']:.3f}"
+            )
+
+        # 6. Kirim Perintah ke Aktuator DDSM115
         fb_dict = self.motors.drive_individual(
             left_value=pd_state.left_output, right_value=pd_state.right_output
         )
