@@ -139,7 +139,7 @@ class MPU6050Sensor:
         raw_kalman = kalman_x if axis == "roll" else kalman_y
         axis_name = "roll" if axis == "roll" else "pitch"
 
-        # KoreksiOffset & IMU Sign
+        # Koreksi Offset & IMU Sign
         angle_deg = (raw_kalman - self.zero_offset_deg) * float(config.IMU_SIGN)
 
         self._latest_state = AngleState(
@@ -166,13 +166,17 @@ class MPU6050Sensor:
         state = self.read_angles()
         return state.angle_deg
 
-    def Angular_Rate_PSI(self) -> float:
-        """Fungsi pengambil kecepatan sudut pendulum (dot_psi) dalam deg/s.
+    def Angular_dot_PSI(self) -> float:
+        """Fungsi utama pengambil kecepatan sudut pendulum (dot_psi) dalam deg/s.
 
         Digunakan oleh PD Control dan CBF-QP.
         """
         state = self._latest_state if self._latest_state is not None else self.read_angles()
         return state.gyro_rate_x if state.axis_used == "roll" else state.gyro_rate_y
+
+    def Angular_Rate_PSI(self) -> float:
+        """Alias untuk Angular_dot_PSI demi kompatibilitas mundur."""
+        return self.Angular_dot_PSI()
 
     # --- FUNGSI KALIBRASI DARI MAIN ---
 
@@ -229,7 +233,7 @@ class MPU6050Sensor:
         state = self.read_angles()
         return {
             "angle_psi": state.angle_deg,
-            "angular_rate_psi": self.Angular_Rate_PSI(),
+            "dot_psi": self.Angular_dot_PSI(),
             "dt": state.dt,
             "kalman_x": state.kalman_x,
             "kalman_y": state.kalman_y,

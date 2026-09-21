@@ -24,7 +24,7 @@ class ISE:
         self.ise_psi_history: List[float] = []
         self.ise_theta_history: List[float] = []
 
-    def reset((self) -> None:
+    def reset(self) -> None:
         """Mereset seluruh akumulator evaluasi."""
         self.elapsed_time = 0.0
         self.ise_psi = 0.0

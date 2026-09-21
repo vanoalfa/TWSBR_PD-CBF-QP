@@ -21,7 +21,7 @@ from ddsm115 import Angle_THETA, DDSM115Dual, DDSM115Error, MotorFeedback
 from joystick_mapping import ABS_MAP, BTN_MAP, DPAD_MAP
 from mpu6050 import AngleState, MPU6050Sensor
 from pd_control import BalancePDController, PDControlState
-form ise import ISE_CBFQP, ISE_PD, reset_ise_evaluator
+from ise import ISE_CBFQP, ISE_PD, reset_ise_evaluator
 
 # Impor opsional evdev untuk fleksibilitas pembacaan joystick
 try:
@@ -512,6 +512,7 @@ class AteraMainApp:
         # Section 1: MPU6050 & IMU State
         lines.append(" [IMU MPU6050 TELEMETRY]")
         if ang:
+            dot_psi_val = self.imu.Angular_dot_PSI()
             lines.append(
                 f"  Angle (Psi)   : {ang.angle_deg:+7.3f}° | Gyro Rate Dot Psi : {ang.gyro_rate_y:+7.3f}°/s"
             )
@@ -519,7 +520,7 @@ class AteraMainApp:
                 f"  Kalman Pitch  : {ang.kalman_y:+7.3f}° | Accel Pitch      : {ang.acc_angle_y:+7.3f}°"
             )
             lines.append(
-                f"  Zero Offset   : {self.state.zero_offset_deg:+7.3f}° | dt               : {ang.dt*1000.2f} ms"
+                f"  Zero Offset   : {self.state.zero_offset_deg:+7.3f}° | dt               : {ang.dt*1000:.2f} ms"
             )
         else:
             lines.append("  [!] IMU Data Disconnected / Loading...")
