@@ -501,7 +501,7 @@ class AteraMainApp:
                 f"  Kalman Pitch  : {ang.kalman_y:+7.3f}° | Accel Pitch      : {ang.acc_angle_y:+7.3f}°"
             )
             lines.append(
-                f"  Zero Offset   : {self.state.zero_offset_deg:+7.3f}° | dt               : {ang.dt*1000.2f} ms"
+                f"  Zero Offset   : {self.state.zero_offset_deg:+7.3f}° | dt               : {ang.dt*1000:.2f} ms"
             )
         else:
             lines.append("  [!] IMU Data Disconnected / Loading...")

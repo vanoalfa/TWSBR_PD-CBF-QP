@@ -166,7 +166,7 @@ class MPU6050Sensor:
         state = self.read_angles()
         return state.angle_deg
 
-    def Angular_Rate_PSI(self) -> float:
+    def Angular_dot_PSI(self) -> float:
         """Fungsi pengambil kecepatan sudut pendulum (dot_psi) dalam deg/s.
 
         Digunakan oleh PD Control dan CBF-QP.
@@ -229,7 +229,7 @@ class MPU6050Sensor:
         state = self.read_angles()
         return {
             "angle_psi": state.angle_deg,
-            "angular_rate_psi": self.Angular_Rate_PSI(),
+            "angular_dot_psi": self.Angular_dot_PSI(),
             "dt": state.dt,
             "kalman_x": state.kalman_x,
             "kalman_y": state.kalman_y,

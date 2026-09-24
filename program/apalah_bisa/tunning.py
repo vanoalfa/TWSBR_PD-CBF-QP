@@ -2,7 +2,7 @@
 # Tunning Control
 # =========================
 # Output kontrol dinormalisasi ke -1.0 .. +1.0
-Kp = 0.100
+Kp = 0.200
 Kd = 0.014
 Alpha_1 = 0.0
 Alpha_2 = 0.0
@@ -30,13 +30,12 @@ MOTOR_TIMEOUT_S = 0.03
 # Untuk balancing, mode "current" biasanya lebih responsif.
 MOTOR_CONTROL_MODE = "current"
 
-# Jika arah putaran salah, ubah salah satu sign ini.
+# Jika arah putaran bebeda, ubah salah satu sign '-' ini.
 LEFT_MOTOR_SIGN = -1.0
 RIGHT_MOTOR_SIGN = 1.0
 
-# Jika robot justru makin jatuh saat balancing mulai aktif,
-# ubah jadi -1.0.
-BALANCE_DIRECTION_SIGN = 1.0
+# Jika arah roda robot sama jatuhnya badan sama maka ubah sign '-'. dihilangkan/ditambah,
+BALANCE_DIRECTION_SIGN = -1.0
 
 # Valid saat speed loop. Satuan mengikuti protokol Waveshare:
 # waktu akselerasi per 1 rpm dalam kelipatan 0.1 ms.
