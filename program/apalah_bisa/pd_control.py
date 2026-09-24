@@ -5,15 +5,12 @@ import tunning
 
 @dataclass
 class PDControlState:
-    error_psi: float
-    error_dot_psi: float
-    target_psi: float
-    error_theta: float
-    error_dot_theta: float
-    target_theta: float
-    base_uPD: float
-    left_uPD: float
-    right_uPD: float
+    error_deg: float
+    error_rate_deg_s: float
+    target_angle_deg: float
+    base_output: float
+    left_output: float
+    right_output: float
 
 
 class BalancePDController:
@@ -29,22 +26,18 @@ class BalancePDController:
     def clamp(value: float, low: float, high: float) -> float:
         return max(low, min(high, value))
 
-    def uPD_compute(
+    def compute(
         self,
-        psi: float,
-        dot_psi: float,
-        target_psi: float = 0.0,
-        theta: float,
-        dot_theta: float,
-        target_theta: float = 0.0,
+        angle_deg: float,
+        angular_rate_deg_s: float,
+        target_angle_deg: float = 0.0,
         turn_command: float = 0.0,
     ) -> PDControlState:
-        error_psi = float(target_psi) - float(psi)
+        error_deg = float(target_angle_deg) - float(angle_deg)
         if abs(error_deg) < self.deadband_deg:
             error_deg = 0.0
-        error_theta = float(target_theta) - float(theta)
 
-        # Rumus PD
+        # PD dengan D memakai laju sudut terukur.
         error_rate_deg_s = -float(angular_rate_deg_s)
         base_output = (self.kp * error_deg) + (self.kd * error_rate_deg_s)
         base_output *= self.balance_direction_sign
