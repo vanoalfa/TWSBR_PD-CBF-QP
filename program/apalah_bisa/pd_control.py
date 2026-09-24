@@ -33,32 +33,40 @@ class BalancePDController:
         self,
         psi: float,
         dot_psi: float,
-        target_psi: float = 0.0,
         theta: float,
         dot_theta: float,
+        target_psi: float = 0.0,
         target_theta: float = 0.0,
         turn_command: float = 0.0,
     ) -> PDControlState:
+        # Perhitungan Error Psi
         error_psi = float(target_psi) - float(psi)
-        if abs(error_deg) < self.deadband_deg:
-            error_deg = 0.0
+        if abs(error_psi) < self.deadband_deg:
+            error_psi = 0.0
+
+        error_dot_psi = -float(dot_psi)
+
+        # Perhitungan Error Theta
         error_theta = float(target_theta) - float(theta)
+        error_dot_theta = -float(dot_theta)
 
         # Rumus PD
-        error_rate_deg_s = -float(angular_rate_deg_s)
-        base_output = (self.kp * error_deg) + (self.kd * error_rate_deg_s)
-        base_output *= self.balance_direction_sign
-        base_output = self.clamp(base_output, -self.output_limit, self.output_limit)
+        base_uPD = (self.kp * error_psi) + (self.kd * error_dot_psi)
+        base_uPD *= self.balance_direction_sign
+        base_uPD = self.clamp(base_uPD, -self.output_limit, self.output_limit)
 
         turn_term = self.clamp(float(turn_command), -1.0, 1.0) * self.turn_fraction
-        left_output = self.clamp(base_output - turn_term, -self.output_limit, self.output_limit)
-        right_output = self.clamp(base_output + turn_term, -self.output_limit, self.output_limit)
+        left_uPD = self.clamp(base_uPD - turn_term, -self.output_limit, self.output_limit)
+        right_uPD = self.clamp(base_uPD + turn_term, -self.output_limit, self.output_limit)
 
         return PDControlState(
-            error_deg=error_deg,
-            error_rate_deg_s=error_rate_deg_s,
-            target_angle_deg=float(target_angle_deg),
-            base_output=base_output,
-            left_output=left_output,
-            right_output=right_output,
+            error_psi=error_psi,
+            error_dot_psi=error_dot_psi,
+            target_psi=float(target_psi),
+            error_theta=error_theta,
+            error_dot_theta=error_dot_theta,
+            target_theta=float(target_theta),
+            base_uPD=base_uPD,
+            left_uPD=left_uPD,
+            right_uPD=right_uPD,
         )
