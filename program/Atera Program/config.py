@@ -83,11 +83,6 @@ MOTOR_TIMEOUT_S = 0.02
 # =========================
 JOYSTICK_PATH = '/dev/input/event5'
 
-# ==========================
-# KONFIGURASI EVALUASI ISE
-# ==========================
-EVALUATION_TIME = 10.0  # Durasi total evaluasi ISE (dalam detik)
-
 # =========================
 # Runtime / UI / safety
 # =========================

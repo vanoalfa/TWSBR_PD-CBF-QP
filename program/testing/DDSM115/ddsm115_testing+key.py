@@ -4,7 +4,7 @@ import sys
 import tty
 import termios
 
-PORT = "/dev/ttyACM1"
+PORT = "/dev/ttyACM0"
 BAUD = 115200
 TIMEOUT = 0.2
 
