@@ -1,137 +1,181 @@
+"""ise.py - Evaluasi error PD (ISE-style logging & plotting) untuk ATERA.
+
+Modul ini TIDAK ikut campur dalam aksi kontrol robot sama sekali. Tugasnya
+murni mencatat data error (selisih sudut terhadap setpoint) selama satu sesi
+balancing berjalan, lalu membuat & menyimpan grafik evaluasinya begitu sesi
+tersebut berakhir:
+
+    - Plot 1: error badan      (error_psi)          dari MPU6050   vs waktu
+    - Plot 2: error roda kiri  (error_theta_left)    dari DDSM115   vs waktu
+    - Plot 3: error roda kanan (error_theta_right)   dari DDSM115   vs waktu
+
+Alur pemakaian (lihat atera_main.py):
+
+    evaluator = EvaluasiError()
+    ...
+    # saat tombol MULAI ditekan / start_balancing() berhasil:
+    evaluator.start_session()
+    ...
+    # setiap siklus kontrol selama mode BALANCING:
+    evaluator.record(error_psi, error_theta_left, error_theta_right)
+    ...
+    # saat balancing berhenti (user stop / fault / quit):
+    evaluator.stop_and_save_session()
+
+File hasil evaluasi disimpan ke folder PLOT_EVALUASI (relatif terhadap
+direktori kerja program, sesuai config.PLOT_EVALUASI_DIR) dengan format nama
+"YYYYMMDD-URUTAN.png", di mana URUTAN otomatis bertambah tiap kali sesi baru
+disimpan pada tanggal yang sama (mis. 20260927-1.png, 20260927-2.png, dst).
+
+CATATAN DESAIN (penting dibaca):
+Permintaan awal menyebutkan "plot langsung muncul ketika tombol MULAI
+ditekan". Menampilkan jendela matplotlib interaktif secara live di tengah
+loop kontrol real-time 200 Hz pada Raspberry Pi berisiko tinggi memblokir
+atau memperlambat loop tersebut (matplotlib tidak dirancang untuk update
+secepat itu, apalagi lewat SSH/headless). Karena itu modul ini mengadaptasi
+permintaan tersebut menjadi: PENCATATAN dimulai persis saat tombol MULAI
+ditekan (start_session dipanggil dari start_balancing()), sedangkan
+PENGGAMBARAN & PENYIMPANAN grafik dilakukan sekali saja tepat setelah sesi
+balancing berakhir (stop_and_save_session). Backend matplotlib diset ke
+"Agg" (non-interaktif) sehingga aman dipanggil headless dan tidak pernah
+membuka jendela GUI. Jika Anda tetap ingin jendela plot muncul secara
+interaktif di layar (mis. saat development di desktop, bukan di robot),
+lihat catatan di bagian bawah file ini.
+"""
 from __future__ import annotations
 
+import logging
 import os
-from typing import Dict, List, Optional
-import matplotlib.pyplot as plt
-import config
+import time
+from dataclasses import dataclass, field
+from typing import List, Optional
+
+import matplotlib
+
+matplotlib.use("Agg")  # non-interaktif: aman dipakai di loop real-time / headless
+import matplotlib.pyplot as plt  # noqa: E402  (import setelah matplotlib.use)
+
+import config as tunning
+
+LOGGER = logging.getLogger("atera.ise")
 
 
-class ISE:
-    """Kelas pengumpul data dan pencatat akumulasi nilai ISE real-time."""
+@dataclass
+class _SessionBuffer:
+    t: List[float] = field(default_factory=list)
+    error_psi: List[float] = field(default_factory=list)
+    error_theta_left: List[float] = field(default_factory=list)
+    error_theta_right: List[float] = field(default_factory=list)
+    t0: float = 0.0
 
-    def __init__(self, mode_name: str, eval_time: float = getattr(config, "EVALUATION_TIME", 10.0)) -> None:
-        self.mode_name = mode_name
-        self.eval_time = eval_time
-        self.elapsed_time = 0.0
-        self.ise_psi = 0.0
-        self.ise_theta = 0.0
-        self.is_completed = False
 
-        # Riwayat data untuk perplotan
-        self.time_history: List[float] = []
-        self.error_psi_history: List[float] = []
-        self.error_theta_history: List[float] = []
-        self.ise_psi_history: List[float] = []
-        self.ise_theta_history: List[float] = []
+class EvaluasiError:
+    """Mencatat error PD selama satu sesi balancing dan membuat plot evaluasi."""
 
-    def reset(self) -> None:
-        """Mereset seluruh akumulator evaluasi."""
-        self.elapsed_time = 0.0
-        self.ise_psi = 0.0
-        self.ise_theta = 0.0
-        self.is_completed = False
-        self.time_history.clear()
-        self.error_psi_history.clear()
-        self.error_theta_history.clear()
-        self.ise_psi_history.clear()
-        self.ise_theta_history.clear()
+    def __init__(self, plot_dir: Optional[str] = None) -> None:
+        self.plot_dir = plot_dir or getattr(tunning, "PLOT_EVALUASI_DIR", "PLOT_EVALUASI")
+        self._buffer: Optional[_SessionBuffer] = None
+        self._active: bool = False
 
-    def update(self, dt: float, error_psi: float, error_theta: float) -> Dict[str, float | bool]:
-        """Memperbarui akumulasi ISE secara diskrit setiap loop control."""
-        if self.is_completed:
-            return {
-                "completed": True,
-                "elapsed_time": self.elapsed_time,
-                "ise_psi": self.ise_psi,
-                "ise_theta": self.ise_theta,
-            }
+    # ------------------------------------------------------------------
+    # Kontrol sesi
+    # ------------------------------------------------------------------
+    def start_session(self) -> None:
+        """Dipanggil tepat saat tombol MULAI ditekan (balancing benar-benar mulai)."""
+        self._buffer = _SessionBuffer(t0=time.monotonic())
+        self._active = True
+        LOGGER.info("Sesi evaluasi ISE dimulai.")
 
-        self.elapsed_time += dt
-        self.ise_psi += (error_psi**2) * dt
-        self.ise_theta += (error_theta**2) * dt
+    def record(
+        self,
+        error_psi: float,
+        error_theta_left: float,
+        error_theta_right: float,
+    ) -> None:
+        """Dipanggil tiap siklus kontrol selama mode BALANCING. Ringan (list
+        append saja) sehingga aman dipanggil di loop 200 Hz."""
+        if not self._active or self._buffer is None:
+            return
+        now = time.monotonic() - self._buffer.t0
+        self._buffer.t.append(now)
+        self._buffer.error_psi.append(float(error_psi))
+        self._buffer.error_theta_left.append(float(error_theta_left))
+        self._buffer.error_theta_right.append(float(error_theta_right))
 
-        self.time_history.append(self.elapsed_time)
-        self.error_psi_history.append(error_psi)
-        self.error_theta_history.append(error_theta)
-        self.ise_psi_history.append(self.ise_psi)
-        self.ise_theta_history.append(self.ise_theta)
+    def stop_and_save_session(self) -> Optional[str]:
+        """Dipanggil saat balancing berhenti (stop manual / fault / quit).
 
-        if self.elapsed_time >= self.eval_time:
-            self.is_completed = True
-            self.generate_plot()
+        Membuat 3 subplot (badan, roda kiri, roda kanan) dalam satu figure,
+        lalu menyimpannya ke PLOT_EVALUASI/YYYYMMDD-URUTAN.png.
 
-        return {
-            "completed": self.is_completed,
-            "elapsed_time": self.elapsed_time,
-            "ise_psi": self.ise_psi,
-            "ise_theta": self.ise_theta,
-        }
+        Mengembalikan path file yang tersimpan, atau None jika tidak ada
+        sesi aktif / datanya terlalu sedikit untuk digambar.
+        """
+        if not self._active:
+            return None
+        self._active = False
+        buffer = self._buffer
+        self._buffer = None
+        if buffer is None or len(buffer.t) < 2:
+            LOGGER.info("Sesi evaluasi ISE dilewati (data terlalu sedikit untuk diplot).")
+            return None
+        try:
+            path = self._save_plot(buffer)
+            LOGGER.info("Plot evaluasi ISE disimpan: %s", path)
+            return path
+        except Exception as exc:  # pragma: no cover - jangan sampai crash robot
+            LOGGER.error("Gagal menyimpan plot evaluasi ISE: %s", exc)
+            return None
 
-    def generate_plot(self) -> str:
-        """Menghasilkan plot evaluasi Error dan ISE lalu menyimpannya sebagai file gambar."""
-        fig, axs = plt.subplots(2, 2, figsize=(12, 8))
-        fig.suptitle(
-            f"Evaluasi Performa ISE Mode [{self.mode_name}] (Target: {self.eval_time}s)\n"
-            f"Final ISE Psi: {self.ise_psi:.4f} | Final ISE Theta: {self.ise_theta:.4f}",
-            fontsize=12,
-            fontweight="bold",
-        )
+    # ------------------------------------------------------------------
+    # Internal
+    # ------------------------------------------------------------------
+    def _next_filepath(self) -> str:
+        os.makedirs(self.plot_dir, exist_ok=True)
+        today = time.strftime("%Y%m%d")
+        urutan = 1
+        while True:
+            candidate = os.path.join(self.plot_dir, f"{today}-{urutan}.png")
+            if not os.path.exists(candidate):
+                return candidate
+            urutan += 1
 
-        # Plot Error Psi
-        axs[0, 0].plot(self.time_history, self.error_psi_history, "r-", label=r"Error $\psi$")
-        axs[0, 0].set_title(r"Error Kemiringan Pitch ($e_\psi$)")
-        axs[0, 0].set_ylabel("Error (deg)")
-        axs[0, 0].grid(True)
-        axs[0, 0].legend()
+    def _save_plot(self, buffer: _SessionBuffer) -> str:
+        fig, axes = plt.subplots(3, 1, figsize=(9, 9), sharex=True)
 
-        # Plot ISE Psi
-        axs[0, 1].plot(self.time_history, self.ise_psi_history, "m-", label=r"ISE $\psi$")
-        axs[0, 1].set_title(r"Integral Square Error Pitch ($ISE_\psi$)")
-        axs[0, 1].set_ylabel(r"$\text{deg}^2 \cdot \text{s}$")
-        axs[0, 1].grid(True)
-        axs[0, 1].legend()
+        axes[0].plot(buffer.t, buffer.error_psi, color="tab:red")
+        axes[0].set_title("Error Badan (psi)")
+        axes[0].set_ylabel("error_psi (deg)")
+        axes[0].grid(True, alpha=0.3)
 
-        # Plot Error Theta
-        axs[1, 0].plot(self.time_history, self.error_theta_history, "b-", label=r"Error $\theta$")
-        axs[1, 0].set_title(r"Error Posisi Roda ($e_\theta$)")
-        axs[1, 0].set_xlabel("Waktu (detik)")
-        axs[1, 0].set_ylabel("Error (deg)")
-        axs[1, 0].grid(True)
-        axs[1, 0].legend()
+        axes[1].plot(buffer.t, buffer.error_theta_left, color="tab:blue")
+        axes[1].set_title("Error Roda Kiri (theta)")
+        axes[1].set_ylabel("error_theta_left (deg)")
+        axes[1].grid(True, alpha=0.3)
 
-        # Plot ISE Theta
-        axs[1, 1].plot(self.time_history, self.ise_theta_history, "c-", label=r"ISE $\theta$")
-        axs[1, 1].set_title(r"Integral Square Error Roda ($ISE_\theta$)")
-        axs[1, 1].set_xlabel("Waktu (detik)")
-        axs[1, 1].set_ylabel(r"$\text{deg}^2 \cdot \text{s}$")
-        axs[1, 1].grid(True)
-        axs[1, 1].legend()
+        axes[2].plot(buffer.t, buffer.error_theta_right, color="tab:green")
+        axes[2].set_title("Error Roda Kanan (theta)")
+        axes[2].set_ylabel("error_theta_right (deg)")
+        axes[2].set_xlabel("Waktu (s)")
+        axes[2].grid(True, alpha=0.3)
 
-        plt.tight_layout()
-        filename = f"ise_plot_{self.mode_name.lower()}.png"
-        plt.savefig(filename, dpi=300)
+        fig.suptitle("Evaluasi Error PD - ATERA Self Balancing Robot")
+        fig.tight_layout()
+
+        path = self._next_filepath()
+        fig.savefig(path, dpi=150)
         plt.close(fig)
-        return filename
+        return path
 
 
-# Global Evaluator Instances
-_eval_pd = ISE(mode_name="PD")
-_eval_cbfqp = ISE(mode_name="CBF_QP")
-
-
-def ISE_PD(dt: float, error_psi: float, error_theta: float) -> Dict[str, float | bool]:
-    """Fungsi pemanggil evaluasi ISE untuk Mode PD murni."""
-    return _eval_pd.update(dt, error_psi, error_theta)
-
-
-def ISE_CBFQP(dt: float, error_psi: float, error_theta: float) -> Dict[str, float | bool]:
-    """Fungsi pemanggil evaluasi ISE untuk Mode PD + CBF-QP."""
-    return _eval_cbfqp.update(dt, error_psi, error_theta)
-
-
-def reset_ise_evaluator(mode: str = "ALL") -> None:
-    """Mereset status pengujian evaluasi ISE."""
-    if mode in ("PD", "ALL"):
-        _eval_pd.reset()
-    if mode in ("CBF_QP", "ALL"):
-        _eval_cbfqp.reset()
+# ----------------------------------------------------------------------
+# CATATAN: menampilkan plot secara interaktif (opsional, non-robot)
+# ----------------------------------------------------------------------
+# Jika file ini dijalankan di komputer development (BUKAN di Raspberry Pi
+# saat robot berjalan) dan Anda ingin jendela grafik benar-benar muncul di
+# layar, ganti backend di bagian atas file dari:
+#       matplotlib.use("Agg")
+# menjadi backend interaktif seperti "TkAgg" atau "QtAgg" (perlu paket GUI
+# terpasang), lalu tambahkan `plt.show()` setelah `fig.savefig(...)` di
+# dalam `_save_plot`. Untuk penggunaan normal di robot (headless, real-time),
+# biarkan tetap "Agg" seperti sekarang agar tidak memblokir loop kontrol.
