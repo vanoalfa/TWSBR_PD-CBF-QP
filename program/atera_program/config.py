@@ -1,42 +1,11 @@
 # =========================
 # Tunning Control
 # =========================
-# CATATAN PERUBAHAN (lihat pd_control.py untuk detail):
-# - Kp/Kd lama (skala ternormalisasi 0.0 - 1.0, dipakai untuk loop psi saja)
-#   diganti dengan 4 gain baru yang terpisah untuk loop psi (badan) dan loop
-#   theta (roda), dan sekarang berupa bilangan bulat (int) karena clamp
-#   output PD di pd_control.py sudah DIHILANGKAN sesuai permintaan.
-# - Kp_theta = Kd_theta = 0 (default) membuat loop theta tidak berkontribusi
-#   sama sekali, sehingga perilaku robot semirip mungkin dengan versi PD
-#   single-loop sebelumnya yang sudah terbukti stabil.
-#
-# --- PERBAIKAN "OSILASI KASAR" (GAIN_SCALE) ---
-# Karena command_normalized() di ddsm115.py TETAP membatasi input ke
-# rentang +-1.0 (tidak diubah), gain integer TANPA skala ternyata jauh
-# lebih "kasar" daripada gain lama yang berupa pecahan: Kp_psi=1 saja
-# sudah membuat motor full-power hanya pada error ~1 derajat (dulu perlu
-# ~5 derajat dengan Kp=0.200), sehingga PD berperilaku seperti relay/
-# bang-bang dan menghasilkan osilasi kasar (limit cycle), bukan PD halus.
-#
-# GAIN_SCALE membagi hasil (Kp*error + Kd*rate) SEBELUM dikirim ke motor,
-# sehingga Kp_psi/Kd_psi/Kp_theta/Kd_theta tetap bilangan BULAT (0 s.d.
-# tak terbatas, sesuai permintaan awal) tapi tiap kenaikan 1 satuan hanya
-# menggeser gain efektif sebesar 1/GAIN_SCALE -- resolusi tuning jadi
-# halus lagi seperti versi float lama.
 GAIN_SCALE = 1000
-
-# Nilai di bawah dipilih supaya gain EFEKTIF (Kp_psi/GAIN_SCALE dst)
-# MEREPRODUKSI PERSIS gain lama yang sudah terbukti stabil, sebagai titik
-# awal yang aman:
-#   Kp lama = 0.200  ->  Kp_psi / GAIN_SCALE = 200 / 1000 = 0.200
-#   Kd lama = 0.014  ->  Kd_psi / GAIN_SCALE =  14 / 1000 = 0.014
-# Untuk fine-tuning, naik/turunkan Kp_psi & Kd_psi dalam langkah kecil
-# (mis. +-5 s.d. +-20) dari titik ini -- jauh lebih halus daripada
-# menaikkan gain 1 demi 1 tanpa skala seperti sebelumnya.
-Kp_psi = 200    # dahulu Kp = 0.200 (loop sudut badan / psi)
-Kd_psi = 14     # dahulu Kd = 0.014 (loop sudut badan / psi)
-Kp_theta = 100    # BARU: loop sudut roda / theta (0 = nonaktif secara default)
-Kd_theta = 0    # BARU: loop kecepatan sudut roda / theta (0 = nonaktif)
+Kp_psi = 200  
+Kd_psi = 14 
+Kp_theta = 0  
+Kd_theta = 0
 
 # Setpoint sudut roda (theta) default, dalam derajat, dipakai oleh loop theta
 # di pd_control.py (dipakai sama untuk roda kiri & kanan). Nilai 0 berarti

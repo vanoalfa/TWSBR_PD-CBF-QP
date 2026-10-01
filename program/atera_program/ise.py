@@ -52,8 +52,8 @@ from typing import List, Optional
 
 import matplotlib
 
-matplotlib.use("Agg")  # non-interaktif: aman dipakai di loop real-time / headless
-import matplotlib.pyplot as plt  # noqa: E402  (import setelah matplotlib.use)
+matplotlib.use("Agg") 
+import matplotlib.pyplot as plt
 
 import config as tunning
 
