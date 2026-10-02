@@ -1,17 +1,17 @@
 # Pemetaan Tombol Digital (Code EV_KEY)
 BTN_MAP = {
-    304: "Tombol A",
-    305: "Tombol B",
-    307: "Tombol X",
-    308: "Tombol Y",
-    310: "LB",
-    311: "RB",
-    312: "LT (Digital)",
-    313: "RT (Digital)",
-    314: "QUIT",
-    315: "MULAI",
-    317: "L3",
-    318: "R3",
+    304: "Tombol A",        # Press this if wanna using analog (ABS_MAP)
+    305: "Tombol B",        # Press this if wanna Just balancing (can't and no joystick (ABS_MAP)) (Mode Balancing)
+    307: "Tombol X",        # Turn off wheel
+    308: "Tombol Y",        # Kalibrasi
+    310: "LB",              # Untuk switch ke mode PD
+    311: "RB",              # Untuk Switch ke Mode PD + CBF-QP
+    312: "LT (Digital)",    # Pindah pages GUI ke kiri
+    313: "RT (Digital)",    # Pindah pages GUI ke kanan
+    314: "QUIT",            # Quit Program
+    315: "MULAI",           # Starting Program (Balancing after kalibrasi)
+    317: "L3",              
+    318: "R3",              
 }
 
 # Pemetaan Sumbu Analog Kontinu (Code EV_ABS)
@@ -20,12 +20,12 @@ ABS_MAP = {
     1: "Analog Kiri (X)",
     2: "Analog Kanan (Y)",
     5: "Analog Kanan (X)",
-    #9: "Analog RT",
-    #10: "Analog LT",
+    9: "Analog RT",
+    10: "Analog LT",
 }
 
 # Pemetaan D-Pad / PAD (Code EV_ABS dengan Nilai Diskrit)
 DPAD_MAP = {
-    16: {-1: "PAD Kiri", 1: "PAD Kanan"},
-    17: {-1: "PAD Atas", 1: "PAD Bawah"},
+    16: {-1: "PAD Kiri", 1: "PAD Kanan"}, # Untuk maju dan mundur, lepas = berhenti
+    17: {-1: "PAD Atas", 1: "PAD Bawah"}, # untuk kiri dan kanan, lepas = berhenti
 }

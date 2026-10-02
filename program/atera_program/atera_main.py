@@ -1,38 +1,24 @@
 """Program utama self-balancing robot ATERA (Versi Joystick).
 
 Fitur utama:
-- Integrasi MPU6050 + Kalman filter + PD controller (loop psi + loop theta) + dua motor DDSM115
+- Integrasi MPU6050 + Kalman filter + PD controller + dua motor DDSM115
+- Satu output kontrol (u_PD) untuk kedua roda, opsional difilter CBF-QP (acados/HPIPM)
+- Evaluasi ISE + plot otomatis (ise.py) setiap kali MULAI ditekan
 - State machine sederhana: IDLE, CALIBRATING, READY, BALANCING, FAULT, EXITING
 - Kontrol joystick non-blocking via evdev menggunakan mapping nama dari joystick_mapping.py
-- UI terminal sederhana dengan beberapa halaman (LB / RB untuk pindah)
+- UI terminal sederhana dengan beberapa halaman (LT / RT untuk pindah)
 - Shutdown aman: motor dihentikan saat fault, tilt berlebih, atau quit
-- Evaluasi error (ise.py): merekam error psi/theta selama balancing dan
-  menyimpan grafiknya otomatis ke folder PLOT_EVALUASI saat balancing berhenti
 
-Pemetaan Kontrol Joystick (berdasarkan joystick_mapping.py):
+Pemetaan Kontrol Joystick (berdasarkan komentar di joystick_mapping.py):
+- Tombol A     : Mode JOYSTICK (analog / D-Pad aktif untuk maju, mundur, belok)
+- Tombol B     : Mode BALANCE (hanya balancing, joystick gerak diabaikan)
+- Tombol X     : Matikan roda (stop balancing)
 - Tombol Y     : Kalibrasi gyro + zero angle
-- MULAI        : Start/Stop balancing (Toggle)
-- Tombol X/B   : Stop balancing
-- LB / RB      : Ganti halaman UI
-- Analog/D-Pad : Maju, mundur, dan belok (proporsional & responsif)
+- LB           : Kontroler PD
+- RB           : Kontroler PD + CBF-QP
+- LT / RT      : Pindah halaman UI ke kiri / kanan
+- MULAI        : Start/Stop balancing (Toggle), plot ISE langsung muncul
 - QUIT         : Quit aman
-
-CATATAN PERUBAHAN vs versi sebelumnya (lihat juga config.py, pd_control.py,
-ise.py untuk detail masing-masing):
-1. tunning.py di-rename menjadi config.py (isi sama persis, hanya nama file
-   yang berubah). Baris import di file ini (dan file lain yang tadinya
-   `import tunning`) cukup diubah menjadi `import config as tunning` supaya
-   seluruh pemanggilan `tunning.NAMA_KONSTANTA` di kode lama TETAP berjalan
-   tanpa perlu diubah satu per satu (perubahan seminimal mungkin).
-2. pd_control.py sekarang punya loop tambahan (theta / sudut roda dari
-   encoder DDSM115) di samping loop psi (sudut badan dari MPU6050) yang
-   sudah terbukti stabil. Loop theta nonaktif secara default
-   (Kp_theta = Kd_theta = 0 di config.py) sehingga perilaku default tetap
-   semirip mungkin dengan versi lama.
-3. Ditambahkan integrasi dengan ise.py (EvaluasiError): mulai mencatat saat
-   tombol MULAI ditekan, lalu menyimpan grafik evaluasi otomatis ke folder
-   PLOT_EVALUASI saat balancing berhenti (baik dihentikan manual, fault,
-   maupun saat program keluar).
 """
 
 from __future__ import annotations
@@ -47,15 +33,21 @@ from typing import Dict, Optional
 import evdev
 from evdev import ecodes
 
+import config
 import joystick_mapping
-import config as tunning
-from ddsm115 import DDSM115Error, DualDDSM115, MotorFeedback
+from cbf_qp import CBFQPFilter, CBFResult
+from ddsm115 import DDSM115Error, DualDDSM115, MotorFeedback, u_limit_raw
+from ise import ISEEvaluator
 from mpu6050 import AngleState, MPU6050Reader
-from pd_control import BalancePDController, PDControlState
-from ise import EvaluasiError
+from pd_control import PDController, PDControlState, wheel_output_from_u
 
 LOGGER = logging.getLogger("atera")
-PAGES = ("status", "motor", "help")
+PAGES = ("status", "motor", "cbf", "help")
+
+CONTROL_PD = "PD"
+CONTROL_PD_CBF = "PD+CBF-QP"
+DRIVE_BALANCE = "BALANCE"      # Tombol B: balancing only, joystick motion ignored
+DRIVE_JOYSTICK = "JOYSTICK"    # Tombol A: analog / D-Pad active
 
 
 @dataclass
@@ -71,23 +63,23 @@ class RuntimeState:
     latest_motor_fb: Dict[str, Optional[MotorFeedback]] = field(
         default_factory=lambda: {"left": None, "right": None}
     )
-    target_angle_deg: float = 0.0
+    latest_cbf: Optional[CBFResult] = None
+    control_mode: str = CONTROL_PD
+    drive_mode: str = DRIVE_BALANCE
+    setpoint_psi: float = 0.0
+    setpoint_theta_left: float = 0.0
+    setpoint_theta_right: float = 0.0
+    angle_theta_left: float = 0.0
+    angle_theta_right: float = 0.0
+    u_cmd: float = 0.0
     turn_command: float = 0.0
     last_loop_dt: float = 0.0
     loop_hz_est: float = 0.0
-
     zero_offset_deg: float = 0.0
     gyro_bias_x: float = 0.0
     gyro_bias_y: float = 0.0
     balance_started_at: Optional[float] = None
     last_status_log_ts: float = 0.0
-
-    # --- Referensi loop theta (roda), lihat perbaikan "robot berputar" ---
-    # Diintegrasikan dari kecepatan roda (bukan dibaca langsung dari posisi
-    # absolut encoder yang wrap 0-360 derajat & tidak sinkron antara roda
-    # kiri & kanan), dan di-nol-kan ulang setiap start_balancing().
-    wheel_theta_left_deg: float = 0.0
-    wheel_theta_right_deg: float = 0.0
 
 
 class JoystickController:
@@ -119,6 +111,7 @@ class JoystickController:
             norm = value / 32768.0
         else:
             norm = 0.0
+
         if abs(norm) < deadzone:
             return 0.0
         return max(-1.0, min(1.0, norm))
@@ -126,40 +119,58 @@ class JoystickController:
     def poll_events(self, app: AteraMainApp) -> None:
         if self.device is None:
             return
+
         try:
             r, _, _ = select.select([self.device], [], [], 0)
             if not r:
                 return
+
             for event in self.device.read():
                 self._process_event(event, app)
         except (OSError, RuntimeError) as exc:
             LOGGER.error("Koneksi joystick terputus: %s", exc)
             self.device = None
+            # A lost joystick must not keep the last stick position.
+            self.analog_y = self.analog_x = self.dpad_y = self.dpad_x = 0.0
 
     def _process_event(self, event: evdev.InputEvent, app: AteraMainApp) -> None:
         # 1. Tombol Digital (EV_KEY)
         if event.type == ecodes.EV_KEY:
             if event.value == 1:  # Button Down Event
                 btn_name = joystick_mapping.BTN_MAP.get(event.code)
+
                 if btn_name == "MULAI":
                     app.toggle_balancing()
                 elif btn_name == "Tombol Y":
                     app.calibrate()
-                elif btn_name in ("Tombol X", "Tombol B"):
-                    app.stop_balancing("Stop manual dari joystick.")
-                elif btn_name in ("LB", "RB"):
+                elif btn_name == "Tombol X":
+                    app.stop_balancing("Roda dimatikan dari joystick.")
+                elif btn_name == "Tombol A":
+                    app.set_drive_mode(DRIVE_JOYSTICK)
+                elif btn_name == "Tombol B":
+                    app.set_drive_mode(DRIVE_BALANCE)
+                elif btn_name == "LB":
+                    app.set_control_mode(CONTROL_PD)
+                elif btn_name == "RB":
+                    app.set_control_mode(CONTROL_PD_CBF)
+                elif btn_name == "LT (Digital)":
+                    app.state.page_index = (app.state.page_index - 1) % len(PAGES)
+                elif btn_name == "RT (Digital)":
                     app.state.page_index = (app.state.page_index + 1) % len(PAGES)
                 elif btn_name == "QUIT":
                     app.state.exit_requested = True
                     app.set_message("Quit diminta dari joystick.")
+
         # 2. Sumbu Analog & D-Pad (EV_ABS)
         elif event.type == ecodes.EV_ABS:
             code = event.code
             val = event.value
+
             # Cek Pemetaan D-Pad (DPAD_MAP)
             if code in joystick_mapping.DPAD_MAP:
                 dpad_dict = joystick_mapping.DPAD_MAP[code]
                 dpad_name = dpad_dict.get(val, "")
+
                 if code == 17:  # Sumbu Y D-Pad
                     if dpad_name == "PAD Atas":
                         self.dpad_y = -1.0  # -1 = Maju
@@ -174,35 +185,40 @@ class JoystickController:
                         self.dpad_x = 1.0   # 1 = Belok Kanan
                     else:
                         self.dpad_x = 0.0
+
             # Cek Pemetaan Analog Stick (ABS_MAP)
             elif code in joystick_mapping.ABS_MAP:
                 abs_name = joystick_mapping.ABS_MAP[code]
                 norm = self._normalize_axis(val)
+
                 if abs_name == "Analog Kiri (Y)":
                     self.analog_y = -norm  # Dibalik agar nilai positif = Maju
                 elif abs_name in ("Analog Kiri (X)", "Analog Kanan (X)"):
                     self.analog_x = norm
 
     def get_commands(self) -> tuple[float, float]:
-        """Menghasilkan pasangan (target_angle_deg, turn_command)."""
+        """Menghasilkan pasangan (offset setpoint_psi [deg], turn_command)."""
         target_angle = 0.0
         turn_command = 0.0
+
         # Maju / Mundur: Prioritas Analog Y, fallback ke D-Pad Y
         if abs(self.analog_y) > 0.0:
             if self.analog_y > 0:
-                target_angle = self.analog_y * float(tunning.MANUAL_FORWARD_TARGET_DEG)
+                target_angle = self.analog_y * float(config.MANUAL_FORWARD_TARGET_DEG)
             else:
-                target_angle = abs(self.analog_y) * float(tunning.MANUAL_BACKWARD_TARGET_DEG)
+                target_angle = abs(self.analog_y) * float(config.MANUAL_BACKWARD_TARGET_DEG)
         elif self.dpad_y != 0.0:
             if self.dpad_y < 0:  # PAD Atas / Maju
-                target_angle = float(tunning.MANUAL_FORWARD_TARGET_DEG)
+                target_angle = float(config.MANUAL_FORWARD_TARGET_DEG)
             elif self.dpad_y > 0:  # PAD Bawah / Mundur
-                target_angle = float(tunning.MANUAL_BACKWARD_TARGET_DEG)
+                target_angle = float(config.MANUAL_BACKWARD_TARGET_DEG)
+
         # Belok Kiri / Kanan: Prioritas Analog X, fallback ke D-Pad X
         if abs(self.analog_x) > 0.0:
             turn_command = self.analog_x
         elif self.dpad_x != 0.0:
             turn_command = self.dpad_x
+
         return target_angle, turn_command
 
 
@@ -210,9 +226,10 @@ class AteraMainApp:
     def __init__(self) -> None:
         self.motors = DualDDSM115()
         self.imu = MPU6050Reader()
-        self.controller = BalancePDController()
-        self.joystick = JoystickController(tunning.JOYSTICK_PATH)
-        self.evaluator = EvaluasiError()
+        self.controller = PDController()
+        self.cbf = CBFQPFilter()
+        self.ise = ISEEvaluator()
+        self.joystick = JoystickController(config.JOYSTICK_PATH)
         self.state = RuntimeState()
         self._running = False
         self._motors_stopped = False
@@ -224,6 +241,9 @@ class AteraMainApp:
         self.imu.open()
         if not self.joystick.open():
             LOGGER.warning("Gagal menginisialisasi joystick pada boot initial.")
+        self.ise.open()
+        # Builds/loads the acados solver only when the [CBF-QP] section of config.py is complete.
+        self.cbf.setup()
         self._motors_stopped = True
         self.state.mode = "IDLE"
         self.state.last_message = "Hardware siap. Tekan Tombol Y untuk kalibrasi."
@@ -232,13 +252,13 @@ class AteraMainApp:
     def cleanup(self) -> None:
         self.state.mode = "EXITING"
         try:
-            self.evaluator.stop_and_save_session()
-        except Exception as exc:
-            LOGGER.error("Failed saving evaluation plot during cleanup: %s", exc)
-        try:
             self.ensure_motors_stopped("cleanup")
         except Exception as exc:
             LOGGER.error("Failed stopping motors during cleanup: %s", exc)
+        try:
+            self.ise.close()
+        except Exception as exc:
+            LOGGER.error("Failed closing ISE evaluation: %s", exc)
         try:
             self.motors.close()
         except Exception as exc:
@@ -265,29 +285,56 @@ class AteraMainApp:
         self.state.fault_reason = reason
         self.state.balance_started_at = None
         try:
-            self.evaluator.stop_and_save_session()
-        except Exception as exc:
-            LOGGER.error("Failed saving evaluation plot after fault: %s", exc)
-        try:
             self.ensure_motors_stopped("fault")
         except Exception as exc:
             LOGGER.error("Failed to stop motors after fault: %s", exc)
-        self.set_message(f"FAULT: {reason}")
+        self.set_message(f"FAULT: {reason}{self.finish_ise()}")
+
+    def finish_ise(self) -> str:
+        """Stop the ISE run (if any) and save the plot. Returns a text for the UI message."""
+        try:
+            base = self.ise.stop()
+        except Exception as exc:
+            LOGGER.error("ISE stop failed: %s", exc)
+            return ""
+        if not base:
+            return ""
+        return f" | ISE disimpan: {config.ISE_PLOT_DIR}/{self.ise.run_name}.png"
+
+    def set_drive_mode(self, drive_mode: str) -> None:
+        self.state.drive_mode = drive_mode
+        if drive_mode == DRIVE_JOYSTICK:
+            self.set_message("Mode JOYSTICK: analog / D-Pad aktif.")
+        else:
+            self.set_message("Mode BALANCE: hanya balancing, joystick gerak diabaikan.")
+
+    def set_control_mode(self, control_mode: str) -> None:
+        if self.state.mode == "BALANCING":
+            self.set_message("Ganti kontroler hanya saat roda mati (tekan Tombol X dulu).")
+            return
+        if control_mode == CONTROL_PD_CBF and not self.cbf.available:
+            self.set_message(f"PD + CBF-QP belum bisa dipakai: {self.cbf.reason}")
+            return
+        self.state.control_mode = control_mode
+        self.set_message(f"Kontroler aktif: {control_mode}")
 
     def stop_balancing(self, reason: str = "Balancing dihentikan.") -> None:
         try:
             self.ensure_motors_stopped("stop balancing")
         finally:
-            self.evaluator.stop_and_save_session()
             self.state.balance_started_at = None
             self.state.latest_pd = None
-            self.state.target_angle_deg = 0.0
+            self.state.latest_cbf = None
+            self.state.u_cmd = 0.0
             self.state.turn_command = 0.0
             if self.state.mode != "FAULT":
                 self.state.mode = "READY" if self.state.calibrated else "IDLE"
-            self.set_message(reason)
+            self.set_message(reason + self.finish_ise())
 
     def calibrate(self) -> None:
+        if self.state.mode == "BALANCING":
+            self.set_message("Kalibrasi hanya saat roda mati (tekan Tombol X dulu).")
+            return
         previous_mode = self.state.mode
         self.state.mode = "CALIBRATING"
         self.state.fault_reason = ""
@@ -318,24 +365,33 @@ class AteraMainApp:
         except Exception as exc:
             self.set_fault(f"Gagal membaca IMU sebelum start: {exc}")
             return
-        if abs(angle.angle_deg) > float(tunning.SAFE_TILT_DEG):
+        if abs(angle.angle_deg) > float(config.SAFE_TILT_DEG):
             self.set_message(
                 f"Sudut awal terlalu besar ({angle.angle_deg:.2f} deg). Tegakkan robot dulu."
             )
             return
+        try:
+            # Zero command -> fresh encoder feedback; this wheel position becomes theta = 0.
+            feedback = self.motors.command_u(0.0)
+            self.motors.reset_wheel_angles()
+        except Exception as exc:
+            self.set_fault(f"Gagal membaca motor sebelum start: {exc}")
+            return
+        self.state.latest_motor_fb["left"] = feedback.get("left")
+        self.state.latest_motor_fb["right"] = feedback.get("right")
+        self.state.setpoint_theta_left = float(config.SETPOINT_THETA_DEG)
+        self.state.setpoint_theta_right = float(config.SETPOINT_THETA_DEG)
         self.state.latest_angle = angle
         self.state.mode = "BALANCING"
         self.state.fault_reason = ""
-        self.state.balance_started_at = time.monotonic()
+        self.state.balance_started_at = angle.timestamp
         self._motors_stopped = False
-        # Nol-kan referensi loop theta setiap sesi balancing baru dimulai,
-        # supaya roda kiri & kanan mulai dari error yang sama-sama nol
-        # (lihat perbaikan "robot berputar saat Kp_theta > 0").
-        self.state.wheel_theta_left_deg = 0.0
-        self.state.wheel_theta_right_deg = 0.0
-        # Mulai sesi evaluasi error (ise.py) tepat saat balancing benar-benar aktif.
-        self.evaluator.start_session()
-        self.set_message("Balancing aktif.")
+        c = self.controller
+        run_name = self.ise.start(
+            f"{self.state.control_mode} | Kp_psi={c.Kp_psi} Kd_psi={c.Kd_psi} "
+            f"Kp_theta={c.Kp_theta} Kd_theta={c.Kd_theta} K_vel={c.K_vel}"
+        )
+        self.set_message(f"Balancing aktif ({self.state.control_mode}). Evaluasi ISE: {run_name}")
 
     def toggle_balancing(self) -> None:
         if self.state.mode == "BALANCING":
@@ -348,46 +404,6 @@ class AteraMainApp:
             return angle_state.gyro_rate_x
         return angle_state.gyro_rate_y
 
-    def _update_theta_from_feedback(self, dt: float) -> None:
-        """Perbarui estimasi sudut roda (theta) kiri & kanan dengan
-        MENGINTEGRASIKAN kecepatan roda (speed_rpm) dari feedback encoder
-        DDSM115 siklus kontrol SEBELUMNYA terhadap dt, relatif ke posisi
-        saat start_balancing() (di-nol-kan di sana).
-
-        PENTING - kenapa TIDAK memakai fb.position_deg langsung (versi lama):
-        1. position_deg adalah posisi ABSOLUT single-turn (0-360 derajat)
-           hasil wrap dari register encoder, bukan jarak tempuh relatif.
-           Nilainya tergantung di sudut mana motor kebetulan berhenti
-           terakhir kali - tidak ada hubungan antara nilai roda kiri &
-           kanan. Kalau dipakai langsung sebagai error_theta, robot yang
-           diam & tegak sempurna pun akan mendapat error_theta_left !=
-           error_theta_right -> torsi kiri/kanan jadi tidak simetris ->
-           robot 'dipaksa' berputar walau tidak pernah diminta belok.
-        2. position_deg juga wrap setiap 360 derajat, menyebabkan lompatan
-           error yang tiba-tiba (mis. dari -1 ke -361) saat roda berputar
-           terus selama balancing.
-        Dengan mengintegrasikan kecepatan (dan menolkan referensi di awal
-        setiap sesi balancing), roda kiri & kanan mulai dari error yang
-        sama-sama nol dan tidak pernah wrap, sehingga loop theta hanya
-        bereaksi terhadap PERGESERAN NYATA robot, bukan artefak encoder.
-        """
-        left_fb = self.state.latest_motor_fb.get("left")
-        right_fb = self.state.latest_motor_fb.get("right")
-        left_dot = (left_fb.speed_rpm * 6.0 * self.motors.left.sign) if left_fb else 0.0
-        right_dot = (right_fb.speed_rpm * 6.0 * self.motors.right.sign) if right_fb else 0.0
-        self.state.wheel_theta_left_deg += left_dot * dt
-        self.state.wheel_theta_right_deg += right_dot * dt
-
-    def _theta_from_feedback(self, side: str) -> tuple[float, float]:
-        """Mengembalikan (angle_theta, angular_dot_theta) dalam derajat &
-        derajat/detik untuk salah satu roda, hasil integrasi terhadap
-        referensi nol di awal balancing (lihat _update_theta_from_feedback)."""
-        fb = self.state.latest_motor_fb.get(side)
-        sign = self.motors.left.sign if side == "left" else self.motors.right.sign
-        angular_dot_theta = (fb.speed_rpm * 6.0 * sign) if fb else 0.0  # rpm -> deg/s
-        angle_theta = self.state.wheel_theta_left_deg if side == "left" else self.state.wheel_theta_right_deg
-        return angle_theta, angular_dot_theta
-
     def control_step(self) -> None:
         angle_state = self.imu.read_angles()
         self.state.latest_angle = angle_state
@@ -395,55 +411,79 @@ class AteraMainApp:
         if self.state.mode != "BALANCING":
             return
 
-        if abs(angle_state.angle_deg) >= float(tunning.SAFE_TILT_DEG):
+        if abs(angle_state.angle_deg) >= float(config.SAFE_TILT_DEG):
             self.set_fault(
-                f"Tilt melebihi batas aman: {angle_state.angle_deg:.2f} deg >= {tunning.SAFE_TILT_DEG:.2f} deg"
+                f"Tilt melebihi batas aman: {angle_state.angle_deg:.2f} deg >= {config.SAFE_TILT_DEG:.2f} deg"
             )
             return
 
-        target_angle, turn_command = self.joystick.get_commands()
-        angular_rate = self.get_angular_rate_from_state(angle_state)
+        st = self.state
 
-        # angle_theta / angular_dot_theta (loop roda) dihitung dari feedback
-        # encoder DDSM115 hasil siklus kontrol SEBELUMNYA (feedback siklus
-        # saat ini baru tersedia setelah motor dikirim perintah, beberapa
-        # baris di bawah) — pola umum untuk feedback loop berbasis serial.
-        # Diintegrasikan (bukan dibaca langsung dari posisi absolut) supaya
-        # kiri & kanan punya referensi nol yang sama — lihat
-        # _update_theta_from_feedback() untuk alasan detailnya.
-        self._update_theta_from_feedback(angle_state.dt)
-        angle_theta_left, angular_dot_theta_left = self._theta_from_feedback("left")
-        angle_theta_right, angular_dot_theta_right = self._theta_from_feedback("right")
+        # Measurements
+        angle_psi = angle_state.angle_deg                                  # body angle (MPU6050)
+        angular_dot_psi = self.get_angular_rate_from_state(angle_state)    # body rate (MPU6050)
+        angle_theta_left = self.motors.left.angle_theta                    # wheel angles (DDSM115)
+        angle_theta_right = self.motors.right.angle_theta
+        angle_theta = 0.5 * (angle_theta_left + angle_theta_right)
+        angular_dot_theta = 0.5 * (self.motors.left.angular_dot_theta + self.motors.right.angular_dot_theta)
 
-        pd_state = self.controller.compute(
-            angle_deg=angle_state.angle_deg,
-            angular_rate_deg_s=angular_rate,
-            target_angle_deg=target_angle,
-            turn_command=turn_command,
-            angle_theta_left=angle_theta_left,
-            angle_theta_right=angle_theta_right,
-            angular_dot_theta_left=angular_dot_theta_left,
-            angular_dot_theta_right=angular_dot_theta_right,
+        # Setpoints
+        if st.drive_mode == DRIVE_JOYSTICK:
+            psi_offset, turn_command = self.joystick.get_commands()
+        else:
+            psi_offset, turn_command = 0.0, 0.0
+        setpoint_psi = float(config.SETPOINT_PSI_DEG) + psi_offset
+        if psi_offset != 0.0 or turn_command != 0.0:
+            # While driving, the wheel setpoints follow the wheels; on release the robot holds the new position.
+            st.setpoint_theta_left = angle_theta_left
+            st.setpoint_theta_right = angle_theta_right
+        setpoint_theta = 0.5 * (st.setpoint_theta_left + st.setpoint_theta_right)
+
+        # PD: one output for both wheels
+        pd_state = self.controller.compute_PD(
+            angle_psi=angle_psi,
+            angular_dot_psi=angular_dot_psi,
+            angle_theta=angle_theta,
+            angular_dot_theta=angular_dot_theta,
+            setpoint_psi=setpoint_psi,
+            setpoint_theta=setpoint_theta,
         )
-        feedback = self.motors.command_normalized(pd_state.left_output, pd_state.right_output)
+        u_cmd = wheel_output_from_u(pd_state.u_PD)
 
-        self.state.target_angle_deg = target_angle
+        # Optional safety filter
+        cbf_result = None
+        if st.control_mode == CONTROL_PD_CBF:
+            cbf_result = self.cbf.filter(u_cmd, angle_psi, angular_dot_psi, angle_theta, angular_dot_theta)
+            u_cmd = cbf_result.u_safe
+
+        # Same u for both wheels; steering only adds a left/right difference.
+        turn_u = max(-1.0, min(1.0, turn_command)) * float(config.TURN_OUTPUT_FRACTION) * u_limit_raw()
+        feedback = self.motors.command_u(u_cmd, turn_u)
+
+        self.ise.add_sample(
+            angle_state.timestamp - (st.balance_started_at or angle_state.timestamp),
+            setpoint_psi, angle_psi,
+            st.setpoint_theta_left, angle_theta_left,
+            st.setpoint_theta_right, angle_theta_right,
+            pd_state.u_PD, u_cmd,
+            bool(cbf_result.active) if cbf_result else False,
+            cbf_result.solve_time_ms if cbf_result else 0.0,
+        )
+
+        st.setpoint_psi = setpoint_psi
+        st.angle_theta_left = angle_theta_left
+        st.angle_theta_right = angle_theta_right
+        st.u_cmd = u_cmd
+        st.latest_cbf = cbf_result
         self.state.turn_command = turn_command
         self.state.latest_pd = pd_state
         self.state.latest_motor_fb["left"] = feedback.get("left")
         self.state.latest_motor_fb["right"] = feedback.get("right")
         self._motors_stopped = False
 
-        # Catat error untuk evaluasi (ise.py): badan (psi), roda kiri & kanan (theta).
-        self.evaluator.record(
-            error_psi=pd_state.error_psi,
-            error_theta_left=pd_state.error_theta_left,
-            error_theta_right=pd_state.error_theta_right,
-        )
-
     def maybe_log_status(self) -> None:
         now = time.monotonic()
-        if (now - self.state.last_status_log_ts) < float(tunning.STATUS_LOG_PERIOD_S):
+        if (now - self.state.last_status_log_ts) < float(config.STATUS_LOG_PERIOD_S):
             return
         self.state.last_status_log_ts = now
 
@@ -451,15 +491,19 @@ class AteraMainApp:
         rate = self.get_angular_rate_from_state(self.state.latest_angle) if self.state.latest_angle else None
         pd = self.state.latest_pd
         LOGGER.info(
-            "mode=%s calibrated=%s angle=%s rate=%s target=%.3f turn=%.2f left=%.3f right=%.3f msg=%s",
+            "mode=%s ctrl=%s drive=%s calibrated=%s angle_psi=%s angular_dot_psi=%s setpoint_psi=%.3f "
+            "angle_theta=%.2f turn=%.2f u_PD=%.1f u_cmd=%.1f msg=%s",
             self.state.mode,
+            self.state.control_mode,
+            self.state.drive_mode,
             self.state.calibrated,
             f"{angle:.3f}" if angle is not None else "-",
             f"{rate:.3f}" if rate is not None else "-",
-            self.state.target_angle_deg,
+            self.state.setpoint_psi,
+            pd.angle_theta if pd else 0.0,
             self.state.turn_command,
-            pd.left_output if pd else 0.0,
-            pd.right_output if pd else 0.0,
+            pd.u_PD if pd else 0.0,
+            self.state.u_cmd,
             self.state.last_message,
         )
 
@@ -469,6 +513,7 @@ class AteraMainApp:
         pd = self.state.latest_pd
         left_fb = self.state.latest_motor_fb.get("left")
         right_fb = self.state.latest_motor_fb.get("right")
+
         lines = []
         lines.append("\x1b[2J\x1b[H")
         lines.append("ATERA SELF-BALANCING ROBOT (JOYSTICK CONTROL)")
@@ -478,39 +523,64 @@ class AteraMainApp:
             f"Page: {page} ({self.state.page_index + 1}/{len(PAGES)})"
         )
         lines.append(
-            f"Loop: {self.state.loop_hz_est:7.1f} Hz | Control target: {tunning.CONTROL_HZ:.1f} Hz | "
-            f"UI target: {tunning.UI_HZ:.1f} Hz"
+            f"Controller: {self.state.control_mode:<10} (LB=PD, RB=PD+CBF-QP) | "
+            f"Drive: {self.state.drive_mode:<8} (A=JOYSTICK, B=BALANCE)"
+        )
+        lines.append(
+            f"Loop: {self.state.loop_hz_est:7.1f} Hz | Control target: {config.CONTROL_HZ:.1f} Hz | "
+            f"UI target: {config.UI_HZ:.1f} Hz"
         )
         lines.append(f"Message: {self.state.last_message}")
         if self.state.fault_reason:
             lines.append(f"Fault : {self.state.fault_reason}")
         lines.append("-" * 72)
+
         if page == "status":
             if angle is None:
                 lines.append("IMU belum ada data.")
             else:
                 angular_rate = self.get_angular_rate_from_state(angle)
                 lines.append(f"Axis used           : {angle.axis_used}")
-                lines.append(f"Angle               : {angle.angle_deg:+8.3f} deg")
-                lines.append(f"Angular rate        : {angular_rate:+8.3f} deg/s")
+                lines.append(f"angle_psi           : {angle.angle_deg:+8.3f} deg")
+                lines.append(f"angular_dot_psi     : {angular_rate:+8.3f} deg/s")
                 lines.append(f"Kalman X / Y        : {angle.kalman_x:+8.3f} / {angle.kalman_y:+8.3f} deg")
                 lines.append(f"Accel angle X / Y   : {angle.acc_angle_x:+8.3f} / {angle.acc_angle_y:+8.3f} deg")
                 lines.append(f"dt                  : {angle.dt * 1000.0:8.3f} ms")
             lines.append("")
-            lines.append(f"Target angle        : {self.state.target_angle_deg:+8.3f} deg")
-            lines.append(f"Turn command        : {self.state.turn_command:+8.3f}")
             if pd is None:
                 lines.append("PD output           : belum aktif")
             else:
-                lines.append(f"Error / rate err    : {pd.error_deg:+8.3f} / {pd.error_rate_deg_s:+8.3f}")
-                lines.append(f"Base output (psi)   : {pd.base_output:+8.3f}")
-                lines.append(f"Left / Right output : {pd.left_output:+8.3f} / {pd.right_output:+8.3f}")
-                lines.append(f"Theta kiri  err/dot : {pd.error_theta_left:+8.3f} / {pd.angular_dot_theta_left:+8.3f}")
-                lines.append(f"Theta kanan err/dot : {pd.error_theta_right:+8.3f} / {pd.angular_dot_theta_right:+8.3f}")
+                lines.append(
+                    f"angle_theta L/R/avg : {self.state.angle_theta_left:+9.2f} / "
+                    f"{self.state.angle_theta_right:+9.2f} / {pd.angle_theta:+9.2f} deg"
+                )
+                lines.append(f"angular_dot_theta   : {pd.angular_dot_theta:+8.2f} deg/s")
+                lines.append(f"setpoint_psi        : {pd.setpoint_psi:+8.3f} deg")
+                lines.append(
+                    f"setpoint_theta L/R  : {self.state.setpoint_theta_left:+9.2f} / "
+                    f"{self.state.setpoint_theta_right:+9.2f} deg"
+                )
+                lines.append(f"error_psi / theta   : {pd.error_psi:+8.3f} / {pd.error_theta:+8.3f} deg")
+                lines.append(f"Turn command        : {self.state.turn_command:+8.3f}")
+                lines.append(f"u_PD                : {pd.u_PD:+10.1f}  (raw count per wheel)")
+                lines.append(
+                    f"u ke kedua roda     : {self.state.u_cmd:+10.1f}  (batas aktuator +-{u_limit_raw():.0f})"
+                )
+            lines.append("")
+            c = self.controller
+            lines.append(
+                f"Gain: Kp_psi={c.Kp_psi} Kd_psi={c.Kd_psi} Kp_theta={c.Kp_theta} "
+                f"Kd_theta={c.Kd_theta} K_vel={c.K_vel}"
+            )
+            lines.append(
+                f"ISE {self.ise.run_name or '-':<13}: badan={self.ise.ise_psi:.4f} | "
+                f"roda kiri={self.ise.ise_theta_left:.4f} | roda kanan={self.ise.ise_theta_right:.4f} (deg^2.s)"
+            )
+
         elif page == "motor":
-            lines.append(f"Motor control mode  : {tunning.MOTOR_CONTROL_MODE}")
-            lines.append(f"Current limit       : {tunning.MAX_CURRENT_A:.3f} A")
-            lines.append(f"Speed limit         : {tunning.MAX_SPEED_RPM:.3f} rpm")
+            lines.append(f"Motor control mode  : {config.MOTOR_CONTROL_MODE}")
+            lines.append(f"Current limit       : {config.MAX_CURRENT_A:.3f} A")
+            lines.append(f"Speed limit         : {config.MAX_SPEED_RPM:.3f} rpm")
             lines.append("")
             lines.append("LEFT MOTOR")
             if left_fb is None:
@@ -533,49 +603,86 @@ class AteraMainApp:
             lines.append(f"  zero_offset_deg   : {self.state.zero_offset_deg:+8.4f}")
             lines.append(f"  gyro_bias_x       : {self.state.gyro_bias_x:+8.4f}")
             lines.append(f"  gyro_bias_y       : {self.state.gyro_bias_y:+8.4f}")
-            lines.append(f"  safe_tilt_deg     : {tunning.SAFE_TILT_DEG:.2f}")
+            lines.append(f"  safe_tilt_deg     : {config.SAFE_TILT_DEG:.2f}")
+
+        elif page == "cbf":
+            cbf = self.state.latest_cbf
+            lines.append(f"CBF-QP (acados/HPIPM, N=1) : {'SIAP' if self.cbf.available else 'TIDAK AKTIF'}")
+            lines.append(f"  status            : {self.cbf.reason}")
+            lines.append(
+                f"  Alpha_1 / Alpha_2 / Alpha_3 : {config.Alpha_1} / {config.Alpha_2} / {config.Alpha_3}"
+            )
+            lines.append(
+                f"  psi_max / theta_dot_max     : {config.CBF_PSI_MAX_DEG} deg / "
+                f"{config.CBF_THETA_DOT_MAX_DEG_S} deg/s"
+            )
+            lines.append("")
+            if cbf is None:
+                lines.append("Filter belum berjalan (pilih RB lalu MULAI).")
+            else:
+                lines.append(f"  u_PD -> u_safe    : {cbf.u_PD:+10.1f} -> {cbf.u_safe:+10.1f}")
+                lines.append(f"  filter aktif      : {cbf.active} | acados status={cbf.status}")
+                lines.append(f"  waktu QP          : {cbf.solve_time_ms:.3f} ms | gagal={self.cbf.fail_count}")
+                lines.append(
+                    f"  h1 / h2 (psi)     : {cbf.h[0]:+7.4f} / {cbf.h[1]:+7.4f} rad"
+                )
+                lines.append(
+                    f"  h3 / h4 (theta_d) : {cbf.h[2]:+7.3f} / {cbf.h[3]:+7.3f} rad/s"
+                )
+
         else:
             lines.append("BANTUAN KONTROL JOYSTICK")
             lines.append("  Tombol Y            : Kalibrasi gyro + zero angle")
-            lines.append("  MULAI               : Start / Stop balancing")
-            lines.append("  Analog Kiri / D-Pad Y : Maju / Mundur (Proporsional)")
-            lines.append("  Analog / D-Pad X      : Belok Kiri / Kanan")
-            lines.append("  Tombol X / B        : Stop balancing")
-            lines.append("  LB / RB             : Pindah halaman UI")
+            lines.append("  MULAI               : Start / Stop balancing (plot ISE muncul & tersimpan)")
+            lines.append("  Tombol X            : Matikan roda (stop balancing)")
+            lines.append("  Tombol A            : Mode JOYSTICK (analog / D-Pad aktif)")
+            lines.append("  Tombol B            : Mode BALANCE (hanya balancing)")
+            lines.append("  Analog Kiri / D-Pad Y : Maju / Mundur, lepas = berhenti")
+            lines.append("  Analog / D-Pad X      : Belok Kiri / Kanan, lepas = berhenti")
+            lines.append("  LB / RB             : Kontroler PD / PD + CBF-QP (saat roda mati)")
+            lines.append("  LT / RT             : Pindah halaman UI kiri / kanan")
             lines.append("  QUIT                : Quit aman")
+
         lines.append("-" * 72)
-        lines.append("Keys: Y calibrate | MULAI balance | Analog/DPAD move | LB/RB page | QUIT exit")
+        lines.append("Keys: Y calib | MULAI balance | X off | A joystick | B balance | LB PD | RB CBF | LT/RT page | QUIT")
+
         sys.stdout.write("\n".join(lines) + "\n")
         sys.stdout.flush()
 
     def run(self) -> None:
-        control_period = 1.0 / float(tunning.CONTROL_HZ)
-        ui_period = 1.0 / float(tunning.UI_HZ)
+        control_period = 1.0 / float(config.CONTROL_HZ)
+        ui_period = 1.0 / float(config.UI_HZ)
         self._running = True
         next_tick = time.monotonic()
+
         while self._running and not self.state.exit_requested:
             loop_start = time.monotonic()
 
             self.joystick.poll_events(self)
+
             try:
                 self.control_step()
             except (OSError, RuntimeError, DDSM115Error, ValueError) as exc:
                 self.set_fault(str(exc))
             except Exception as exc:
                 self.set_fault(f"Unhandled error: {exc}")
+
             now = time.monotonic()
             self.state.last_loop_dt = now - loop_start
             self.state.loop_hz_est = 1.0 / self.state.last_loop_dt if self.state.last_loop_dt > 0 else 0.0
             self.maybe_log_status()
+
             if (now - self._last_ui_ts) >= ui_period:
                 self.render_ui()
                 self._last_ui_ts = now
+
             next_tick += control_period
             sleep_time = next_tick - time.monotonic()
             if sleep_time > 0:
                 time.sleep(sleep_time)
             else:
                 next_tick = time.monotonic()
+
         self.cleanup()
 
 

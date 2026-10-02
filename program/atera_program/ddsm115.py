@@ -8,6 +8,7 @@ Berdasarkan dokumentasi Waveshare DDSM115:
 
 Modul ini memisahkan detail protokol RS485 dari logika kontrol robot.
 """
+
 from __future__ import annotations
 
 import logging
@@ -18,7 +19,7 @@ from typing import Optional, Dict, Any
 
 import serial
 
-import config as tunning
+import config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -33,6 +34,15 @@ CMD_SWITCH_MODE = 0xA0
 FRAME_LEN = 10
 CRC8_INIT = 0x00
 CRC8_POLY_REVERSED = 0x8C  # CRC-8/MAXIM reversed polynomial
+
+# Current loop scaling: -32767..32767 <-> -8 A..+8 A (verify against datasheet).
+RAW_PER_AMP = 32767.0 / 8.0
+RPM_TO_DEG_S = 6.0
+
+
+def u_limit_raw() -> float:
+    """Actuator limit of u (raw current count per wheel), from config.MAX_CURRENT_A."""
+    return float(config.MAX_CURRENT_A) * RAW_PER_AMP
 
 
 class DDSM115Error(Exception):
@@ -67,11 +77,11 @@ class DDSM115Motor:
         self,
         port: str,
         motor_id: int = 1,
-        baudrate: int = tunning.MOTOR_BAUDRATE,
-        timeout: float = tunning.MOTOR_TIMEOUT_S,
+        baudrate: int = config.MOTOR_BAUDRATE,
+        timeout: float = config.MOTOR_TIMEOUT_S,
         sign: float = 1.0,
         control_mode: str = "current",
-        accel_time: int = tunning.MOTOR_ACCEL_TIME,
+        accel_time: int = config.MOTOR_ACCEL_TIME,
         name: str = "motor",
     ) -> None:
         self.port = port
@@ -85,6 +95,9 @@ class DDSM115Motor:
         self._ser: Optional[serial.Serial] = None
         self._current_mode_value: Optional[int] = None
         self.last_feedback: Optional[MotorFeedback] = None
+        # Multi-turn wheel angle from the single-turn encoder (motor frame, deg).
+        self._wheel_angle_acc_deg = 0.0
+        self._last_position_deg: Optional[float] = None
 
     def open(self) -> None:
         if self._ser and self._ser.is_open:
@@ -207,7 +220,35 @@ class DDSM115Motor:
             source="control",
         )
         self.last_feedback = fb
+        self._update_wheel_angle(position_deg)
         return fb
+
+    def _update_wheel_angle(self, position_deg: float) -> None:
+        """Unwrap the 0..360 deg encoder reading into a continuous wheel angle."""
+        if self._last_position_deg is not None:
+            delta = position_deg - self._last_position_deg
+            if delta > 180.0:
+                delta -= 360.0
+            elif delta < -180.0:
+                delta += 360.0
+            self._wheel_angle_acc_deg += delta
+        self._last_position_deg = position_deg
+
+    def reset_wheel_angle(self) -> None:
+        """Make the current wheel position the new zero of angle_theta."""
+        self._wheel_angle_acc_deg = 0.0
+
+    @property
+    def angle_theta(self) -> float:
+        """Wheel angle in the robot frame (positive = same direction as positive u) [deg]."""
+        return self.sign * self._wheel_angle_acc_deg
+
+    @property
+    def angular_dot_theta(self) -> float:
+        """Wheel angular rate in the robot frame [deg/s] (from the motor speed feedback)."""
+        if self.last_feedback is None:
+            return 0.0
+        return self.sign * self.last_feedback.speed_rpm * RPM_TO_DEG_S
 
     def _parse_query_feedback(self, frame: bytes) -> MotorFeedback:
         motor_id = frame[0]
@@ -300,10 +341,14 @@ class DDSM115Motor:
         normalized = max(-1.0, min(1.0, float(normalized)))
         normalized *= self.sign
         if self.control_mode == "current":
-            return self.command_current_amp(normalized * tunning.MAX_CURRENT_A)
+            return self.command_current_amp(normalized * config.MAX_CURRENT_A)
         if self.control_mode == "speed":
-            return self.command_speed_rpm(normalized * tunning.MAX_SPEED_RPM)
+            return self.command_speed_rpm(normalized * config.MAX_SPEED_RPM)
         raise ValueError(f"Unsupported control_mode for balancing: {self.control_mode}")
+
+    def command_u(self, u: float) -> MotorFeedback:
+        """Send u (raw current count). The actuator limit +-MAX_CURRENT_A is applied here."""
+        return self.command_normalized(float(u) / u_limit_raw())
 
     def initialize(self) -> None:
         self.ensure_open()
@@ -324,23 +369,23 @@ class DDSM115Motor:
 class DualDDSM115:
     def __init__(self) -> None:
         self.left = DDSM115Motor(
-            port=tunning.LEFT_MOTOR_PORT,
-            motor_id=tunning.LEFT_MOTOR_ID,
-            baudrate=tunning.MOTOR_BAUDRATE,
-            timeout=tunning.MOTOR_TIMEOUT_S,
-            sign=tunning.LEFT_MOTOR_SIGN,
-            control_mode=tunning.MOTOR_CONTROL_MODE,
-            accel_time=tunning.MOTOR_ACCEL_TIME,
+            port=config.LEFT_MOTOR_PORT,
+            motor_id=config.LEFT_MOTOR_ID,
+            baudrate=config.MOTOR_BAUDRATE,
+            timeout=config.MOTOR_TIMEOUT_S,
+            sign=config.LEFT_MOTOR_SIGN,
+            control_mode=config.MOTOR_CONTROL_MODE,
+            accel_time=config.MOTOR_ACCEL_TIME,
             name="left_motor",
         )
         self.right = DDSM115Motor(
-            port=tunning.RIGHT_MOTOR_PORT,
-            motor_id=tunning.RIGHT_MOTOR_ID,
-            baudrate=tunning.MOTOR_BAUDRATE,
-            timeout=tunning.MOTOR_TIMEOUT_S,
-            sign=tunning.RIGHT_MOTOR_SIGN,
-            control_mode=tunning.MOTOR_CONTROL_MODE,
-            accel_time=tunning.MOTOR_ACCEL_TIME,
+            port=config.RIGHT_MOTOR_PORT,
+            motor_id=config.RIGHT_MOTOR_ID,
+            baudrate=config.MOTOR_BAUDRATE,
+            timeout=config.MOTOR_TIMEOUT_S,
+            sign=config.RIGHT_MOTOR_SIGN,
+            control_mode=config.MOTOR_CONTROL_MODE,
+            accel_time=config.MOTOR_ACCEL_TIME,
             name="right_motor",
         )
 
@@ -366,6 +411,16 @@ class DualDDSM115:
         left_fb = self.left.command_normalized(left_value)
         right_fb = self.right.command_normalized(right_value)
         return {"left": left_fb, "right": right_fb}
+
+    def command_u(self, u: float, turn_u: float = 0.0) -> Dict[str, MotorFeedback]:
+        """One output u for BOTH wheels; turn_u is only the left/right difference for steering."""
+        left_fb = self.left.command_u(u - turn_u)
+        right_fb = self.right.command_u(u + turn_u)
+        return {"left": left_fb, "right": right_fb}
+
+    def reset_wheel_angles(self) -> None:
+        self.left.reset_wheel_angle()
+        self.right.reset_wheel_angle()
 
     def query_both(self) -> Dict[str, MotorFeedback]:
         return {
