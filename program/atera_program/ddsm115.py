@@ -1,21 +1,30 @@
-"""Driver DDSM115 untuk Raspberry Pi.
+"""ddsm115.py - driver motor roda Waveshare DDSM115 (RS485) untuk ATERA.
 
-Berdasarkan dokumentasi Waveshare DDSM115:
-- Baudrate 115200, 8N1
-- Panjang frame 10 byte
-- CRC: CRC-8/MAXIM
-- Mode: current(1), velocity(2), position(3)
+Protokol (wiki Waveshare DDSM115): 115200 8N1, frame 10 byte, CRC-8/MAXIM, maks 500 Hz.
+    perintah : [ID, 0x64, nilai_hi, nilai_lo, 0, 0, accel, brake, 0, CRC]
+    balasan  : [ID, mode, arus_hi, arus_lo, rpm_hi, rpm_lo, pos_hi, pos_lo, error, CRC]
+    mode     : [ID, 0xA0, 0, 0, 0, 0, 0, 0, 0, mode]   (tanpa CRC, tidak dibalas)
+    arus     : -32767..32767 <-> -8..8 A     posisi : 0..32767 <-> 0..360 derajat
 
-Modul ini memisahkan detail protokol RS485 dari logika kontrol robot.
+Perbedaan dari driver lama (apalah_bisa/ddsm115.py), frame yang dikirim sama:
+- Perintah dalam TORSI [N m] (u dari PD / CBF-QP), dikonversi ke arus lewat config.MOTOR_KT.
+- Kedua motor ditulis dulu baru dibaca, jadi waktu tunggu balasan berjalan paralel.
+- theta dihitung dari posisi encoder (di-unwrap jadi multi-putaran) dan dtheta dari
+  turunan posisi + low-pass, karena rpm umpan balik motor tertinggal sekitar 0.1 s.
+- Satu frame hilang tidak langsung FAULT: baru setelah MOTOR_MAX_COMM_ERRORS berturut-turut.
+- Tiap kegagalan diberi penjelasan (motor.problem) untuk ditampilkan di GUI, dan motor yang
+  gagal diinisialisasi tidak menghentikan program: bisa dicoba ulang dengan initialize().
+
+Kerangka robot: arus/torsi/theta positif = roda ke DEPAN (tanda diatur di config.py).
 """
 
 from __future__ import annotations
 
 import logging
-import struct
+import math
 import time
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import List, Optional
 
 import serial
 
@@ -26,408 +35,342 @@ LOGGER = logging.getLogger(__name__)
 MODE_CURRENT = 0x01
 MODE_SPEED = 0x02
 MODE_POSITION = 0x03
-
+MODE_NAMES = {MODE_CURRENT: "current loop", MODE_SPEED: "speed loop", MODE_POSITION: "position loop"}
 CMD_CONTROL = 0x64
-CMD_QUERY = 0x74
 CMD_SWITCH_MODE = 0xA0
-
 FRAME_LEN = 10
-CRC8_INIT = 0x00
-CRC8_POLY_REVERSED = 0x8C  # CRC-8/MAXIM reversed polynomial
+ACCEL_TIME = 3                  # sama dengan driver lama; hanya berpengaruh di speed loop
 
-# Current loop scaling: -32767..32767 <-> -8 A..+8 A (verify against datasheet).
-RAW_PER_AMP = 32767.0 / 8.0
-RPM_TO_DEG_S = 6.0
+RAW_PER_AMP = config.MOTOR_RAW_FULL_SCALE / config.MOTOR_CURRENT_FULL_SCALE_A
+RAD_PER_COUNT = 2.0 * math.pi / config.MOTOR_POSITION_COUNTS
+RPM_TO_RAD_S = 2.0 * math.pi / 60.0
 
-
-def u_limit_raw() -> float:
-    """Actuator limit of u (raw current count per wheel), from config.MAX_CURRENT_A."""
-    return float(config.MAX_CURRENT_A) * RAW_PER_AMP
+ERROR_BITS = ((0x01, "sensor"), (0x02, "overcurrent"), (0x04, "phase overcurrent"),
+              (0x08, "stall"), (0x10, "troubleshooting"))
 
 
 class DDSM115Error(Exception):
-    """Base exception untuk driver DDSM115."""
+    """Kesalahan komunikasi / protokol DDSM115."""
 
 
-class CRCError(DDSM115Error):
-    """CRC frame tidak valid."""
+def crc8_maxim(data: bytes) -> int:
+    crc = 0x00
+    for byte in data:
+        crc ^= byte
+        for _ in range(8):
+            crc = (crc >> 1) ^ 0x8C if crc & 0x01 else crc >> 1
+    return crc & 0xFF
 
 
-class SerialTimeoutError(DDSM115Error):
-    """Timeout saat menunggu reply serial."""
+def decode_error(code: int) -> str:
+    names = [name for bit, name in ERROR_BITS if code & bit]
+    return ", ".join(names) if names else "-"
+
+
+def explain_port_error(exc: Exception, port: str) -> str:
+    """Ubah exception pembukaan/penulisan port menjadi penjelasan + saran."""
+    text = str(exc)
+    if "No such file" in text or "Errno 2" in text:
+        return (f"port {port} tidak ada -> USB-RS485 tidak tercolok atau nama port berubah "
+                f"(cek: ls /dev/ttyACM*)")
+    if "Permission denied" in text or "Errno 13" in text:
+        return f"tidak ada izin membuka {port} -> sudo usermod -aG dialout $USER, lalu login ulang"
+    if "busy" in text or "Errno 16" in text:
+        return f"port {port} sedang dipakai program lain -> tutup program lain yang memakai motor"
+    if "Errno 5" in text or "Input/output" in text or "disconnected" in text:
+        return f"USB-RS485 di {port} terlepas saat dipakai -> cek kabel USB"
+    return f"port {port}: {text}"
 
 
 @dataclass
 class MotorFeedback:
-    motor_id: int
     mode: int
-    torque_raw: int
-    torque_ampere: float
-    speed_rpm: int
-    position_raw: int
-    position_deg: float
+    current_a: float        # arus umpan balik, kerangka robot [A]
+    speed_rpm: float        # rpm umpan balik, kerangka robot (tertinggal)
+    position_raw: int       # 0..32767
     error_code: int
-    temperature_c: Optional[int] = None
-    position_u8: Optional[int] = None
-    source: str = "control"
 
 
 class DDSM115Motor:
-    def __init__(
-        self,
-        port: str,
-        motor_id: int = 1,
-        baudrate: int = config.MOTOR_BAUDRATE,
-        timeout: float = config.MOTOR_TIMEOUT_S,
-        sign: float = 1.0,
-        control_mode: str = "current",
-        accel_time: int = config.MOTOR_ACCEL_TIME,
-        name: str = "motor",
-    ) -> None:
+    def __init__(self, port: str, motor_id: int, sign: float, name: str) -> None:
         self.port = port
         self.motor_id = int(motor_id)
-        self.baudrate = int(baudrate)
-        self.timeout = float(timeout)
         self.sign = 1.0 if sign >= 0 else -1.0
-        self.control_mode = control_mode.strip().lower()
-        self.accel_time = max(0, min(255, int(accel_time)))
+        self.encoder_sign = self.sign * (1.0 if config.ENCODER_DIRECTION >= 0 else -1.0)
         self.name = name
         self._ser: Optional[serial.Serial] = None
-        self._current_mode_value: Optional[int] = None
-        self.last_feedback: Optional[MotorFeedback] = None
-        # Multi-turn wheel angle from the single-turn encoder (motor frame, deg).
-        self._wheel_angle_acc_deg = 0.0
-        self._last_position_deg: Optional[float] = None
+        self.feedback: Optional[MotorFeedback] = None
+        self.command_a = 0.0            # arus perintah terakhir, kerangka robot [A]
+        self.command_raw = 0            # nilai mentah yang dikirim ke motor (-32767..32767)
 
+        # --- status untuk diagnosa ---
+        self.ready = False              # True: port terbuka, motor membalas, mode current loop
+        self.problem = "belum diinisialisasi"
+        self.comm_errors = 0            # gagal berturut-turut
+        self.count_ok = 0
+        self.count_timeout = 0          # tidak ada / kurang byte balasan
+        self.count_bad_frame = 0        # ID atau CRC salah
+        self.last_error = ""
+        self.last_reply_t = 0.0
+
+        self._counts = 0                # posisi multi-putaran (hitungan mentah encoder)
+        self._last_raw: Optional[int] = None
+        self._last_t: Optional[float] = None
+        self._dtheta = 0.0
+
+    # --------------------------------------------------------------- serial --
     def open(self) -> None:
-        if self._ser and self._ser.is_open:
+        if self._ser is not None and self._ser.is_open:
             return
         self._ser = serial.Serial(
-            port=self.port,
-            baudrate=self.baudrate,
-            bytesize=serial.EIGHTBITS,
-            parity=serial.PARITY_NONE,
-            stopbits=serial.STOPBITS_ONE,
-            timeout=self.timeout,
-            write_timeout=self.timeout,
+            port=self.port, baudrate=config.MOTOR_BAUDRATE, bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
+            timeout=config.MOTOR_TIMEOUT_S, write_timeout=config.MOTOR_TIMEOUT_S,
         )
         self._ser.reset_input_buffer()
         self._ser.reset_output_buffer()
-        LOGGER.info("%s opened on %s", self.name, self.port)
+        LOGGER.info("%s dibuka di %s", self.name, self.port)
 
     def close(self) -> None:
-        if self._ser and self._ser.is_open:
-            try:
+        try:
+            if self._ser is not None and self._ser.is_open:
                 self._ser.close()
-            finally:
-                LOGGER.info("%s closed", self.name)
+        finally:
+            self._ser = None
+            self.ready = False
 
-    @property
-    def is_open(self) -> bool:
-        return bool(self._ser and self._ser.is_open)
-
-    def ensure_open(self) -> None:
-        if not self.is_open:
-            self.open()
-
-    @staticmethod
-    def crc8_maxim(data: bytes) -> int:
-        crc = CRC8_INIT
-        for byte in data:
-            crc ^= byte
-            for _ in range(8):
-                if crc & 0x01:
-                    crc = (crc >> 1) ^ CRC8_POLY_REVERSED
-                else:
-                    crc >>= 1
-        return crc & 0xFF
-
-    @classmethod
-    def build_frame(cls, b0: int, b1: int, b2: int, b3: int, b4: int, b5: int, b6: int, b7: int, b8: int) -> bytes:
-        payload = bytes([
-            b0 & 0xFF,
-            b1 & 0xFF,
-            b2 & 0xFF,
-            b3 & 0xFF,
-            b4 & 0xFF,
-            b5 & 0xFF,
-            b6 & 0xFF,
-            b7 & 0xFF,
-            b8 & 0xFF,
-        ])
-        crc = cls.crc8_maxim(payload)
-        return payload + bytes([crc])
-
-    @staticmethod
-    def int16_to_hi_lo(value: int) -> tuple[int, int]:
-        packed = struct.pack(">h", int(value))
-        return packed[0], packed[1]
-
-    @staticmethod
-    def uint16_to_hi_lo(value: int) -> tuple[int, int]:
-        packed = struct.pack(">H", int(value))
-        return packed[0], packed[1]
-
-    @staticmethod
-    def hi_lo_to_int16(hi: int, lo: int) -> int:
-        return struct.unpack(">h", bytes([hi & 0xFF, lo & 0xFF]))[0]
-
-    @staticmethod
-    def hi_lo_to_uint16(hi: int, lo: int) -> int:
-        return struct.unpack(">H", bytes([hi & 0xFF, lo & 0xFF]))[0]
-
-    def _write_and_read(self, frame: bytes, expect_reply: bool = True) -> Optional[bytes]:
-        self.ensure_open()
-        assert self._ser is not None
+    def _write(self, frame: bytes) -> None:
+        if self._ser is None:
+            raise DDSM115Error(f"port {self.port} belum terbuka")
         self._ser.reset_input_buffer()
         self._ser.write(frame)
         self._ser.flush()
-        if not expect_reply:
-            return None
+
+    # ------------------------------------------------------------- protokol --
+    def set_mode(self, mode: int) -> None:
+        self._write(bytes([self.motor_id, CMD_SWITCH_MODE, 0, 0, 0, 0, 0, 0, 0, mode & 0xFF]))
+        time.sleep(0.05)
+
+    def write_current(self, current_a: float) -> None:
+        """Kirim perintah arus (kerangka robot). Balasan dibaca dengan read_feedback()."""
+        limit = float(config.MAX_CURRENT_A)
+        current_a = max(-limit, min(limit, float(current_a)))
+        self.command_a = current_a
+        self.command_raw = int(round(self.sign * current_a * RAW_PER_AMP))
+        body = (bytes([self.motor_id, CMD_CONTROL]) + self.command_raw.to_bytes(2, "big", signed=True)
+                + bytes([0, 0, ACCEL_TIME, 0, 0]))
+        self._write(body + bytes([crc8_maxim(body)]))
+
+    def read_feedback(self) -> MotorFeedback:
+        if self._ser is None:
+            raise DDSM115Error(f"port {self.port} belum terbuka")
         reply = self._ser.read(FRAME_LEN)
+        now = time.monotonic()
         if len(reply) != FRAME_LEN:
-            raise SerialTimeoutError(f"{self.name} timeout/read short frame: got {len(reply)} bytes")
-        self.validate_reply(reply)
-        return reply
-
-    @classmethod
-    def validate_reply(cls, frame: bytes) -> None:
-        if len(frame) != FRAME_LEN:
-            raise DDSM115Error(f"Invalid frame length: {len(frame)}")
-        expected = cls.crc8_maxim(frame[:9])
-        got = frame[9]
-        if expected != got:
-            raise CRCError(f"CRC mismatch: expected 0x{expected:02X}, got 0x{got:02X}")
-
-    def _parse_control_feedback(self, frame: bytes) -> MotorFeedback:
-        motor_id = frame[0]
-        mode = frame[1]
-        torque_raw = self.hi_lo_to_int16(frame[2], frame[3])
-        speed_rpm = self.hi_lo_to_int16(frame[4], frame[5])
-        position_raw = self.hi_lo_to_uint16(frame[6], frame[7])
-        error_code = frame[8]
-        torque_ampere = (torque_raw / 32767.0) * 8.0
-        position_deg = (position_raw / 32767.0) * 360.0 if position_raw <= 32767 else 0.0
+            self.count_timeout += 1
+            raise DDSM115Error(
+                f"tidak ada balasan ({len(reply)}/{FRAME_LEN} byte) -> catu daya motor (12-24 V) mati, "
+                f"kabel RS485 A/B lepas atau tertukar, atau ID motor bukan {self.motor_id}")
+        if reply[0] != self.motor_id or crc8_maxim(reply[:9]) != reply[9]:
+            self.count_bad_frame += 1
+            self._ser.reset_input_buffer()
+            raise DDSM115Error(
+                f"balasan rusak (ID {reply[0]}, CRC salah) -> gangguan di kabel RS485 "
+                f"atau baudrate bukan {config.MOTOR_BAUDRATE}")
         fb = MotorFeedback(
-            motor_id=motor_id,
-            mode=mode,
-            torque_raw=torque_raw,
-            torque_ampere=torque_ampere,
-            speed_rpm=speed_rpm,
-            position_raw=position_raw,
-            position_deg=position_deg,
-            error_code=error_code,
-            source="control",
+            mode=reply[1],
+            current_a=self.sign * int.from_bytes(reply[2:4], "big", signed=True) / RAW_PER_AMP,
+            speed_rpm=self.sign * int.from_bytes(reply[4:6], "big", signed=True),
+            position_raw=int.from_bytes(reply[6:8], "big", signed=False),
+            error_code=reply[8],
         )
-        self.last_feedback = fb
-        self._update_wheel_angle(position_deg)
+        self._update_wheel_state(fb, now)
+        self.feedback = fb
+        self.count_ok += 1
+        self.last_reply_t = now
         return fb
 
-    def _update_wheel_angle(self, position_deg: float) -> None:
-        """Unwrap the 0..360 deg encoder reading into a continuous wheel angle."""
-        if self._last_position_deg is not None:
-            delta = position_deg - self._last_position_deg
-            if delta > 180.0:
-                delta -= 360.0
-            elif delta < -180.0:
-                delta += 360.0
-            self._wheel_angle_acc_deg += delta
-        self._last_position_deg = position_deg
+    def exchange(self, current_a: float) -> MotorFeedback:
+        self.write_current(current_a)
+        return self.read_feedback()
+
+    # ------------------------------------------------------ theta dan dtheta --
+    def _update_wheel_state(self, fb: MotorFeedback, now: float) -> None:
+        half = config.MOTOR_POSITION_COUNTS // 2
+        if self._last_raw is not None and self._last_t is not None:
+            delta = (fb.position_raw - self._last_raw + half) % config.MOTOR_POSITION_COUNTS - half
+            self._counts += delta
+            dt = now - self._last_t
+            if str(config.DTHETA_SOURCE).strip().lower() == "rpm":
+                self._dtheta = fb.speed_rpm * RPM_TO_RAD_S
+            elif dt > 1e-4:
+                raw_rate = self.encoder_sign * delta * RAD_PER_COUNT / dt
+                weight = dt / (float(config.DTHETA_FILTER_TAU_S) + dt)
+                self._dtheta += weight * (raw_rate - self._dtheta)
+        self._last_raw = fb.position_raw
+        self._last_t = now
+
+    @property
+    def theta(self) -> float:
+        """Sudut roda relatif terhadap badan, kerangka robot [rad]."""
+        return self.encoder_sign * self._counts * RAD_PER_COUNT
+
+    @property
+    def dtheta(self) -> float:
+        """Kecepatan sudut roda relatif terhadap badan, kerangka robot [rad/s]."""
+        return self._dtheta
 
     def reset_wheel_angle(self) -> None:
-        """Make the current wheel position the new zero of angle_theta."""
-        self._wheel_angle_acc_deg = 0.0
+        self._counts = 0
 
-    @property
-    def angle_theta(self) -> float:
-        """Wheel angle in the robot frame (positive = same direction as positive u) [deg]."""
-        return self.sign * self._wheel_angle_acc_deg
+    # ------------------------------------------------------------ inisialisasi --
+    def initialize(self) -> bool:
+        """Buka port, pindah ke current loop, pastikan motor membalas dengan mode yang benar.
 
-    @property
-    def angular_dot_theta(self) -> float:
-        """Wheel angular rate in the robot frame [deg/s] (from the motor speed feedback)."""
-        if self.last_feedback is None:
-            return 0.0
-        return self.sign * self.last_feedback.speed_rpm * RPM_TO_DEG_S
+        Tidak melempar exception: hasilnya di self.ready dan self.problem.
+        """
+        self.ready = False
+        try:
+            self.close()
+            self.open()
+        except Exception as exc:
+            self.problem = explain_port_error(exc, self.port)
+            LOGGER.error("%s: %s", self.name, self.problem)
+            return False
+        self.problem = "motor tidak membalas"
+        for _ in range(3):
+            try:
+                self.set_mode(MODE_CURRENT)
+                fb = self.exchange(0.0)
+            except DDSM115Error as exc:
+                self.problem = str(exc)
+                continue
+            except Exception as exc:
+                self.problem = explain_port_error(exc, self.port)
+                continue
+            if fb.mode == MODE_CURRENT:
+                self.ready = True
+                self.comm_errors = 0
+                self.problem = ""
+                LOGGER.info("%s siap (mode current loop)", self.name)
+                return True
+            self.problem = (f"motor membalas mode {fb.mode} ({MODE_NAMES.get(fb.mode, 'tidak dikenal')}), "
+                            f"bukan current loop -> perintah pindah mode tidak diterima motor")
+        LOGGER.error("%s: %s", self.name, self.problem)
+        return False
 
-    def _parse_query_feedback(self, frame: bytes) -> MotorFeedback:
-        motor_id = frame[0]
-        mode = frame[1]
-        torque_raw = self.hi_lo_to_int16(frame[2], frame[3])
-        speed_rpm = self.hi_lo_to_int16(frame[4], frame[5])
-        temperature_c = frame[6]
-        position_u8 = frame[7]
-        error_code = frame[8]
-        torque_ampere = (torque_raw / 32767.0) * 8.0
-        position_deg = (position_u8 / 255.0) * 360.0
-        fb = MotorFeedback(
-            motor_id=motor_id,
-            mode=mode,
-            torque_raw=torque_raw,
-            torque_ampere=torque_ampere,
-            speed_rpm=speed_rpm,
-            position_raw=position_u8,
-            position_deg=position_deg,
-            error_code=error_code,
-            temperature_c=temperature_c,
-            position_u8=position_u8,
-            source="query",
-        )
-        self.last_feedback = fb
-        return fb
-
-    def set_mode(self, mode: str | int) -> None:
-        if isinstance(mode, str):
-            mode_key = mode.strip().lower()
-            if mode_key == "current":
-                mode_val = MODE_CURRENT
-            elif mode_key == "speed":
-                mode_val = MODE_SPEED
-            elif mode_key == "position":
-                mode_val = MODE_POSITION
-            else:
-                raise ValueError(f"Unknown mode: {mode}")
-        else:
-            mode_val = int(mode)
-        frame = bytes([
-            self.motor_id & 0xFF,
-            CMD_SWITCH_MODE,
-            0, 0, 0, 0, 0, 0, 0,
-            mode_val & 0xFF,
-        ])
-        self._write_and_read(frame, expect_reply=False)
-        self._current_mode_value = mode_val
-        time.sleep(0.02)
-
-    def query_status(self) -> MotorFeedback:
-        frame = self.build_frame(self.motor_id, CMD_QUERY, 0, 0, 0, 0, 0, 0, 0)
-        reply = self._write_and_read(frame, expect_reply=True)
-        assert reply is not None
-        return self._parse_query_feedback(reply)
-
-    def send_raw_command(self, command_value: int, brake: bool = False) -> MotorFeedback:
-        hi, lo = self.int16_to_hi_lo(command_value)
-        frame = self.build_frame(
-            self.motor_id,
-            CMD_CONTROL,
-            hi,
-            lo,
-            0,
-            0,
-            self.accel_time,
-            0xFF if brake else 0x00,
-            0,
-        )
-        reply = self._write_and_read(frame, expect_reply=True)
-        assert reply is not None
-        return self._parse_control_feedback(reply)
-
-    def command_current_amp(self, current_amp: float) -> MotorFeedback:
-        current_amp = max(-8.0, min(8.0, float(current_amp)))
-        raw = int((current_amp / 8.0) * 32767.0)
-        return self.send_raw_command(raw, brake=False)
-
-    def command_speed_rpm(self, speed_rpm: float) -> MotorFeedback:
-        speed_rpm = max(-330.0, min(330.0, float(speed_rpm)))
-        raw = int(round(speed_rpm))
-        return self.send_raw_command(raw, brake=False)
-
-    def stop(self) -> MotorFeedback:
-        if self.control_mode == "current":
-            return self.command_current_amp(0.0)
-        return self.command_speed_rpm(0.0)
-
-    def command_normalized(self, normalized: float) -> MotorFeedback:
-        normalized = max(-1.0, min(1.0, float(normalized)))
-        normalized *= self.sign
-        if self.control_mode == "current":
-            return self.command_current_amp(normalized * config.MAX_CURRENT_A)
-        if self.control_mode == "speed":
-            return self.command_speed_rpm(normalized * config.MAX_SPEED_RPM)
-        raise ValueError(f"Unsupported control_mode for balancing: {self.control_mode}")
-
-    def command_u(self, u: float) -> MotorFeedback:
-        """Send u (raw current count). The actuator limit +-MAX_CURRENT_A is applied here."""
-        return self.command_normalized(float(u) / u_limit_raw())
-
-    def initialize(self) -> None:
-        self.ensure_open()
-        self.set_mode(self.control_mode)
-        self.stop()
-
-    def decode_error_flags(self, error_code: int) -> Dict[str, bool]:
-        code = int(error_code) & 0xFF
-        return {
-            "sensor_error": bool(code & 0x01),
-            "overcurrent_error": bool(code & 0x02),
-            "phase_overcurrent_error": bool(code & 0x04),
-            "stall_error": bool(code & 0x08),
-            "troubleshooting": bool(code & 0x10),
-        }
+    def status_text(self) -> str:
+        if self.ready:
+            fb = self.feedback
+            err = decode_error(fb.error_code) if fb else "-"
+            return "siap" if err == "-" else f"siap, tetapi motor melaporkan error: {err}"
+        return self.problem
 
 
 class DualDDSM115:
+    """Dua roda. u = torsi TOTAL [N m]; tiap roda menerima u/2 (+/- selisih belok)."""
+
     def __init__(self) -> None:
-        self.left = DDSM115Motor(
-            port=config.LEFT_MOTOR_PORT,
-            motor_id=config.LEFT_MOTOR_ID,
-            baudrate=config.MOTOR_BAUDRATE,
-            timeout=config.MOTOR_TIMEOUT_S,
-            sign=config.LEFT_MOTOR_SIGN,
-            control_mode=config.MOTOR_CONTROL_MODE,
-            accel_time=config.MOTOR_ACCEL_TIME,
-            name="left_motor",
-        )
-        self.right = DDSM115Motor(
-            port=config.RIGHT_MOTOR_PORT,
-            motor_id=config.RIGHT_MOTOR_ID,
-            baudrate=config.MOTOR_BAUDRATE,
-            timeout=config.MOTOR_TIMEOUT_S,
-            sign=config.RIGHT_MOTOR_SIGN,
-            control_mode=config.MOTOR_CONTROL_MODE,
-            accel_time=config.MOTOR_ACCEL_TIME,
-            name="right_motor",
-        )
+        self.left = DDSM115Motor(config.LEFT_MOTOR_PORT, config.LEFT_MOTOR_ID,
+                                 config.LEFT_MOTOR_SIGN, "motor kiri")
+        self.right = DDSM115Motor(config.RIGHT_MOTOR_PORT, config.RIGHT_MOTOR_ID,
+                                  config.RIGHT_MOTOR_SIGN, "motor kanan")
+        self.motors = (self.left, self.right)
+        self.u_applied = 0.0
 
-    def open(self) -> None:
-        self.left.open()
-        self.right.open()
+    @property
+    def ready(self) -> bool:
+        return self.left.ready and self.right.ready
 
-    def initialize(self) -> None:
-        self.left.initialize()
-        self.right.initialize()
+    def initialize(self) -> bool:
+        """Inisialisasi motor yang belum siap. Kembalikan True bila keduanya siap."""
+        for motor in self.motors:
+            if not motor.ready:
+                motor.initialize()
+        return self.ready
+
+    def problems(self) -> List[str]:
+        return [f"{m.name}: {m.problem}" for m in self.motors if not m.ready]
+
+    def command_currents(self, left_a: float, right_a: float, strict: bool = False) -> None:
+        """Kirim arus ke tiap roda lalu baca umpan baliknya.
+
+        strict=True (saat balancing): melempar DDSM115Error bila ada motor yang tidak siap atau
+        gagal komunikasi berturut-turut. strict=False: motor bermasalah ditandai tidak siap.
+        """
+        if strict and not self.ready:
+            raise DDSM115Error("; ".join(self.problems()))
+        written = []
+        for motor, current in zip(self.motors, (left_a, right_a)):
+            if not motor.ready:
+                written.append(False)
+                continue
+            try:
+                motor.write_current(current)
+                written.append(True)
+            except Exception as exc:
+                written.append(False)
+                self._count_error(motor, exc)
+        for motor, ok in zip(self.motors, written):
+            if not ok:
+                continue
+            try:
+                motor.read_feedback()
+                motor.comm_errors = 0
+            except Exception as exc:
+                self._count_error(motor, exc)
+        for motor in self.motors:
+            if motor.comm_errors > int(config.MOTOR_MAX_COMM_ERRORS):
+                motor.ready = False
+                motor.problem = f"{motor.comm_errors} kali gagal berturut-turut: {motor.last_error}"
+                LOGGER.error("%s: %s", motor.name, motor.problem)
+                if strict:
+                    raise DDSM115Error(f"{motor.name}: {motor.problem}")
+
+    def command_torque(self, u: float, turn: float = 0.0, strict: bool = False) -> float:
+        """Kirim u ke kedua roda. Kembalikan u yang benar-benar dikirim (setelah batas arus).
+
+        turn [N m] adalah selisih torsi per roda: positif = belok kanan (roda kiri lebih maju).
+        """
+        half = 0.5 * float(u)
+        self.command_currents((half + turn) / config.MOTOR_KT, (half - turn) / config.MOTOR_KT, strict)
+        self.u_applied = config.MOTOR_KT * (self.left.command_a + self.right.command_a)
+        return self.u_applied
+
+    @staticmethod
+    def _count_error(motor: DDSM115Motor, exc: Exception) -> None:
+        motor.comm_errors += 1
+        motor.last_error = str(exc) if isinstance(exc, DDSM115Error) else explain_port_error(exc, motor.port)
 
     def stop_all(self) -> None:
-        errors = []
-        for motor in (self.left, self.right):
-            try:
-                motor.stop()
-            except Exception as exc:  # pragma: no cover
-                errors.append(exc)
-        if errors:
-            raise DDSM115Error(f"Stop all encountered {len(errors)} error(s): {errors}")
+        """Arus nol ke kedua roda. Dicoba beberapa kali; tidak pernah melempar exception."""
+        self.u_applied = 0.0
+        for motor in self.motors:
+            motor.command_a = 0.0
+            if motor._ser is None:
+                continue
+            for _ in range(3):
+                try:
+                    motor.exchange(0.0)
+                    break
+                except Exception as exc:
+                    motor.last_error = str(exc)
 
-    def command_normalized(self, left_value: float, right_value: float) -> Dict[str, MotorFeedback]:
-        left_fb = self.left.command_normalized(left_value)
-        right_fb = self.right.command_normalized(right_value)
-        return {"left": left_fb, "right": right_fb}
+    @property
+    def theta(self) -> float:
+        return 0.5 * (self.left.theta + self.right.theta)
 
-    def command_u(self, u: float, turn_u: float = 0.0) -> Dict[str, MotorFeedback]:
-        """One output u for BOTH wheels; turn_u is only the left/right difference for steering."""
-        left_fb = self.left.command_u(u - turn_u)
-        right_fb = self.right.command_u(u + turn_u)
-        return {"left": left_fb, "right": right_fb}
+    @property
+    def dtheta(self) -> float:
+        return 0.5 * (self.left.dtheta + self.right.dtheta)
 
     def reset_wheel_angles(self) -> None:
-        self.left.reset_wheel_angle()
-        self.right.reset_wheel_angle()
-
-    def query_both(self) -> Dict[str, MotorFeedback]:
-        return {
-            "left": self.left.query_status(),
-            "right": self.right.query_status(),
-        }
+        for motor in self.motors:
+            motor.reset_wheel_angle()
 
     def close(self) -> None:
-        self.left.close()
-        self.right.close()
+        for motor in self.motors:
+            try:
+                motor.close()
+            except Exception as exc:
+                LOGGER.error("Gagal menutup %s: %s", motor.name, exc)

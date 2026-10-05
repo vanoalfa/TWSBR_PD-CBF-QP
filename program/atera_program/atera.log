@@ -1,0 +1,116 @@
+2026-10-04 19:45:32,660 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-04 19:45:32,715 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-04 19:45:32,802 | INFO | joystick_mapping | Joystick terhubung: Gamepad (/dev/input/event5)
+2026-10-04 19:45:32,803 | INFO | atera | Menyiapkan CBF-QP ...
+2026-10-04 19:45:32,803 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-04 19:45:37,020 | INFO | atera | Mode PD+CBF ditolak: Alpha_1 harus > 0 di config.py (sekarang 0.0)
+2026-10-04 19:45:39,038 | INFO | atera | Mode PD+CBF ditolak: Alpha_1 harus > 0 di config.py (sekarang 0.0)
+2026-10-04 19:45:40,499 | INFO | atera | Mode PD+CBF ditolak: Alpha_1 harus > 0 di config.py (sekarang 0.0)
+2026-10-04 19:45:45,051 | INFO | atera | Mode PD+CBF ditolak: Alpha_1 harus > 0 di config.py (sekarang 0.0)
+2026-10-04 19:45:48,067 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-04 19:45:52,979 | INFO | atera | Kalibrasi selesai (zero offset -3.55 deg). Tekan MULAI.
+2026-10-04 19:45:53,086 | ERROR | atera | Error fatal
+Traceback (most recent call last):
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 498, in main
+    app.run()
+    ~~~~~~~^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 309, in run
+    self.render()
+    ~~~~~~~~~~~^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 340, in render
+    lines.extend((self.page_status, self.page_pd, self.page_cbf,
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                  self.page_hardware, self.page_ise, self.page_help)[self.page]())
+                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 386, in page_pd
+    A, B = model.linearize()
+           ^^^^^^^^^^^^^^^
+AttributeError: module 'model' has no attribute 'linearize'
+2026-10-04 19:47:58,112 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-04 19:47:58,167 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-04 19:47:58,245 | INFO | joystick_mapping | Joystick terhubung: Gamepad (/dev/input/event5)
+2026-10-04 19:47:58,245 | INFO | atera | Menyiapkan CBF-QP ...
+2026-10-04 19:48:02,818 | INFO | cbf_qp | CBF-QP siap (kode acados baru di-generate)
+2026-10-04 19:48:02,818 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-04 19:48:02,824 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-04 19:48:07,736 | INFO | atera | Kalibrasi selesai (zero offset -3.04 deg). Tekan MULAI.
+2026-10-04 19:48:09,339 | INFO | atera | Balancing aktif, mode PD. Percobaan: 20261004_COBA PD_PERCOBAAN KE-01
+2026-10-04 19:48:19,413 | INFO | atera | Mode PD+CBF. Percobaan baru: 20261004_COBA PD+CBF_PERCOBAAN KE-01 (tersimpan: 20261004_COBA PD_PERCOBAAN KE-01)
+2026-10-04 19:48:19,415 | ERROR | atera | Error fatal
+Traceback (most recent call last):
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 498, in main
+    app.run()
+    ~~~~~~~^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 301, in run
+    self.control_step(self.loop_dt)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 262, in control_step
+    u, feasible = self.cbf.filter(self.x, self.u_pd)
+                  ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/home/atera/projects/skripsi/program/atera_program/cbf_qp.py", line 290, in filter
+    a, b = constraint_rows(x)
+           ~~~~~~~~~~~~~~~^^^
+  File "/home/atera/projects/skripsi/program/atera_program/cbf_qp.py", line 63, in constraint_rows
+    fx, gx = model.fg(x)
+             ^^^^^^^^
+AttributeError: module 'model' has no attribute 'fg'
+2026-10-04 19:48:27,056 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-04 19:48:27,111 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-04 19:48:27,190 | INFO | joystick_mapping | Joystick terhubung: Gamepad (/dev/input/event5)
+2026-10-04 19:48:27,190 | INFO | atera | Menyiapkan CBF-QP ...
+2026-10-04 19:48:27,743 | INFO | cbf_qp | CBF-QP siap (kode acados dipakai ulang)
+2026-10-04 19:48:27,743 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-04 19:48:29,882 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-04 19:48:34,790 | INFO | atera | Kalibrasi selesai (zero offset -2.47 deg). Tekan MULAI.
+2026-10-04 19:48:36,785 | INFO | atera | Balancing aktif, mode PD. Percobaan: 20261004_COBA PD_PERCOBAAN KE-02
+2026-10-04 19:48:47,105 | INFO | atera | Mode balancing saja (perintah gerak diabaikan).
+2026-10-04 20:05:32,417 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-04 20:05:32,471 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-04 20:05:32,472 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-04 20:05:32,526 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-04 20:05:32,551 | INFO | joystick_mapping | Joystick terhubung: Gamepad (/dev/input/event5)
+2026-10-04 20:05:32,551 | INFO | atera | Menyiapkan CBF-QP ...
+2026-10-04 20:05:32,551 | INFO | atera | Ada 1 masalah yang harus dibereskan - lihat baris Masalah / halaman DIAGNOSA.
+2026-10-04 20:05:32,551 | INFO | atera | diagnosa awal [ERROR] Kontrol: semua gain PD = 0 di config.py -> u_PD selalu 0, RODA TIDAK AKAN BERGERAK. Isi Kp_psi dan Kd_dpsi (titik awal: 30.9 dan 2.17)
+2026-10-04 20:05:32,551 | INFO | atera | diagnosa awal [INFO] Kalibrasi: IMU belum dikalibrasi -> tekan Tombol Y (wajib sebelum MULAI)
+2026-10-04 20:05:32,551 | INFO | atera | diagnosa awal [INFO] CBF-QP: mode PD+CBF belum bisa dipakai: Alpha_1 harus > 0 di config.py (sekarang 0.0)
+2026-10-04 20:05:37,045 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-04 20:05:41,958 | INFO | atera | Kalibrasi selesai (zero offset -2.69 deg). Tekan MULAI.
+2026-10-04 20:05:43,871 | INFO | atera | Balancing aktif TETAPI semua gain 0 -> u = 0, roda tidak akan bergerak. Isi gain di config.py.
+2026-10-04 20:06:31,621 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-04 20:06:31,675 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-04 20:06:31,676 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-04 20:06:31,730 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-04 20:06:31,755 | INFO | joystick_mapping | Joystick terhubung: Gamepad (/dev/input/event5)
+2026-10-04 20:06:31,755 | INFO | atera | Menyiapkan CBF-QP ...
+2026-10-04 20:06:31,755 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-04 20:06:31,755 | INFO | atera | diagnosa awal [AWAS] Kontrol: Kp_psi = 0 terlalu kecil: pada psi = 5 deg arus hanya 0.000 A per roda. Satuannya N m/rad (bukan per derajat); gain lama 0.200 setara dengan sekitar 30.9
+2026-10-04 20:06:31,755 | INFO | atera | diagnosa awal [INFO] Kalibrasi: IMU belum dikalibrasi -> tekan Tombol Y (wajib sebelum MULAI)
+2026-10-04 20:06:31,755 | INFO | atera | diagnosa awal [INFO] CBF-QP: mode PD+CBF belum bisa dipakai: Alpha_1 harus > 0 di config.py (sekarang 0.0)
+2026-10-04 20:07:04,979 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-04 20:07:05,034 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-04 20:07:05,035 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-04 20:07:05,089 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-04 20:07:05,114 | INFO | joystick_mapping | Joystick terhubung: Gamepad (/dev/input/event5)
+2026-10-04 20:07:05,114 | INFO | atera | Menyiapkan CBF-QP ...
+2026-10-04 20:07:05,114 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-04 20:07:05,114 | INFO | atera | diagnosa awal [AWAS] Kontrol: Kp_psi = 0 terlalu kecil: pada psi = 5 deg arus hanya 0.000 A per roda. Satuannya N m/rad (bukan per derajat); gain lama 0.200 setara dengan sekitar 30.9
+2026-10-04 20:07:05,114 | INFO | atera | diagnosa awal [INFO] Kalibrasi: IMU belum dikalibrasi -> tekan Tombol Y (wajib sebelum MULAI)
+2026-10-04 20:07:05,114 | INFO | atera | diagnosa awal [INFO] CBF-QP: mode PD+CBF belum bisa dipakai: Alpha_1 harus > 0 di config.py (sekarang 0.0)
+2026-10-04 20:07:07,559 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-04 20:07:12,467 | INFO | atera | Kalibrasi selesai (zero offset -2.69 deg). Tekan MULAI.
+2026-10-04 20:07:13,763 | INFO | atera | Balancing aktif, mode PD. Percobaan: 20261004_COBA PD_PERCOBAAN KE-04
+2026-10-04 20:07:14,836 | INFO | atera | FAULT: torsi jenuh (|u| = u_max) lebih dari 1 s: robot tidak tertolong, atau gain terlalu besar | tersimpan: 20261004_COBA PD_PERCOBAAN KE-04
+2026-10-04 20:07:22,443 | INFO | atera | Mode balancing saja (perintah gerak diabaikan).
+2026-10-04 20:08:29,912 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-04 20:08:29,966 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-04 20:08:29,967 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-04 20:08:30,021 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-04 20:08:30,045 | INFO | joystick_mapping | Joystick terhubung: Gamepad (/dev/input/event5)
+2026-10-04 20:08:30,046 | INFO | atera | Menyiapkan CBF-QP ...
+2026-10-04 20:08:30,046 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-04 20:08:30,046 | INFO | atera | diagnosa awal [INFO] Kalibrasi: IMU belum dikalibrasi -> tekan Tombol Y (wajib sebelum MULAI)
+2026-10-04 20:08:30,046 | INFO | atera | diagnosa awal [INFO] CBF-QP: mode PD+CBF belum bisa dipakai: Alpha_1 harus > 0 di config.py (sekarang 0.0)
+2026-10-04 20:08:41,922 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-04 20:08:46,836 | INFO | atera | Kalibrasi selesai (zero offset -2.50 deg). Tekan MULAI.
+2026-10-04 20:08:52,576 | INFO | atera | Balancing aktif, mode PD. Percobaan: 20261004_COBA PD_PERCOBAAN KE-05

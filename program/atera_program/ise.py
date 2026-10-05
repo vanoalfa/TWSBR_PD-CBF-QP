@@ -1,336 +1,269 @@
-"""ISE (Integral Square Error) evaluation for ATERA.
+"""ise.py - evaluasi ISE (Integral Square Error) ATERA.
 
-    error_psi         = setpoint_psi         - angle_psi          (body, MPU6050)
-    error_theta_left  = setpoint_theta_left  - angle_theta_left   (left wheel, DDSM115)
-    error_theta_right = setpoint_theta_right - angle_theta_right  (right wheel, DDSM115)
-    ISE = integral of error(t)^2 dt   (trapezoidal rule with the measured time stamps)
+    e(t) = referensi - nilai terukur          ISE = integral e(t)^2 dt   (aturan trapesium)
 
-- The plot (3 panels: body, left wheel, right wheel; Y = error, X = time) appears
-  when MULAI is pressed and is saved automatically as PLOT_EVALUASI/YYYYMMDD-URUTAN.png
-  (plus .csv with the raw samples) when balancing stops.
-- Plotting runs in a SEPARATE PROCESS so matplotlib never delays the control loop.
-  The control loop only appends a tuple to a list and, a few times per second,
-  puts the batch on a queue.
+ISE dihitung untuk keempat state; yang utama adalah psi dan dpsi (batasan masalah skripsi).
+Tiap percobaan (dari MULAI sampai roda dimatikan / ganti mode / FAULT) disimpan di folder
+PLOT_EVALUASI sebagai:
+
+    YYYYMMDD_COBA PD_PERCOBAAN KE-XX.csv / .png
+    YYYYMMDD_COBA PD+CBF_PERCOBAAN KE-XX.csv / .png
+
+XX naik otomatis per tanggal dan per mode. CSV berisi data mentah (SI: rad, rad/s, N m);
+PNG berisi plot error (sumbu y) terhadap waktu (sumbu x).
+
+Penyimpanan berjalan di PROSES TERPISAH supaya matplotlib tidak mengganggu loop kontrol.
 """
 
 from __future__ import annotations
 
 import csv
 import logging
+import math
 import multiprocessing as mp
 import os
-import queue
 import re
 import time
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
 import config
 
 LOGGER = logging.getLogger(__name__)
 
+MODE_PD = "PD"
+MODE_PD_CBF = "PD+CBF"
+
 CSV_COLUMNS = (
-    "time_s",
-    "setpoint_psi_deg", "angle_psi_deg", "error_psi_deg",
-    "setpoint_theta_left_deg", "angle_theta_left_deg", "error_theta_left_deg",
-    "setpoint_theta_right_deg", "angle_theta_right_deg", "error_theta_right_deg",
-    "u_PD", "u_cmd", "cbf_active", "qp_time_ms",
+    "t_s",
+    "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
+    "theta_ref_rad", "dtheta_ref_rad_s", "psi_ref_rad", "dpsi_ref_rad_s",
+    "e_theta_rad", "e_dtheta_rad_s", "e_psi_rad", "e_dpsi_rad_s",
+    "u_PD_Nm", "u_Nm", "cbf_active", "feasible",
+    "h1", "h2", "h3", "h4",
+    "ISE_theta", "ISE_dtheta", "ISE_psi", "ISE_dpsi",
 )
-_COL_T, _COL_E_PSI, _COL_E_LEFT, _COL_E_RIGHT = 0, 3, 6, 9
-_MAX_LIVE_POINTS = 4000
+_E0 = CSV_COLUMNS.index("e_theta_rad")
+_ISE0 = CSV_COLUMNS.index("ISE_theta")
 
 
-def plot_dir_path() -> str:
+def plot_dir() -> str:
     return os.path.join(os.path.dirname(os.path.abspath(__file__)), config.ISE_PLOT_DIR)
 
 
-def next_run_name(plot_dir: str, previous: str = "") -> str:
-    """YYYYMMDD-URUTAN, URUTAN = next free number for today (001, 002, ...).
-
-    `previous` is the last name handed out by this program; its file may still be
-    being written by the plot process, so it must not be reused.
-    """
+def next_name(mode: str, reserved=()) -> str:
+    """Nama dasar berikutnya: YYYYMMDD_COBA <mode>_PERCOBAAN KE-XX."""
     date = time.strftime("%Y%m%d")
-    pattern = re.compile(rf"^{date}-(\d+)\.")
-    last = 0
-    if previous.startswith(date + "-"):
-        last = int(previous.split("-")[1])
-    if os.path.isdir(plot_dir):
-        for name in os.listdir(plot_dir):
-            match = pattern.match(name)
-            if match:
-                last = max(last, int(match.group(1)))
-    return f"{date}-{last + 1:03d}"
+    prefix = f"{date}_COBA {mode}_PERCOBAAN KE-"
+    pattern = re.compile("^" + re.escape(prefix) + r"(\d+)\.")
+    used = [0]
+    os.makedirs(plot_dir(), exist_ok=True)
+    for name in list(os.listdir(plot_dir())) + [r + "." for r in reserved]:
+        match = pattern.match(name)
+        if match:
+            used.append(int(match.group(1)))
+    return f"{prefix}{max(used) + 1:02d}"
 
 
-def write_csv(path: str, rows: List[tuple]) -> None:
-    with open(path, "w", newline="") as handle:
+class ISERecorder:
+    def __init__(self) -> None:
+        self.recording = False
+        self.mode = MODE_PD
+        self.name = ""
+        self.rows: List[tuple] = []
+        self.ise = [0.0, 0.0, 0.0, 0.0]         # theta, dtheta, psi, dpsi
+        self.duration = 0.0
+        self.active_count = 0
+        self.infeasible_count = 0
+        self.last_saved = ""                    # nama dasar percobaan terakhir yang disimpan
+        self.last_summary = ""
+        self._t0 = 0.0
+        self._prev_t = 0.0
+        self._prev_e2 = (0.0, 0.0, 0.0, 0.0)
+        self._reserved: List[str] = []
+        self._workers: List[mp.Process] = []
+
+    def start(self, mode: str) -> None:
+        self.mode = mode
+        self.name = next_name(mode, self._reserved)
+        self._reserved.append(self.name)
+        self.rows = []
+        self.ise = [0.0, 0.0, 0.0, 0.0]
+        self.duration = 0.0
+        self.active_count = 0
+        self.infeasible_count = 0
+        self._t0 = time.monotonic()
+        self._prev_t = 0.0
+        self._prev_e2 = (0.0, 0.0, 0.0, 0.0)
+        self.recording = True
+
+    def add(self, x, x_ref, u_pd: float, u: float, cbf_active: bool, feasible: bool, h) -> None:
+        """Tambah satu sampel. Hanya operasi ringan: aman dipanggil tiap siklus kontrol."""
+        if not self.recording:
+            return
+        t = time.monotonic() - self._t0
+        e = tuple(float(x_ref[i]) - float(x[i]) for i in range(4))
+        e2 = tuple(v * v for v in e)
+        if self.rows:
+            dt = t - self._prev_t
+            for i in range(4):
+                self.ise[i] += 0.5 * (e2[i] + self._prev_e2[i]) * dt
+        self._prev_t, self._prev_e2 = t, e2
+        self.duration = t
+        self.active_count += int(cbf_active)
+        self.infeasible_count += int(not feasible)
+        self.rows.append((
+            t, float(x[0]), float(x[1]), float(x[2]), float(x[3]),
+            float(x_ref[0]), float(x_ref[1]), float(x_ref[2]), float(x_ref[3]),
+            e[0], e[1], e[2], e[3],
+            float(u_pd), float(u), int(cbf_active), int(feasible),
+            float(h[0]), float(h[1]), float(h[2]), float(h[3]),
+            self.ise[0], self.ise[1], self.ise[2], self.ise[3],
+        ))
+
+    @property
+    def ise_psi_deg2s(self) -> float:
+        return self.ise[2] * math.degrees(1.0) ** 2
+
+    @property
+    def ise_dpsi_deg2s(self) -> float:
+        return self.ise[3] * math.degrees(1.0) ** 2
+
+    def stop(self, reason: str = "") -> Optional[str]:
+        """Akhiri percobaan dan simpan .csv + .png di proses terpisah. Kembalikan nama dasarnya."""
+        if not self.recording:
+            return None
+        self.recording = False
+        rows, self.rows = self.rows, []
+        if not rows or self.duration < float(config.ISE_MIN_DURATION_S):
+            self.last_summary = f"{self.name}: terlalu singkat, tidak disimpan"
+            return None
+        meta = {
+            "name": self.name, "mode": self.mode, "reason": reason,
+            "psi_max": config.psi_max, "dtheta_max": config.dtheta_max, "u_max": config.u_max,
+            "zeta_deg": config.zeta_DEG,
+            "gains": (config.Kp_theta, config.Kd_dtheta, config.Kp_psi, config.Kd_dpsi, config.Kvel),
+            "alphas": (config.Alpha_1, config.Alpha_2),
+        }
+        base = os.path.join(plot_dir(), self.name)
+        try:
+            worker = mp.get_context("spawn").Process(target=save_run, args=(rows, meta, base))
+            worker.start()
+            self._workers.append(worker)
+        except Exception as exc:
+            LOGGER.error("Proses penyimpanan ISE gagal dibuat (%s), simpan langsung", exc)
+            save_run(rows, meta, base)
+        self.last_saved = self.name
+        self.last_summary = (f"{self.name} | {self.duration:.1f} s | "
+                             f"ISE psi = {self.ise_psi_deg2s:.3f} deg^2 s")
+        self._workers = [w for w in self._workers if w.is_alive()]
+        return self.name
+
+    def close(self) -> None:
+        """Tunggu semua penyimpanan selesai (dipanggil saat program keluar)."""
+        for worker in self._workers:
+            worker.join(timeout=30.0)
+        self._workers = []
+
+
+# ------------------------------------------------------------------ penyimpanan --
+def save_run(rows, meta, base: str) -> None:
+    """Tulis <base>.csv dan <base>.png. Berjalan di proses terpisah."""
+    os.makedirs(os.path.dirname(base), exist_ok=True)
+    with open(base + ".csv", "w", newline="") as handle:
         writer = csv.writer(handle)
         writer.writerow(CSV_COLUMNS)
         writer.writerows(rows)
+    try:
+        save_plot(rows, meta, base + ".png")
+    except Exception as exc:
+        logging.getLogger(__name__).error("Plot ISE gagal: %s", exc)
 
 
-class ISEEvaluator:
-    """Lives in the control process. All methods are cheap and never block."""
-
-    def __init__(self) -> None:
-        self.plot_dir = plot_dir_path()
-        self.active = False
-        self.run_name = ""
-        self.last_saved = ""
-        self.ise_psi = 0.0
-        self.ise_theta_left = 0.0
-        self.ise_theta_right = 0.0
-        self.samples = 0
-        self._prev: Optional[Tuple[float, float, float, float]] = None
-        self._rows: List[tuple] = []
-        self._sent = 0
-        self._send_every = max(1, int(float(config.CONTROL_HZ) / float(config.ISE_PLOT_REFRESH_HZ)))
-        self._ctx = mp.get_context("spawn")
-        self._queue = None
-        self._process = None
-
-    # ---- plot process management -------------------------------------------------
-    def open(self) -> None:
-        os.makedirs(self.plot_dir, exist_ok=True)
-        self._ensure_process()
-
-    def _ensure_process(self) -> None:
-        if self._process is not None and self._process.is_alive():
-            return
-        self._queue = self._ctx.Queue()
-        settings = {
-            "live": bool(config.ISE_LIVE_PLOT),
-            "refresh_s": 1.0 / float(config.ISE_PLOT_REFRESH_HZ),
-            "save_csv": bool(config.ISE_SAVE_CSV),
-        }
-        self._process = self._ctx.Process(
-            target=_plot_worker, args=(self._queue, settings), name="atera_ise_plot", daemon=True
-        )
-        self._process.start()
-        self._queue.put_nowait(("hello",))   # starts the queue feeder thread now, not at the first sample
-
-    def _put(self, message: tuple) -> bool:
-        try:
-            if self._process is None or not self._process.is_alive():
-                return False
-            self._queue.put_nowait(message)
-            return True
-        except Exception as exc:  # the control loop must never die because of plotting
-            LOGGER.error("ISE plot queue error: %s", exc)
-            return False
-
-    # ---- one evaluation run ------------------------------------------------------
-    def start(self, title: str = "") -> str:
-        """Call when MULAI is pressed. Opens the plot and returns the run name."""
-        try:
-            self._ensure_process()
-        except Exception as exc:
-            LOGGER.error("ISE plot process could not start: %s", exc)
-        self.run_name = next_run_name(self.plot_dir, self.run_name)
-        self.ise_psi = self.ise_theta_left = self.ise_theta_right = 0.0
-        self.samples = 0
-        self._prev = None
-        self._rows = []
-        self._sent = 0
-        self.active = True
-        self._put(("start", self.run_name, title))
-        return self.run_name
-
-    def add_sample(
-        self,
-        time_s: float,
-        setpoint_psi: float,
-        angle_psi: float,
-        setpoint_theta_left: float,
-        angle_theta_left: float,
-        setpoint_theta_right: float,
-        angle_theta_right: float,
-        u_PD: float = 0.0,
-        u_cmd: float = 0.0,
-        cbf_active: bool = False,
-        qp_time_ms: float = 0.0,
-    ) -> None:
-        if not self.active:
-            return
-        error_psi = setpoint_psi - angle_psi
-        error_left = setpoint_theta_left - angle_theta_left
-        error_right = setpoint_theta_right - angle_theta_right
-
-        if self._prev is not None:
-            dt = time_s - self._prev[0]
-            if dt > 0.0:
-                self.ise_psi += 0.5 * (self._prev[1] ** 2 + error_psi ** 2) * dt
-                self.ise_theta_left += 0.5 * (self._prev[2] ** 2 + error_left ** 2) * dt
-                self.ise_theta_right += 0.5 * (self._prev[3] ** 2 + error_right ** 2) * dt
-        self._prev = (time_s, error_psi, error_left, error_right)
-
-        self._rows.append((
-            round(time_s, 5),
-            setpoint_psi, angle_psi, error_psi,
-            setpoint_theta_left, angle_theta_left, error_left,
-            setpoint_theta_right, angle_theta_right, error_right,
-            u_PD, u_cmd, int(bool(cbf_active)), qp_time_ms,
-        ))
-        self.samples += 1
-        if (self.samples - self._sent) >= self._send_every:
-            self._flush()
-
-    def _ise(self) -> Tuple[float, float, float]:
-        return (self.ise_psi, self.ise_theta_left, self.ise_theta_right)
-
-    def _flush(self) -> None:
-        if self._sent < len(self._rows):
-            self._put(("data", self._rows[self._sent:], self._ise()))
-            self._sent = len(self._rows)
-
-    def stop(self) -> str:
-        """Call when balancing ends (stop, fault or quit). Saves PNG (+CSV). Returns the base path."""
-        if not self.active:
-            return ""
-        self.active = False
-        self._flush()
-        base = os.path.join(self.plot_dir, self.run_name)
-        if not self._put(("stop", base, self._ise())):
-            # Plot process is gone: keep at least the raw data.
-            try:
-                write_csv(base + ".csv", self._rows)
-                LOGGER.warning("ISE plot process not running, saved CSV only: %s.csv", base)
-            except Exception as exc:
-                LOGGER.error("ISE CSV save failed: %s", exc)
-        self.last_saved = base
-        return base
-
-    def close(self) -> None:
-        self.stop()
-        if self._process is None:
-            return
-        if self._put(("quit",)):
-            self._process.join(timeout=15.0)
-        if self._process.is_alive():
-            self._process.terminate()
-        self._process = None
-
-
-# ==================================================================================
-# Plot process
-# ==================================================================================
-_PANELS = (
-    ("Body (MPU6050): error_psi = setpoint_psi - angle_psi", _COL_E_PSI),
-    ("Left wheel (DDSM115): error_theta = setpoint_theta - angle_theta", _COL_E_LEFT),
-    ("Right wheel (DDSM115): error_theta = setpoint_theta - angle_theta", _COL_E_RIGHT),
-)
-_INK = "#1f2933"
-_MUTED = "#6b7785"
-_LINE = "#2563a8"
-
-
-def _plot_worker(q, settings: dict) -> None:
+def save_plot(rows, meta, path: str) -> None:
     import matplotlib
-
-    has_display = bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
-    if not (settings["live"] and has_display):
-        matplotlib.use("Agg")
+    matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    live = settings.get("assume_gui", False) or (
-        settings["live"] and has_display and matplotlib.get_backend().lower() != "agg"
-    )
-    if live:
-        plt.ion()
+    deg = math.degrees(1.0)
+    t = [r[0] for r in rows]
+    e_psi = [r[_E0 + 2] * deg for r in rows]
+    e_dpsi = [r[_E0 + 3] * deg for r in rows]
+    dtheta = [r[2] for r in rows]
+    u_pd = [r[13] for r in rows]
+    u = [r[14] for r in rows]
+    active = [r[15] for r in rows]
+    ise_psi = rows[-1][_ISE0 + 2] * deg * deg
+    ise_dpsi = rows[-1][_ISE0 + 3] * deg * deg
+    psi_max = meta["psi_max"] * deg
 
-    fig = None
-    axes = []
-    lines = []
-    rows: List[tuple] = []
-    ise = (0.0, 0.0, 0.0)
-    run_name = ""
-    title = ""
-    running = False
-    dirty = False
-    last_draw = 0.0
+    ink, muted, grid = "#0b0b0b", "#898781", "#e4e3df"
+    blue, orange, limit = "#2a78d6", "#eb6834", "#d03b3b"
+    plt.rcParams.update({"font.size": 9, "axes.edgecolor": muted, "axes.labelcolor": ink,
+                         "xtick.color": muted, "ytick.color": muted, "text.color": ink})
+    fig, axes = plt.subplots(4, 1, figsize=(10, 10.5), sharex=True, facecolor="#fcfcfb")
 
-    def new_figure():
-        nonlocal fig, axes, lines
-        plt.close("all")
-        fig, axes_arr = plt.subplots(3, 1, sharex=True, figsize=(10.0, 8.0))
-        axes = list(axes_arr)
-        lines = []
-        for ax in axes:
-            ax.axhline(0.0, color=_MUTED, linewidth=0.8)
-            (line,) = ax.plot([], [], color=_LINE, linewidth=1.3)
-            lines.append(line)
-            ax.set_ylabel("Error [deg]", color=_INK)
-            ax.grid(True, color="#d9dee4", linewidth=0.6)
-            ax.tick_params(colors=_MUTED)
-            for side in ("top", "right"):
-                ax.spines[side].set_visible(False)
-            for side in ("left", "bottom"):
-                ax.spines[side].set_color("#c3cad2")
-        axes[-1].set_xlabel("Time since MULAI [s]", color=_INK)
-        if live:
-            fig.show()
+    def style(ax, ylabel, title):
+        ax.set_facecolor("#fcfcfb")
+        ax.grid(True, color=grid, linewidth=0.8)
+        ax.set_axisbelow(True)
+        for side in ("top", "right"):
+            ax.spines[side].set_visible(False)
+        ax.set_ylabel(ylabel)
+        ax.set_title(title, loc="left", fontsize=9.5, fontweight="bold")
+        ax.axhline(0.0, color=muted, linewidth=0.8)
 
-    def redraw(full: bool):
-        stride = 1 if full else max(1, len(rows) // _MAX_LIVE_POINTS)
-        t = [r[_COL_T] for r in rows[::stride]]
-        for ax, line, (label, col), value in zip(axes, lines, _PANELS, ise):
-            line.set_data(t, [r[col] for r in rows[::stride]])
-            ax.relim()
-            ax.autoscale_view()
-            ax.set_title(f"{label}   |   ISE = {value:.4f} deg²·s", loc="left", fontsize=10, color=_INK)
-        fig.suptitle(f"ATERA ISE evaluation  {run_name}   {title}", fontsize=12, color=_INK)
-        fig.tight_layout(rect=(0, 0, 1, 0.97))
+    def shade_active(ax):
+        start = None
+        for i, flag in enumerate(active):
+            if flag and start is None:
+                start = t[i]
+            if start is not None and (not flag or i == len(active) - 1):
+                ax.axvspan(start, t[i], color=orange, alpha=0.12, linewidth=0)
+                start = None
 
-    def save(base: str):
-        redraw(full=True)
-        fig.savefig(base + ".png", dpi=150)
-        if settings["save_csv"]:
-            write_csv(base + ".csv", rows)
+    ax = axes[0]
+    style(ax, "error psi [deg]", f"Error sudut badan psi   |   ISE = {ise_psi:.4f} deg^2 s")
+    ax.plot(t, e_psi, color=blue, linewidth=1.6)
+    for sign in (1.0, -1.0):
+        ax.axhline(sign * psi_max, color=limit, linewidth=1.0, linestyle="--")
+    ax.text(t[-1], psi_max, f" batas safety set +-{psi_max:.0f} deg", color=limit,
+            fontsize=8, va="bottom", ha="right")
+    shade_active(ax)
 
-    while True:
-        try:
-            message = q.get(timeout=0.05)
-        except queue.Empty:
-            message = None
-        except (EOFError, OSError):
-            break
+    ax = axes[1]
+    style(ax, "error dpsi [deg/s]", f"Error kecepatan sudut badan dpsi   |   ISE = {ise_dpsi:.2f} (deg/s)^2 s")
+    ax.plot(t, e_dpsi, color=blue, linewidth=1.2)
+    shade_active(ax)
 
-        if message is not None:
-            kind = message[0]
-            try:
-                if kind == "start":
-                    run_name, title = message[1], message[2]
-                    rows = []
-                    ise = (0.0, 0.0, 0.0)
-                    new_figure()
-                    running = True
-                    dirty = True
-                elif kind == "data" and running:
-                    rows.extend(message[1])
-                    ise = message[2]
-                    dirty = True
-                elif kind == "stop" and running:
-                    ise = message[2]
-                    save(message[1])
-                    running = False
-                    dirty = False
-                    if live:
-                        fig.canvas.draw_idle()
-                elif kind == "quit":
-                    break
-            except Exception as exc:  # keep the worker alive for the next run
-                print(f"[ise] plot worker error: {exc!r}", flush=True)
+    ax = axes[2]
+    style(ax, "dtheta [rad/s]", "Kecepatan sudut roda dtheta")
+    ax.plot(t, dtheta, color=blue, linewidth=1.4)
+    span = max(abs(min(dtheta)), abs(max(dtheta)))
+    if span > 0.5 * meta["dtheta_max"]:
+        for sign in (1.0, -1.0):
+            ax.axhline(sign * meta["dtheta_max"], color=limit, linewidth=1.0, linestyle="--")
+    shade_active(ax)
 
-        if live and fig is not None:
-            try:
-                now = time.monotonic()
-                if dirty and (now - last_draw) >= settings["refresh_s"]:
-                    redraw(full=False)
-                    fig.canvas.draw_idle()
-                    last_draw = now
-                    dirty = False
-                fig.canvas.flush_events()
-            except Exception:
-                pass  # e.g. the user closed the window; saving still works
+    ax = axes[3]
+    style(ax, "torsi [N m]", "Sinyal kontrol (torsi total dua roda)")
+    ax.plot(t, u_pd, color=orange, linewidth=1.2, label="u_PD")
+    ax.plot(t, u, color=blue, linewidth=1.6, label="u terkirim" if meta["mode"] == MODE_PD else "u_QP terkirim")
+    top = 1.15 * meta["u_max"]
+    ax.set_ylim(-top, top)
+    ax.legend(loc="upper right", frameon=False, ncol=2)
+    shade_active(ax)
+    ax.set_xlabel("waktu [s]")
 
-    plt.close("all")
+    kp_t, kd_t, kp_p, kd_p, kvel = meta["gains"]
+    subtitle = (f"Kp_theta={kp_t:g}  Kd_dtheta={kd_t:g}  Kp_psi={kp_p:g}  Kd_dpsi={kd_p:g}  Kvel={kvel:g}"
+                f"   |   zeta={meta['zeta_deg']:g} deg")
+    if meta["mode"] == MODE_PD_CBF:
+        n_active = sum(active)
+        subtitle += (f"   |   Alpha_1={meta['alphas'][0]:g}  Alpha_2={meta['alphas'][1]:g}"
+                     f"   |   CBF aktif {100.0 * n_active / len(rows):.1f}% (area jingga)")
+    fig.suptitle(f"ATERA - {meta['name']}   ({t[-1]:.1f} s)", x=0.01, y=0.985, ha="left",
+                 fontsize=12, fontweight="bold")
+    fig.text(0.01, 0.948, subtitle, fontsize=8.5, color="#52514e")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    fig.savefig(path, dpi=130)
+    plt.close(fig)

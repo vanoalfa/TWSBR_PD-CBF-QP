@@ -1,80 +1,60 @@
+"""pd_control.py - kontrol PD nominal ATERA. Keluarannya u_PD.
+
+    u_PD = Kp_theta*theta + Kd_dtheta*dtheta + Kp_psi*psi + Kd_dpsi*dpsi + Kvel
+
+    x    = [theta, dtheta, psi, dpsi]   (SI, rad)
+    u_PD = torsi TOTAL kedua roda [N m] (tiap roda menerima u_PD / 2)
+
+Catatan untuk tuning:
+- Tidak ada saturasi di sini. Batas aktuator diterapkan di ddsm115.py (mode PD) atau
+  sebagai bound u di cbf_qp.py (mode PD+CBF).
+- Dengan konvensi tanda di config.py, keempat gain POSITIF. Kp_psi dan Kd_dpsi menegakkan
+  badan; Kp_theta dan Kd_dtheta mengembalikan roda ke posisi awal sehingga robot diam.
+  Hanya dengan gain psi, model linear punya dua pole di 0 (robot berdiri tapi hanyut).
+- Dari model linear: Kd_dtheta harus jauh lebih kecil dari Kd_dpsi (kira-kira
+  Kd_dtheta < 0.4 * Kd_dpsi), begitu juga Kp_theta terhadap Kp_psi. Naikkan pelan-pelan.
+  Cek pole dengan:  python3 model.py
+- Kvel adalah konstanta torsi (bias). Di bidang datar biarkan 0; di bidang miring nilainya
+  mendekati model.equilibrium()[1] untuk menahan robot di tanjakan.
+- Untuk perintah gerak, atera_main.py memanggil compute(x - x_ref): rumusnya tetap sama,
+  hanya titik acuannya yang digeser.
+"""
+
 from __future__ import annotations
-from dataclasses import dataclass
+
 import config
-
-
-@dataclass
-class PDControlState:
-    angle_psi: float            # body angle (MPU6050) [deg]
-    angular_dot_psi: float      # body angular rate (MPU6050) [deg/s]
-    angle_theta: float          # wheel angle (DDSM115 encoder) [deg]
-    angular_dot_theta: float    # wheel angular rate (DDSM115 encoder) [deg/s]
-    setpoint_psi: float         # body setpoint [deg]
-    setpoint_theta: float       # wheel setpoint [deg]
-    error_psi: float            # setpoint_psi - angle_psi [deg]
-    error_theta: float          # setpoint_theta - angle_theta [deg]
-    u_PD: float                 # single PD output [raw DDSM115 current count per wheel]
 
 
 class PDController:
     def __init__(self) -> None:
-        self.Kp_psi = self._as_gain("Kp_psi", config.Kp_psi)
-        self.Kd_psi = self._as_gain("Kd_psi", config.Kd_psi)
-        self.Kp_theta = self._as_gain("Kp_theta", config.Kp_theta)
-        self.Kd_theta = self._as_gain("Kd_theta", config.Kd_theta)
-        self.K_vel = int(config.K_vel)
-        self.deadband_deg = float(config.CONTROLLER_DEADBAND_DEG)
-        self.balance_direction_sign = float(config.BALANCE_DIRECTION_SIGN)
+        self.reload()
 
-    @staticmethod
-    def _as_gain(name: str, value) -> int:
-        gain = int(value)
-        if gain != value or gain < 0:
-            raise ValueError(f"{name} must be an integer >= 0, got {value!r}")
-        return gain
+    def reload(self) -> None:
+        """Baca ulang gain dari config.py."""
+        self.Kp_theta = float(config.Kp_theta)
+        self.Kd_dtheta = float(config.Kd_dtheta)
+        self.Kp_psi = float(config.Kp_psi)
+        self.Kd_dpsi = float(config.Kd_dpsi)
+        self.Kvel = float(config.Kvel)
 
-    def compute_PD(
-        self,
-        angle_psi: float,
-        angular_dot_psi: float,
-        angle_theta: float = 0.0,
-        angular_dot_theta: float = 0.0,
-        setpoint_psi: float = 0.0,
-        setpoint_theta: float = 0.0,
-    ) -> PDControlState:
-        error_psi = float(setpoint_psi) - float(angle_psi)
-        if abs(error_psi) < self.deadband_deg:
-            error_psi = 0.0
-        error_theta = float(setpoint_theta) - float(angle_theta)
-
-        # u_PD = Kp*psi + Kd*psi_dot + Kp*theta + Kd*theta_dot + K_vel
-        # (angles taken relative to their setpoints, no clamp).
-        u_PD = (
-            self.Kp_psi * (-error_psi)
-            + self.Kd_psi * float(angular_dot_psi)
-            + self.Kp_theta * (-error_theta)
-            + self.Kd_theta * float(angular_dot_theta)
-            + self.K_vel
-        )
-        # BALANCE_DIRECTION_SIGN = -1.0 (default) keeps the formula above as written.
-        u_PD *= -self.balance_direction_sign
-
-        return PDControlState(
-            angle_psi=float(angle_psi),
-            angular_dot_psi=float(angular_dot_psi),
-            angle_theta=float(angle_theta),
-            angular_dot_theta=float(angular_dot_theta),
-            setpoint_psi=float(setpoint_psi),
-            setpoint_theta=float(setpoint_theta),
-            error_psi=error_psi,
-            error_theta=error_theta,
-            u_PD=u_PD,
+    def terms(self, x) -> tuple:
+        """Kelima suku u_PD secara terpisah (untuk GUI dan log)."""
+        return (
+            self.Kp_theta * float(x[0]),
+            self.Kd_dtheta * float(x[1]),
+            self.Kp_psi * float(x[2]),
+            self.Kd_dpsi * float(x[3]),
+            self.Kvel,
         )
 
+    def compute(self, x) -> float:
+        """u_PD [N m] dari state x = [theta, dtheta, psi, dpsi]."""
+        return float(sum(self.terms(x)))
 
-def wheel_output_from_u(u: float) -> float:
-    if config.USE_WHEEL_DISTANCE_FORMULA:
-        if not config.WHEEL_DISTANCE_M:
-            raise ValueError("WHEEL_DISTANCE_M belum diisi di config.py")
-        return float(u) / float(config.WHEEL_DISTANCE_M)
-    return float(u)
+
+_default = PDController()
+
+
+def compute(x) -> float:
+    """Kontrak: pd.compute(x) -> float [N m]."""
+    return _default.compute(x)

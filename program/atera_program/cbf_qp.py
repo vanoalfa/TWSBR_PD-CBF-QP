@@ -1,38 +1,31 @@
-"""CBF-QP safety filter for ATERA (acados + HPIPM, horizon N = 1).
+"""cbf_qp.py - safety filter CBF-QP ATERA (acados + HPIPM, N = 1).
 
-    u_safe = argmin_u  1/2 (u - u_PD)^2
-             s.t.      CBF conditions of h1..h4,   u_min <= u <= u_max
+    uQP = argmin_u (u - u_PD)^2
+          s.t.  constraint CBF h1..h4,   -u_max <= u <= u_max
 
-(u_PD is first saturated to the actuator limit; the CBF conditions are soft with a
-large penalty so that the QP stays feasible, the tilt conditions have priority.)
+Barrier function (config.psi_max, config.dtheta_max):
+    h1 = psi_max - psi            h2 = psi + psi_max           -> relative degree 2
+    h3 = dtheta_max - dtheta      h4 = dtheta + dtheta_max     -> relative degree 1
 
-Model (from the Lagrangian of the thesis, q = [theta, psi]):
+h1, h2 - HOCBF orde-2 dengan alpha linear (Alpha_1, Alpha_2):
+    L_f^2 h + L_g L_f h u + Alpha_1 L_f h + Alpha_2 (L_f h + Alpha_1 h) >= 0
+h3, h4 - CBF orde-1 (L_g h != 0, jadi bentuk orde-2 tidak berlaku):
+    L_f h + L_g h u + Alpha_1 h >= 0
 
-    [2A  C] [theta_dd]   [-M R L sin(psi+zeta) psi_d^2]   [      D        ]   [ u]
-    [C   B] [ psi_dd ] + [             0              ] + [-M g L sin(psi)] = [-u]
+Lie derivative, dengan x_dot = f(x) + g(x) u dari model.py dan x = [theta, dtheta, psi, dpsi]:
+    h1: L_f h = -dpsi      L_f^2 h = -f4     L_g L_f h = -g4
+    h2: L_f h = +dpsi      L_f^2 h = +f4     L_g L_f h = +g4
+    h3: L_f h = -f2        L_g h   = -g2
+    h4: L_f h = +f2        L_g h   = +g2
 
-    A = m R^2 + 1/2 M R^2 + j_omega      B = M L^2 + j_psi
-    C = M R L cos(psi + zeta)            D = (M + 2 m) g R sin(zeta)
-    u = torque_left + torque_right  [N m]
+Keempat constraint affine terhadap u:  a_i u + b_i >= 0.  Tiap baris dibagi |a_i| supaya
+slack-nya bersatuan N m (QP terskala baik), lalu (a_i, b_i) dikirim ke acados sebagai
+parameter. Karena u skalar, satu iterasi SQP-RTI = tepat satu QP yang diselesaikan HPIPM.
 
-    NOTE: the gravity term of the psi row is -M g L sin(psi). This is what
-    d/dt(dL/d psi_dot) - dL/d psi gives for the Lagrangian with -M g L cos(psi)
-    (inverted pendulum: gravity pushes the body AWAY from psi = 0).
+Constraint dibuat soft (slack berbobot besar) supaya QP selalu punya solusi;
+feasible = False berarti ada constraint yang terpaksa dilanggar.
 
-Barrier functions:
-
-    h1 =  psi_max - psi          h2 = psi + psi_max           (relative degree 2 -> HOCBF)
-    h3 =  theta_dot_max - theta_dot    h4 = theta_dot + theta_dot_max   (relative degree 1)
-
-    h1, h2:  Psi_1 = h_dot + Alpha_1 h,   Psi_1_dot + Alpha_2 Psi_1 >= 0
-             <=>  h_ddot + (Alpha_1 + Alpha_2) h_dot + Alpha_1 Alpha_2 h >= 0
-    h3, h4:  h_dot + Alpha_3 h >= 0
-
-All four conditions are affine in u, so the problem is a QP. It is solved by one
-SQP-RTI step of acados (= exactly one HPIPM QP solve) on a horizon of N = 1.
-
-Units: this module works in SI (rad, rad/s, N m). The public method `filter()`
-takes and returns the same units as the PD (deg, deg/s, raw current count).
+Kontrak:  cbf_qp.filter(x, uPD) -> (uQP: float, feasible: bool)
 """
 
 from __future__ import annotations
@@ -40,288 +33,295 @@ from __future__ import annotations
 import logging
 import math
 import os
-from dataclasses import dataclass
-from typing import Optional, Tuple
+import time
 
 import config
-from ddsm115 import RAW_PER_AMP, u_limit_raw
+import model
 
 LOGGER = logging.getLogger(__name__)
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
-CODE_DIR = os.path.join(_HERE, "c_generated_code_cbf")
+CODE_DIR = os.path.join(_HERE, "c_generated_code")
 JSON_FILE = os.path.join(CODE_DIR, "acados_ocp_cbf.json")
 SIGNATURE_FILE = os.path.join(CODE_DIR, "atera_signature.txt")
 MODEL_NAME = "atera_cbf_qp"
-
-# Order of the runtime parameter vector p of the acados model.
-P_NAMES = ("A", "B", "MRL", "MgL", "D", "zeta", "psi_max", "theta_dot_max", "alpha_1", "alpha_2", "alpha_3")
-
-_REQUIRED = (
-    "CBF_M_BODY_KG", "CBF_M_WHEEL_KG", "CBF_R_WHEEL_M", "CBF_L_COM_M",
-    "CBF_J_WHEEL_KGM2", "CBF_J_BODY_KGM2", "CBF_TORQUE_CONSTANT_NM_PER_A",
-    "CBF_PSI_MAX_DEG", "CBF_THETA_DOT_MAX_DEG_S",
-)
+_STRUCTURE_VERSION = "v1"       # naikkan bila struktur OCP di _build_ocp berubah
+_BIG = 1.0e9
+H_NAMES = ("h1 = psi_max - psi", "h2 = psi + psi_max",
+           "h3 = dtheta_max - dtheta", "h4 = dtheta + dtheta_max")
 
 
-@dataclass
-class CBFResult:
-    u_safe: float            # filtered command [raw current count per wheel]
-    u_PD: float              # nominal command [raw current count per wheel]
-    active: bool             # True if the filter changed the (saturated) PD command
-    status: int              # acados status (0 = OK), -1 = fallback to u_PD
-    solve_time_ms: float     # acados time_tot of this cycle
-    h: Tuple[float, float, float, float]   # h1..h4 (rad, rad, rad/s, rad/s)
+def barrier_values(x) -> tuple:
+    """h1..h4 pada state x."""
+    dtheta, psi = float(x[1]), float(x[2])
+    return (config.psi_max - psi, psi + config.psi_max,
+            config.dtheta_max - dtheta, dtheta + config.dtheta_max)
 
 
-def model_coefficients() -> dict:
-    """Auxiliary coefficients A, B, MRL, MgL, D of the thesis from config.py."""
-    M = float(config.CBF_M_BODY_KG)
-    m = float(config.CBF_M_WHEEL_KG)
-    R = float(config.CBF_R_WHEEL_M)
-    L = float(config.CBF_L_COM_M)
-    j_w = float(config.CBF_J_WHEEL_KGM2)
-    j_psi = float(config.CBF_J_BODY_KGM2)
-    g = float(config.CBF_GRAVITY_M_S2)
-    zeta = math.radians(float(config.CBF_ZETA_DEG))
-    return {
-        "A": m * R * R + 0.5 * M * R * R + j_w,
-        "B": M * L * L + j_psi,
-        "MRL": M * R * L,
-        "MgL": M * g * L,
-        "D": (M + 2.0 * m) * g * R * math.sin(zeta),
-        "zeta": zeta,
-    }
+def constraint_rows(x) -> tuple:
+    """(a, b) tiap constraint, dengan arti a_i u + b_i >= 0 (belum dinormalkan)."""
+    fx, gx = model.fg(x)
+    dpsi = float(x[3])
+    f2, f4, g2, g4 = fx[1], fx[3], gx[1], gx[3]
+    a1, a2 = float(config.Alpha_1), float(config.Alpha_2)
+    h1, h2, h3, h4 = barrier_values(x)
+    # HOCBF: L_f^2 h + L_gL_f h u + Alpha_1 L_f h + Alpha_2 (L_f h + Alpha_1 h) >= 0
+    b1 = -f4 + a1 * (-dpsi) + a2 * (-dpsi + a1 * h1)
+    b2 = f4 + a1 * dpsi + a2 * (dpsi + a1 * h2)
+    # CBF orde-1: L_f h + L_g h u + Alpha_1 h >= 0
+    b3 = -f2 + a1 * h3
+    b4 = f2 + a1 * h4
+    return (-g4, g4, -g2, g2), (b1, b2, b3, b4)
 
 
-def accelerations(x, u, p, cos, sin):
-    """theta_dd, psi_dd of the model. Works with casadi symbols and with floats."""
-    psi, psi_d = x[1], x[3]
-    A, B, MRL, MgL, D, zeta = p[0], p[1], p[2], p[3], p[4], p[5]
-    C = MRL * cos(psi + zeta)
-    det = 2.0 * A * B - C * C
-    rhs_theta = u + MRL * sin(psi + zeta) * psi_d * psi_d - D
-    rhs_psi = -u + MgL * sin(psi)
-    theta_dd = (B * rhs_theta - C * rhs_psi) / det
-    psi_dd = (-C * rhs_theta + 2.0 * A * rhs_psi) / det
-    return theta_dd, psi_dd
+def solve_analytic(a, b, u_ref: float, u_max: float) -> tuple:
+    """Solusi tertutup QP 1 variabel. Kembalikan (u, feasible).
+
+    Tiap baris a_i u + b_i >= 0 adalah batas bawah (a_i > 0) atau batas atas (a_i < 0) u.
+    Bila himpunannya kosong: batas psi (baris 0, 1) dipenuhi dulu, batas dtheta sedekat mungkin.
+    """
+    def interval(rows):
+        lo, hi = -math.inf, math.inf
+        for i in rows:
+            bound = -b[i] / a[i]
+            if a[i] > 0.0:
+                lo = max(lo, bound)
+            else:
+                hi = min(hi, bound)
+        return lo, hi
+
+    def clip(v, lo, hi):
+        return max(lo, min(hi, v))
+
+    feasible = True
+    lo, hi = -u_max, u_max
+    for rows in ((0, 1), (2, 3)):
+        r_lo, r_hi = interval(rows)
+        n_lo, n_hi = max(lo, r_lo), min(hi, r_hi)
+        if n_lo <= n_hi:
+            lo, hi = n_lo, n_hi
+        else:
+            feasible = False
+            if r_lo > r_hi:                 # baris saling bertentangan: ambil tengahnya
+                r_lo = r_hi = 0.5 * (r_lo + r_hi)
+            point = clip(r_lo if r_lo > hi else r_hi, lo, hi)
+            lo = hi = point
+    return clip(u_ref, lo, hi), feasible
 
 
-def cbf_conditions(x, u, p, cos, sin):
-    """The four CBF expressions; each one must be >= 0."""
-    psi, theta_d, psi_d = x[1], x[2], x[3]
-    psi_max, theta_d_max = p[6], p[7]
-    a1, a2, a3 = p[8], p[9], p[10]
-    theta_dd, psi_dd = accelerations(x, u, p, cos, sin)
-    # Each condition is divided by its (positive) class-K gain: same inequality, but the
-    # values (and the slacks) are then in rad and rad/s, which keeps the QP well scaled.
-    k = a1 * a2
-    c1 = (-psi_dd - (a1 + a2) * psi_d) / k + (psi_max - psi)          # h1 = psi_max - psi
-    c2 = (psi_dd + (a1 + a2) * psi_d) / k + (psi + psi_max)           # h2 = psi + psi_max
-    c3 = -theta_dd / a3 + (theta_d_max - theta_d)                     # h3 = theta_dot_max - theta_dot
-    c4 = theta_dd / a3 + (theta_d + theta_d_max)                      # h4 = theta_dot + theta_dot_max
-    return c1, c2, c3, c4
-
-
-class CBFQPFilter:
+class CBFQP:
     def __init__(self) -> None:
         self.available = False
         self.reason = "CBF-QP belum di-setup."
-        self.solver = None
-        self.p = None
-        self.torque_per_raw = 0.0
+        self.backend = ""
+        self._solver = None
+        self._np = None
+        # hasil siklus terakhir (dibaca GUI dan ise.py)
+        self.h = (0.0, 0.0, 0.0, 0.0)
+        self.u_bound = (-config.u_max, config.u_max)   # selang u yang diizinkan CBF
+        self.active = False
+        self.feasible = True
+        self.status = 0
+        self.solve_ms = 0.0
         self.fail_count = 0
-        self.last: Optional[CBFResult] = None
 
-    # ---- configuration -----------------------------------------------------------
+    # ------------------------------------------------------------------ setup --
     @staticmethod
     def check_config() -> str:
-        """Return '' if config.py is complete for CBF-QP, otherwise the reason."""
-        missing = [name for name in _REQUIRED if getattr(config, name, None) is None]
-        if missing:
-            return "Isi dulu di config.py [CBF-QP]: " + ", ".join(missing)
-        for name in ("Alpha_1", "Alpha_2", "Alpha_3"):
+        """'' bila config.py lengkap untuk CBF-QP, selain itu alasannya."""
+        for name in ("Alpha_1", "Alpha_2"):
             if float(getattr(config, name)) <= 0.0:
-                return f"{name} harus > 0 untuk CBF-QP (sekarang {getattr(config, name)})."
-        if float(config.CBF_PSI_MAX_DEG) >= float(config.SAFE_TILT_DEG):
-            return "CBF_PSI_MAX_DEG harus lebih kecil dari SAFE_TILT_DEG."
-        if str(config.MOTOR_CONTROL_MODE).strip().lower() != "current":
-            return "CBF-QP butuh MOTOR_CONTROL_MODE = 'current' (u adalah torsi)."
+                return f"{name} harus > 0 di config.py (sekarang {getattr(config, name)})"
+        if config.psi_max_DEG >= config.SAFE_TILT_DEG:
+            return "psi_max_DEG harus lebih kecil dari SAFE_TILT_DEG"
+        if int(config.CBF_N_HORIZON) != 1:
+            return "CBF_N_HORIZON harus 1"
         return ""
 
-    def parameter_vector(self) -> list:
-        c = model_coefficients()
-        return [
-            c["A"], c["B"], c["MRL"], c["MgL"], c["D"], c["zeta"],
-            math.radians(float(config.CBF_PSI_MAX_DEG)),
-            math.radians(float(config.CBF_THETA_DOT_MAX_DEG_S)),
-            float(config.Alpha_1), float(config.Alpha_2), float(config.Alpha_3),
-        ]
+    def setup(self) -> bool:
+        """Siapkan solver. Panggil sekali saat start (kompilasi kode C bisa makan waktu)."""
+        self.available = False
+        self._solver = None
+        self.reason = self.check_config()
+        if self.reason:
+            return False
+        if str(config.CBF_SOLVER).strip().lower() != "acados":
+            self.backend = "analitik"
+            self.available = True
+            self.reason = "siap (solusi analitik, tanpa acados)"
+            return True
+        try:
+            self._setup_acados()
+        except Exception as exc:
+            self.reason = f"acados gagal di-setup: {exc}"
+            LOGGER.error("CBF-QP %s", self.reason)
+            return False
+        self.backend = "acados/HPIPM"
+        self.available = True
+        LOGGER.info("CBF-QP %s", self.reason)
+        return True
 
-    # ---- acados problem ----------------------------------------------------------
-    def _build_ocp(self, dt: float):
+    def _build_ocp(self):
         import casadi as ca
         import numpy as np
         from acados_template import AcadosModel, AcadosOcp
 
-        x = ca.SX.sym("x", 4)     # [theta, psi, theta_dot, psi_dot]
-        u = ca.SX.sym("u", 1)     # torque_left + torque_right [N m]
-        p = ca.SX.sym("p", len(P_NAMES))
-        theta_dd, psi_dd = accelerations(x, u[0], p, ca.cos, ca.sin)
+        # State tiruan (acados butuh nx >= 1). State robot masuk lewat parameter p,
+        # yaitu koefisien constraint yang sudah dihitung dari model.py.
+        x = ca.SX.sym("x", 1)
+        u = ca.SX.sym("u", 1)                 # torsi total [N m]
+        p = ca.SX.sym("p", 8)                 # [a1..a4, b1..b4] ternormalisasi
 
-        model = AcadosModel()
-        model.name = MODEL_NAME
-        model.x, model.u, model.p = x, u, p
-        model.disc_dyn_expr = x + dt * ca.vertcat(x[2], x[3], theta_dd, psi_dd)
-        model.con_h_expr_0 = ca.vertcat(*cbf_conditions(x, u[0], p, ca.cos, ca.sin))
+        mdl = AcadosModel()
+        mdl.name = MODEL_NAME
+        mdl.x, mdl.u, mdl.p = x, u, p
+        mdl.disc_dyn_expr = x
+        mdl.con_h_expr_0 = p[0:4] * u[0] + p[4:8]      # a_i u + b_i >= 0
 
         ocp = AcadosOcp()
-        ocp.model = model
+        ocp.model = mdl
         ocp.code_export_directory = CODE_DIR
-        ocp.solver_options.N_horizon = 1
-        ocp.solver_options.tf = dt
-        ocp.parameter_values = np.asarray(self.p, dtype=float)
+        n_horizon = int(config.CBF_N_HORIZON)
+        if hasattr(ocp.solver_options, "N_horizon"):
+            ocp.solver_options.N_horizon = n_horizon
+        else:                                           # acados versi lama
+            ocp.dims.N = n_horizon
+        ocp.solver_options.tf = 1.0 / float(config.CONTROL_HZ)
+        ocp.parameter_values = np.array([1.0, -1.0, 1.0, -1.0, 0.0, 0.0, 0.0, 0.0])
 
-        # cost: (u - u_PD)^2 on the first (and only) shooting node
+        # cost node 0: 1/2 * 2 * (u - u_PD)^2 = (u - u_PD)^2
         ocp.cost.cost_type_0 = "LINEAR_LS"
-        ocp.cost.Vx_0 = np.zeros((1, 4))
+        ocp.cost.Vx_0 = np.zeros((1, 1))
         ocp.cost.Vu_0 = np.eye(1)
-        ocp.cost.W_0 = np.eye(1)
+        ocp.cost.W_0 = 2.0 * np.eye(1)
         ocp.cost.yref_0 = np.zeros(1)
+        # tidak ada cost di node lain
         ocp.cost.cost_type = "LINEAR_LS"
+        ocp.cost.Vx = np.zeros((0, 1))
+        ocp.cost.Vu = np.zeros((0, 1))
+        ocp.cost.W = np.zeros((0, 0))
+        ocp.cost.yref = np.zeros(0)
         ocp.cost.cost_type_e = "LINEAR_LS"
+        ocp.cost.Vx_e = np.zeros((0, 1))
+        ocp.cost.W_e = np.zeros((0, 0))
+        ocp.cost.yref_e = np.zeros(0)
 
-        # CBF conditions (soft, so the QP is always feasible)
-        big = 1.0e9
+        # constraint CBF (soft)
         ocp.constraints.lh_0 = np.zeros(4)
-        ocp.constraints.uh_0 = big * np.ones(4)
+        ocp.constraints.uh_0 = _BIG * np.ones(4)
         ocp.constraints.idxsh_0 = np.arange(4)
         w_psi = float(config.CBF_SLACK_WEIGHT_PSI)
-        w_vel = float(config.CBF_SLACK_WEIGHT_THETA_DOT)
-        weights = np.array([w_psi, w_psi, w_vel, w_vel])
-        ocp.cost.zl_0 = weights
+        w_dth = float(config.CBF_SLACK_WEIGHT_DTHETA)
+        weights = np.array([w_psi, w_psi, w_dth, w_dth])
+        ocp.cost.zl_0 = weights            # penalti L1 (eksak selama bobot > pengali Lagrange)
         ocp.cost.zu_0 = weights
-        ocp.cost.Zl_0 = weights
+        ocp.cost.Zl_0 = weights            # penalti L2
         ocp.cost.Zu_0 = weights
 
-        # actuator limits (updated at run time) and the measured state
+        # batas aktuator dan state awal
         ocp.constraints.idxbu = np.array([0])
-        ocp.constraints.lbu = np.array([-1.0])
-        ocp.constraints.ubu = np.array([1.0])
-        ocp.constraints.x0 = np.zeros(4)
+        ocp.constraints.lbu = np.array([-float(config.u_max)])
+        ocp.constraints.ubu = np.array([float(config.u_max)])
+        ocp.constraints.x0 = np.zeros(1)
 
-        ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM"
-        ocp.solver_options.nlp_solver_type = "SQP_RTI"
-        ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
         ocp.solver_options.integrator_type = "DISCRETE"
+        ocp.solver_options.nlp_solver_type = "SQP_RTI"
+        ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM"
+        ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
         ocp.solver_options.print_level = 0
-        ocp.solver_options.hpipm_mode = "ROBUST"
-        ocp.solver_options.qp_solver_iter_max = 100
         return ocp
 
-    def _signature(self, dt: float) -> str:
+    def _setup_acados(self) -> None:
         import acados_template
-        return "|".join(str(v) for v in (
-            getattr(acados_template, "__version__", "?"), dt,
-            config.CBF_SLACK_WEIGHT_PSI, config.CBF_SLACK_WEIGHT_THETA_DOT, len(P_NAMES), 4,
+        import numpy as np
+        from acados_template import AcadosOcpSolver
+
+        signature = "|".join(str(v) for v in (
+            _STRUCTURE_VERSION, getattr(acados_template, "__version__", "?"),
+            config.CBF_N_HORIZON, config.CBF_SLACK_WEIGHT_PSI, config.CBF_SLACK_WEIGHT_DTHETA,
         ))
-
-    def setup(self) -> bool:
-        """Build (or reuse) the acados solver. Call once at start-up, never while balancing."""
-        self.available = False
-        self.reason = self.check_config()
-        if self.reason:
-            return False
+        reuse = False
+        if not config.CBF_FORCE_REBUILD and os.path.isfile(SIGNATURE_FILE) and os.path.isfile(JSON_FILE):
+            with open(SIGNATURE_FILE) as handle:
+                reuse = handle.read() == signature
+        ocp = self._build_ocp()
+        cwd = os.getcwd()
+        os.chdir(_HERE)
         try:
-            from acados_template import AcadosOcpSolver
+            self._solver = AcadosOcpSolver(
+                ocp, json_file=JSON_FILE, generate=not reuse, build=not reuse, verbose=False)
+        finally:
+            os.chdir(cwd)
+        if not reuse:
+            with open(SIGNATURE_FILE, "w") as handle:
+                handle.write(signature)
+        self._np = np
+        self.reason = "siap (kode acados dipakai ulang)" if reuse else "siap (kode acados baru di-generate)"
 
-            self.p = self.parameter_vector()
-            dt = 1.0 / float(config.CONTROL_HZ)
-            signature = self._signature(dt)
-            reuse = False
-            if not config.CBF_FORCE_REBUILD and os.path.isfile(SIGNATURE_FILE) and os.path.isfile(JSON_FILE):
-                with open(SIGNATURE_FILE) as handle:
-                    reuse = handle.read() == signature
-            ocp = self._build_ocp(dt)
-            cwd = os.getcwd()
-            os.chdir(_HERE)
-            try:
-                self.solver = AcadosOcpSolver(
-                    ocp, json_file=JSON_FILE, generate=not reuse, build=not reuse, verbose=False
-                )
-            finally:
-                os.chdir(cwd)
-            if not reuse:
-                with open(SIGNATURE_FILE, "w") as handle:
-                    handle.write(signature)
-
-            import numpy as np
-            self._np = np
-            for stage in (0, 1):
-                self.solver.set(stage, "p", np.asarray(self.p, dtype=float))
-            # raw current count per wheel -> total torque of both wheels [N m]
-            self.torque_per_raw = 2.0 * float(config.CBF_TORQUE_CONSTANT_NM_PER_A) / RAW_PER_AMP
-            self.available = True
-            self.reason = "siap (kode acados dipakai ulang)" if reuse else "siap (kode acados baru di-generate)"
-            LOGGER.info("CBF-QP %s", self.reason)
-            return True
-        except Exception as exc:
-            self.solver = None
-            self.reason = f"acados gagal di-setup: {exc}"
-            LOGGER.error("CBF-QP %s", self.reason)
-            return False
-
-    # ---- run time ----------------------------------------------------------------
-    def state_si(self, angle_psi, angular_dot_psi, angle_theta, angular_dot_theta) -> list:
-        """PD units (deg, encoder angle) -> model state [theta, psi, theta_dot, psi_dot] (rad).
-
-        The model's theta is the ABSOLUTE wheel angle. The DDSM115 encoder measures the
-        wheel relative to the body, so theta = theta_encoder + psi.
-        """
-        psi = math.radians(angle_psi)
-        psi_d = math.radians(angular_dot_psi)
-        return [math.radians(angle_theta) + psi, psi, math.radians(angular_dot_theta) + psi_d, psi_d]
-
-    def barrier_values(self, x) -> Tuple[float, float, float, float]:
-        psi_max, theta_d_max = self.p[6], self.p[7]
-        return (psi_max - x[1], x[1] + psi_max, theta_d_max - x[2], x[2] + theta_d_max)
-
-    def filter(self, u_PD: float, angle_psi: float, angular_dot_psi: float,
-               angle_theta: float, angular_dot_theta: float) -> CBFResult:
-        """u_PD and the returned u_safe are raw current counts per wheel (same unit as the PD)."""
+    # --------------------------------------------------------------- runtime --
+    def _solve_acados(self, a_n, b_n, u_ref: float, u_max: float) -> tuple:
         np = self._np
-        limit_raw = u_limit_raw()
-        u_nominal_raw = max(-limit_raw, min(limit_raw, float(u_PD)))
-        x = self.state_si(angle_psi, angular_dot_psi, angle_theta, angular_dot_theta)
-        h = self.barrier_values(x)
+        solver = self._solver
+        solver.set(0, "p", np.array(a_n + b_n, dtype=float))
+        solver.constraints_set(0, "lbu", np.array([-u_max]))
+        solver.constraints_set(0, "ubu", np.array([u_max]))
+        solver.cost_set(0, "yref", np.array([u_ref]))
+        solver.set(0, "u", np.array([u_ref]))
+        status = int(solver.solve())
+        u = float(solver.get(0, "u")[0])
+        if status != 0 or not math.isfinite(u):
+            raise RuntimeError(f"acados status {status}")
+        slack = float(np.max(solver.get(0, "sl")))
+        return u, slack <= float(config.CBF_SLACK_TOL)
 
-        u_max = limit_raw * self.torque_per_raw
-        # Reference = PD command saturated to the actuator limit (same minimiser, better conditioning).
-        u_ref = u_nominal_raw * self.torque_per_raw
-        x_np = np.asarray(x, dtype=float)
-        solver = self.solver
-        try:
-            solver.set(0, "lbx", x_np)
-            solver.set(0, "ubx", x_np)
-            solver.set(0, "x", x_np)       # linearisation point = measured state -> the QP is exact
-            solver.set(0, "u", np.array([u_nominal_raw * self.torque_per_raw]))
-            solver.constraints_set(0, "lbu", np.array([-u_max]))
-            solver.constraints_set(0, "ubu", np.array([u_max]))
-            solver.cost_set(0, "yref", np.array([u_ref]))
-            status = int(solver.solve())
-            u_opt = float(solver.get(0, "u")[0])
-            solve_ms = float(solver.get_stats("time_tot")) * 1000.0
-        except Exception as exc:
-            LOGGER.error("CBF-QP solve error: %s", exc)
-            status, u_opt, solve_ms = -1, float("nan"), 0.0
+    def filter(self, x, uPD) -> tuple:
+        """Kembalikan (uQP, feasible). x = [theta, dtheta, psi, dpsi], uPD dan uQP dalam N m."""
+        t0 = time.perf_counter()
+        u_max = float(config.u_max)
+        # Acuan = uPD yang sudah dijenuhkan ke batas aktuator. Untuk u skalar minimizer-nya
+        # sama, dan bobot slack tetap lebih besar dari gradien cost.
+        u_ref = max(-u_max, min(u_max, float(uPD)))
+        self.h = barrier_values(x)
 
-        if status != 0 or not math.isfinite(u_opt):
-            # Fail safe: fall back to the (saturated) PD command.
-            self.fail_count += 1
-            result = CBFResult(u_nominal_raw, float(u_PD), False, status if status != 0 else -1, solve_ms, h)
+        if not self.available:
+            self.active, self.feasible, self.status = False, False, -1
+            return u_ref, False
+
+        a, b = constraint_rows(x)
+        a_n = [1.0 if ai > 0.0 else -1.0 for ai in a]
+        b_n = [bi / abs(ai) for ai, bi in zip(a, b)]
+        lower = max(-bi for ai, bi in zip(a_n, b_n) if ai > 0.0)
+        upper = min(bi for ai, bi in zip(a_n, b_n) if ai < 0.0)
+        self.u_bound = (lower, upper)
+
+        self.status = 0
+        if self._solver is not None:
+            try:
+                u, feasible = self._solve_acados(a_n, b_n, u_ref, u_max)
+            except Exception as exc:
+                # Jangan pernah meneruskan u_PD mentah saat solver gagal: pakai solusi tertutup.
+                self.fail_count += 1
+                self.status = 1
+                if self.fail_count <= 3:
+                    LOGGER.error("CBF-QP solve gagal (%s), pakai solusi analitik", exc)
+                u, feasible = solve_analytic(a_n, b_n, u_ref, u_max)
         else:
-            u_safe_raw = u_opt / self.torque_per_raw
-            active = abs(u_safe_raw - u_nominal_raw) > 1.0     # more than 1 raw count
-            result = CBFResult(u_safe_raw, float(u_PD), active, status, solve_ms, h)
-        self.last = result
-        return result
+            u, feasible = solve_analytic(a_n, b_n, u_ref, u_max)
+
+        u = max(-u_max, min(u_max, u))
+        self.active = abs(u - u_ref) > float(config.CBF_ACTIVE_TOL)
+        self.feasible = bool(feasible)
+        self.solve_ms = (time.perf_counter() - t0) * 1000.0
+        return u, self.feasible
+
+
+_default = CBFQP()
+
+
+def setup() -> bool:
+    return _default.setup()
+
+
+def filter(x, uPD) -> tuple:
+    """Kontrak: cbf_qp.filter(x, uPD) -> (uQP: float, feasible: bool)."""
+    return _default.filter(x, uPD)
