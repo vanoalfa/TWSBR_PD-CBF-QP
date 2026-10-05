@@ -1,0 +1,81 @@
+<?xml version="1.0" ?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ATERA_URDF">
+  <xacro:macro name="ATERA_URDF" params="">
+    <xacro:include filename="$(find ATERA_URDF_description)/urdf/materials.xacro"/>
+    <xacro:include filename="$(find ATERA_URDF_description)/urdf/ATERA_URDF.trans"/>
+    <xacro:include filename="$(find ATERA_URDF_description)/urdf/ATERA_URDF.gazebo"/>
+    <link name="body_link">
+      <inertial>
+        <origin xyz="0.000271 0.104088 -0.0" rpy="0 0 0"/>
+        <mass value="19.912715"/>
+        <inertia ixx="0.136321" iyy="0.149288" izz="0.256065" ixy="-0.000202" iyz="1e-06" ixz="-0.0"/>
+      </inertial>
+      <visual>
+        <origin xyz="-0.0 -0.0 -0.0" rpy="0.0 -0.0 0.0"/>
+        <geometry>
+          <mesh filename="package://ATERA_URDF_description/meshes/body_link.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="silver"/>
+      </visual>
+      <collision>
+        <origin xyz="-0.0 -0.0 -0.0" rpy="0.0 -0.0 0.0"/>
+        <geometry>
+          <mesh filename="package://ATERA_URDF_description/meshes/body_link.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
+    </link>
+    <link name="Lwheel_link">
+      <inertial>
+        <origin xyz="0.150135 -0.01055 -0.0" rpy="0 0 0"/>
+        <mass value="2.902443"/>
+        <inertia ixx="0.003488" iyy="0.002298" izz="0.002298" ixy="0.0" iyz="-0.0" ixz="-0.0"/>
+      </inertial>
+      <visual>
+        <origin xyz="-0.0 -0.0 -0.0" rpy="-0.0 1.570796 0"/>
+        <geometry>
+          <mesh filename="package://ATERA_URDF_description/meshes/Lwheel_link.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="silver"/>
+      </visual>
+      <collision>
+        <origin xyz="-0.0 -0.0 -0.0" rpy="-0.0 1.570796 0"/>
+        <geometry>
+          <mesh filename="package://ATERA_URDF_description/meshes/Lwheel_link.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
+    </link>
+    <link name="Rwheel_link">
+      <inertial>
+        <origin xyz="-0.150135 -0.01055 0.0" rpy="0 0 0"/>
+        <mass value="2.902443"/>
+        <inertia ixx="0.003488" iyy="0.002298" izz="0.002298" ixy="-0.0" iyz="0.0" ixz="-0.0"/>
+      </inertial>
+      <visual>
+        <origin xyz="-0.0 -0.0 -0.0" rpy="-0.0 1.570796 0"/>
+        <geometry>
+          <mesh filename="package://ATERA_URDF_description/meshes/Rwheel_link.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+        <material name="silver"/>
+      </visual>
+      <collision>
+        <origin xyz="-0.0 -0.0 -0.0" rpy="-0.0 1.570796 0"/>
+        <geometry>
+          <mesh filename="package://ATERA_URDF_description/meshes/Rwheel_link.stl" scale="0.001 0.001 0.001"/>
+        </geometry>
+      </collision>
+    </link>
+    <joint name="Revolute 1" type="continuous">
+      <origin xyz="0.114 -0.01055 0.0" rpy="-0.0 -1.570796 0"/>
+      <parent link="body_link"/>
+      <child link="Lwheel_link"/>
+      <axis xyz="0 0 1"/>
+    </joint>
+    <joint name="Revolute 2" type="continuous">
+      <origin xyz="-0.114 -0.01055 0.0" rpy="-0.0 1.570796 0"/>
+      <parent link="body_link"/>
+      <child link="Rwheel_link"/>
+      <axis xyz="0 0 1"/>
+    </joint>
+  </xacro:macro>
+  <!-- <xacro:ATERA_URDF /> -->
+</robot>
