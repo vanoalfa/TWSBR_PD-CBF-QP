@@ -25,11 +25,14 @@ Kontrol:
     Ctrl+C di terminal = keluar
 """
 
+import glob
+import math
+import os
+import time
+import xml.etree.ElementTree as ET
+
 import pybullet as p
 import pybullet_data
-import time
-import os
-import math
 
 
 # ============================================================
@@ -48,6 +51,13 @@ RATED_SPEED_RPM = 115   # rpm, kecepatan pada torsi rated
 WHEEL_MAX_FORCE = STALL_TORQUE
 WHEEL_DRIVE_VELOCITY = 15.0   # rad/s, kecepatan putar roda saat W/S ditekan (nilai bebas untuk demo visual)
 
+# Arah putar tiap roda. Exporter memakai sumbu Z dari Joint Origin sebagai
+# sumbu putar, dan Joint Origin roda kiri/kanan bisa saling berlawanan arah.
+# Kalau salah satu roda terlihat berputar mundur saat W ditekan, ganti
+# nilainya menjadi -1.0.
+LEFT_WHEEL_SIGN = 1.0
+RIGHT_WHEEL_SIGN = 1.0
+
 # --- Kecepatan gerak robot (kinematik, bebas diatur untuk demo) ---
 LINEAR_SPEED = 0.5      # meter/detik, kecepatan maju/mundur
 YAW_SPEED = 1.0          # radian/detik, kecepatan belok
@@ -63,20 +73,97 @@ START_POS = [0, 0, 0.04]
 # kita jadikan acuan "tegak" yang dikunci paksa sepanjang simulasi.
 UPRIGHT_ORIENTATION_EULER = [math.pi / 2, 0, 0]
 
-LEFT_WHEEL_PATTERN = "wheelL"
-RIGHT_WHEEL_PATTERN = "wheelR"
+# Potongan nama link roda (nama komponen di Fusion: Lwheel_link, Rwheel_link)
+LEFT_WHEEL_PATTERN = "Lwheel"
+RIGHT_WHEEL_PATTERN = "Rwheel"
 
 
 # ============================================================
-# BAGIAN 2: PATH HANDLING
+# BAGIAN 2: PATH HANDLING + KONVERSI .urdf.xacro -> .urdf
 # ============================================================
+#
+# Struktur folder yang diharapkan (hasil ekspor Fusion disalin ke "urdf"):
+#
+#   PROJECT_ROOT/
+#   ├── scripts/drive_awsd.py      <- file ini
+#   └── urdf/
+#       ├── urdf/NAMA.urdf.xacro   <- hasil exporter
+#       └── meshes/*.stl
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
-URDF_PATH = os.path.join(PROJECT_ROOT, "urdf", "urdf", "robot.urdf")
+URDF_DIR = os.path.join(PROJECT_ROOT, "urdf", "urdf")
+MESH_DIR = os.path.join(PROJECT_ROOT, "urdf", "meshes")
+URDF_PATH = os.path.join(URDF_DIR, "robot.urdf")
 
-if not os.path.exists(URDF_PATH):
-    raise FileNotFoundError(f"URDF tidak ditemukan di: {URDF_PATH}")
+XACRO_NS = "{http://www.ros.org/wiki/xacro}"
+
+
+def convert_xacro_to_urdf(xacro_path, urdf_path):
+    """
+    Mengubah .urdf.xacro hasil exporter menjadi .urdf biasa TANPA ROS.
+
+    Ini bukan pengganti perintah `xacro` secara umum. Fungsi ini hanya
+    menangani pola file yang ditulis exporter fusion2urdf (haoyan):
+    - isi robot (link & joint) dibungkus satu <xacro:macro>  -> dikeluarkan
+    - <xacro:include> (materials/trans/gazebo, khusus ROS)   -> dibuang
+    - path mesh "package://nama_paket/meshes/x.stl"          -> path relatif
+    - material "silver" (aslinya di materials.xacro)         -> ditulis langsung
+    """
+    src_root = ET.parse(xacro_path).getroot()
+
+    robot = ET.Element("robot", {"name": src_root.get("name", "robot")})
+    material = ET.SubElement(robot, "material", {"name": "silver"})
+    ET.SubElement(material, "color", {"rgba": "0.7 0.7 0.7 1.0"})
+
+    macro = src_root.find(f"{XACRO_NS}macro")
+    container = macro if macro is not None else src_root
+    for element in container:
+        if element.tag in ("link", "joint"):
+            robot.append(element)
+
+    # PyBullet mencari mesh relatif terhadap lokasi file URDF
+    mesh_rel_dir = os.path.relpath(MESH_DIR, os.path.dirname(urdf_path)).replace("\\", "/")
+    for mesh in robot.iter("mesh"):
+        file_name = mesh.get("filename", "").replace("\\", "/").split("/")[-1]
+        mesh.set("filename", f"{mesh_rel_dir}/{file_name}")
+
+    n_links = len(robot.findall("link"))
+    n_joints = len(robot.findall("joint"))
+    if n_links == 0:
+        raise RuntimeError(f"Tidak ada <link> yang terbaca dari: {xacro_path}")
+
+    ET.indent(robot)
+    ET.ElementTree(robot).write(urdf_path, encoding="utf-8", xml_declaration=True)
+    print(f"Konversi xacro -> urdf selesai: {n_links} link, {n_joints} joint")
+    print(f"  dari : {xacro_path}")
+    print(f"  ke   : {urdf_path}")
+
+
+def prepare_urdf():
+    """
+    Memastikan robot.urdf ada dan terbaru.
+    Kalau ada file .urdf.xacro yang lebih baru (habis ekspor ulang dari
+    Fusion), robot.urdf dibuat ulang otomatis.
+    """
+    xacro_files = sorted(glob.glob(os.path.join(URDF_DIR, "*.urdf.xacro")))
+
+    if xacro_files:
+        xacro_path = xacro_files[0]
+        if len(xacro_files) > 1:
+            print(f"Ada {len(xacro_files)} file .urdf.xacro, yang dipakai: {xacro_path}")
+        urdf_outdated = (
+            not os.path.exists(URDF_PATH)
+            or os.path.getmtime(URDF_PATH) < os.path.getmtime(xacro_path)
+        )
+        if urdf_outdated:
+            convert_xacro_to_urdf(xacro_path, URDF_PATH)
+
+    if not os.path.exists(URDF_PATH):
+        raise FileNotFoundError(
+            f"Tidak ada robot.urdf maupun file .urdf.xacro di: {URDF_DIR}"
+        )
+    return URDF_PATH
 
 
 # ============================================================
@@ -90,9 +177,9 @@ def setup_world():
     p.loadURDF("plane.urdf")
 
 
-def load_robot():
+def load_robot(urdf_path):
     orn = p.getQuaternionFromEuler(UPRIGHT_ORIENTATION_EULER)
-    robot_id = p.loadURDF(URDF_PATH, basePosition=START_POS, baseOrientation=orn, useFixedBase=False)
+    robot_id = p.loadURDF(urdf_path, basePosition=START_POS, baseOrientation=orn, useFixedBase=False)
     print(f"Robot dimuat dengan ID: {robot_id}")
     return robot_id
 
@@ -100,17 +187,24 @@ def load_robot():
 def detect_wheel_joints(robot_id):
     num_joints = p.getNumJoints(robot_id)
     left_idx, right_idx = None, None
+    found = []
 
     for i in range(num_joints):
         info = p.getJointInfo(robot_id, i)
+        joint_name = info[1].decode("utf-8")
         child_link_name = info[12].decode("utf-8")
+        found.append(f"  [{i}] joint='{joint_name}' -> link='{child_link_name}'")
         if LEFT_WHEEL_PATTERN in child_link_name:
             left_idx = i
         elif RIGHT_WHEEL_PATTERN in child_link_name:
             right_idx = i
 
     if left_idx is None or right_idx is None:
-        raise RuntimeError("Index joint roda tidak ditemukan otomatis.")
+        raise RuntimeError(
+            "Index joint roda tidak ditemukan otomatis. Sesuaikan "
+            "LEFT_WHEEL_PATTERN / RIGHT_WHEEL_PATTERN dengan nama link berikut:\n"
+            + "\n".join(found)
+        )
 
     print(f"Joint roda kiri: {left_idx} | Joint roda kanan: {right_idx}")
     return left_idx, right_idx
@@ -233,11 +327,11 @@ def spin_wheels_visual(robot_id, left_idx, right_idx, direction):
 
     p.setJointMotorControl2(
         robot_id, left_idx, p.VELOCITY_CONTROL,
-        targetVelocity=target_velocity, force=WHEEL_MAX_FORCE
+        targetVelocity=LEFT_WHEEL_SIGN * target_velocity, force=WHEEL_MAX_FORCE
     )
     p.setJointMotorControl2(
         robot_id, right_idx, p.VELOCITY_CONTROL,
-        targetVelocity=target_velocity, force=WHEEL_MAX_FORCE
+        targetVelocity=RIGHT_WHEEL_SIGN * target_velocity, force=WHEEL_MAX_FORCE
     )
 
 
@@ -302,8 +396,9 @@ def run(robot_id, left_idx, right_idx):
 # ============================================================
 
 def main():
+    urdf_path = prepare_urdf()
     setup_world()
-    robot_id = load_robot()
+    robot_id = load_robot(urdf_path)
     left_idx, right_idx = detect_wheel_joints(robot_id)
     print_robot_specs(robot_id, left_idx, right_idx)
     run(robot_id, left_idx, right_idx)
