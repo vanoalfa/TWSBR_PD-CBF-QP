@@ -2,15 +2,16 @@
 
 ISE = jumlah (error^2 * dt), dihitung untuk theta, dtheta, psi, dan dpsi.
 
-Tiap percobaan disimpan di folder PLOT_EVALUASI:
-    YYYYMMDD_COBA PD_PERCOBAAN KE-XX.csv        (data)
-    YYYYMMDD_COBA PD_PERCOBAAN KE-XX.png        (gambar)
-    YYYYMMDD_COBA PD+CBF_PERCOBAAN KE-XX.csv / .png
+Tiap percobaan disimpan di folder PLOT_EVALUASI (HHmmSS = jam, menit, detik saat disimpan):
+    YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.csv        (data)
+    YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.png        (gambar)
+    YYYYMMDD_HHmmSS_COBA PD+CBF_PERCOBAAN KE-XX.csv / .png
+Nomor KE-XX naik otomatis per tanggal dan per mode. File lama tanpa HHmmSS tetap terbaca.
 Bila gain diubah saat percobaan sedang direkam, nama file diberi akhiran _TUNING.
 
-Isi gambar:
-    Gambar 1: sumbu X = psi,   sumbu Y = dpsi
-    Gambar 2: sumbu X = theta, sumbu Y = dtheta
+Isi gambar (garis merah tebal = batas safety set):
+    Gambar 1: sumbu X = psi,   sumbu Y = dpsi       batas psi dan dpsi
+    Gambar 2: sumbu X = theta, sumbu Y = dtheta     batas dtheta, dan batas jarak s = R*theta (theta = s/R)
 
 Perintah (dijalankan dari terminal):
     python3 ise.py --daftar                                          daftar semua percobaan
@@ -57,8 +58,12 @@ KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
              "u_PD_Nm", "u_Nm", "status_cbf", "dorong_N",
              "ISE_theta", "ISE_dtheta", "ISE_psi", "ISE_dpsi"] + KOLOM_GAIN + ["zeta_DEG"]
 
-# Contoh nama: 20261007_COBA PD+CBF_PERCOBAAN KE-05_TUNING.csv
-POLA_NAMA = re.compile(r"^(\d{8})_COBA (PD\+CBF|PD)_PERCOBAAN KE-(\d+)(_TUNING)?\.csv$")
+# Contoh nama: 20261008_201530_COBA PD+CBF_PERCOBAAN KE-05_TUNING.csv  (bagian _HHmmSS boleh tidak ada: file lama)
+POLA_NAMA = re.compile(r"^(\d{8})(?:_(\d{6}))?_COBA (PD\+CBF|PD)_PERCOBAAN KE-(\d+)(_TUNING)?\.csv$")
+
+# Garis batas safety set di semua gambar
+SAFETY_WARNA = "red"
+SAFETY_TEBAL = 2.2
 
 WARNA_PD = "tab:blue"
 WARNA_PD_CBF = "tab:orange"
@@ -91,29 +96,48 @@ def daftar_percobaan():
             continue
         percobaan = {
             "tanggal": cocok.group(1),
-            "mode": cocok.group(2),
-            "nomor": int(cocok.group(3)),
-            "tuning": cocok.group(4) is not None,
+            "jam": cocok.group(2) if cocok.group(2) is not None else "",
+            "mode": cocok.group(3),
+            "nomor": int(cocok.group(4)),
+            "tuning": cocok.group(5) is not None,
             "nama": nama_file[:-4],
             "path": os.path.join(FOLDER_PLOT, nama_file),
         }
         hasil.append(percobaan)
-    hasil.sort(key=lambda percobaan: (percobaan["tanggal"], percobaan["nomor"], percobaan["mode"]))
+    hasil.sort(key=lambda percobaan: (percobaan["tanggal"], percobaan["nomor"], percobaan["jam"], percobaan["mode"]))
     return hasil
 
 
 def nama_percobaan(mode, tuning):
-    """Contoh: 20261007_COBA PD+CBF_PERCOBAAN KE-03 (nomor naik otomatis per tanggal dan per mode)."""
+    """Contoh: 20261008_201530_COBA PD+CBF_PERCOBAAN KE-03 (nomor naik otomatis per tanggal dan per mode)."""
     os.makedirs(FOLDER_PLOT, exist_ok=True)
-    tanggal = datetime.now().strftime("%Y%m%d")
+    sekarang = datetime.now()
+    tanggal = sekarang.strftime("%Y%m%d")
+    jam = sekarang.strftime("%H%M%S")
     nomor = 1
     for percobaan in daftar_percobaan():
         if percobaan["tanggal"] == tanggal and percobaan["mode"] == mode and percobaan["nomor"] >= nomor:
             nomor = percobaan["nomor"] + 1
-    nama = "%s_COBA %s_PERCOBAAN KE-%02d" % (tanggal, mode, nomor)
+    nama = "%s_%s_COBA %s_PERCOBAAN KE-%02d" % (tanggal, jam, mode, nomor)
     if tuning:
         nama = nama + "_TUNING"
     return nama
+
+
+def gambar_safety_set(gambar1, gambar2):
+    """Garis merah tebal batas safety set.
+    Gambar 1: psi_min, psi_max (tegak) dan dpsi_min, dpsi_max (mendatar).
+    Gambar 2: dtheta_min, dtheta_max (mendatar) dan batas jarak s_min/R, s_max/R (tegak, bila ada di config.py)."""
+    gambar1.axvline(config.psi_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, label="batas safety set")
+    gambar1.axvline(config.psi_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
+    gambar1.axhline(config.dpsi_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
+    gambar1.axhline(config.dpsi_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
+
+    gambar2.axhline(config.dtheta_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, label="batas safety set")
+    gambar2.axhline(config.dtheta_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
+    if hasattr(config, "s_max") and hasattr(config, "s_min"):
+        gambar2.axvline(config.s_max / config.R, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
+        gambar2.axvline(config.s_min / config.R, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
 
 
 def angka(nilai):
@@ -254,15 +278,12 @@ class PerekamISE:
 
         fig, (gambar1, gambar2) = plt.subplots(1, 2, figsize=(13, 6.0))
         fig.suptitle(judul, fontsize=10)
+        gambar_safety_set(gambar1, gambar2)
 
         # Gambar 1: X = psi, Y = dpsi
         gambar1.plot(psi, dpsi, color="tab:blue", linewidth=1.0)
         gambar1.plot(psi[0], dpsi[0], "o", color="tab:green", label="awal")
-        gambar1.plot(psi[-1], dpsi[-1], "x", color="tab:red", markersize=9, label="akhir")
-        gambar1.axvline(config.psi_max, color="gray", linestyle="--", linewidth=0.8, label="batas safety set")
-        gambar1.axvline(config.psi_min, color="gray", linestyle="--", linewidth=0.8)
-        gambar1.axhline(config.dpsi_max, color="gray", linestyle="--", linewidth=0.8)
-        gambar1.axhline(config.dpsi_min, color="gray", linestyle="--", linewidth=0.8)
+        gambar1.plot(psi[-1], dpsi[-1], "x", color="black", markersize=9, label="akhir")
         gambar1.set_xlabel("psi [rad]")
         gambar1.set_ylabel("dpsi [rad/s]")
         gambar1.set_title("Gambar 1\nISE psi = %.6f rad^2 s   |   ISE dpsi = %.6f (rad/s)^2 s"
@@ -273,10 +294,8 @@ class PerekamISE:
         # Gambar 2: X = theta, Y = dtheta
         gambar2.plot(theta, dtheta, color="tab:orange", linewidth=1.0)
         gambar2.plot(theta[0], dtheta[0], "o", color="tab:green", label="awal")
-        gambar2.plot(theta[-1], dtheta[-1], "x", color="tab:red", markersize=9, label="akhir")
-        gambar2.axhline(config.dtheta_max, color="gray", linestyle="--", linewidth=0.8, label="batas safety set")
-        gambar2.axhline(config.dtheta_min, color="gray", linestyle="--", linewidth=0.8)
-        gambar2.set_xlabel("theta [rad]")
+        gambar2.plot(theta[-1], dtheta[-1], "x", color="black", markersize=9, label="akhir")
+        gambar2.set_xlabel("theta [rad]   (s = R*theta)")
         gambar2.set_ylabel("dtheta [rad/s]")
         gambar2.set_title("Gambar 2\nISE theta = %.6f rad^2 s   |   ISE dtheta = %.6f (rad/s)^2 s"
                           % (self.ise_theta, self.ise_dtheta), fontsize=10)
@@ -415,6 +434,7 @@ def ringkasan(data):
         "psi_maks": nilai_maks(data["psi_rad"]),
         "dpsi_maks": nilai_maks(data["dpsi_rad_s"]),
         "dtheta_maks": nilai_maks(data["dtheta_rad_s"]),
+        "s_maks": config.R * nilai_maks(data["theta_rad"]),
         "u_maks": nilai_maks(data["u_Nm"]),
         "dorong_depan": depan,
         "dorong_belakang": belakang,
@@ -449,8 +469,8 @@ def perintah_daftar():
         print("Belum ada percobaan di folder", FOLDER_PLOT)
         return
     print("Folder:", FOLDER_PLOT)
-    print("%-9s %-7s %-4s %-7s %8s %7s %12s %12s  %s"
-          % ("tanggal", "mode", "KE", "", "durasi", "zeta", "ISE psi", "ISE theta", "gain"))
+    print("%-9s %-7s %-7s %-4s %-7s %8s %7s %12s %12s  %s"
+          % ("tanggal", "jam", "mode", "KE", "", "durasi", "zeta", "ISE psi", "ISE theta", "gain"))
     for percobaan in semua:
         data = baca_csv(percobaan["path"])
         hasil = ringkasan(data)
@@ -459,8 +479,8 @@ def perintah_daftar():
             gain = teks_gain(percobaan["mode"], awal, akhir)
         else:
             gain = "(file lama, gain tidak tercatat)"
-        print("%-9s %-7s %02d   %-7s %6.1f s %7s %12.6f %12.6f  %s"
-              % (percobaan["tanggal"], percobaan["mode"], percobaan["nomor"],
+        print("%-9s %-7s %-7s %02d   %-7s %6.1f s %7s %12.6f %12.6f  %s"
+              % (percobaan["tanggal"], percobaan["jam"], percobaan["mode"], percobaan["nomor"],
                  "TUNING" if percobaan["tuning"] else "", hasil["durasi"], teks_zeta(data["zeta_deg"]),
                  hasil["ise_psi"], hasil["ise_theta"], gain))
     print("")
@@ -596,6 +616,8 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal):
          "%.3f" % hasil_cbf["dpsi_maks"], selisih(hasil_pd["dpsi_maks"], hasil_cbf["dpsi_maks"])],
         ["|dtheta| maks [rad/s]  (batas %.2f)" % config.dtheta_max, "%.3f" % hasil_pd["dtheta_maks"],
          "%.3f" % hasil_cbf["dtheta_maks"], selisih(hasil_pd["dtheta_maks"], hasil_cbf["dtheta_maks"])],
+        ["|s| maks [m]  (batas %s)" % (("%.2f" % config.s_max) if hasattr(config, "s_max") else "-"),
+         "%.3f" % hasil_pd["s_maks"], "%.3f" % hasil_cbf["s_maks"], selisih(hasil_pd["s_maks"], hasil_cbf["s_maks"])],
         ["|u| maks [N m]  (batas %.2f)" % config.u_max, "%.3f" % hasil_pd["u_maks"],
          "%.3f" % hasil_cbf["u_maks"], selisih(hasil_pd["u_maks"], hasil_cbf["u_maks"])],
         ["Dorongan (O / P)", teks_dorongan(hasil_pd), teks_dorongan(hasil_cbf), ""],
@@ -614,15 +636,12 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal):
     judul = "%s\nISE dihitung dan data digambar dari t = 0 sampai %.1f s (durasi percobaan yang lebih pendek)" \
         % (nama, t_banding)
     fig.suptitle(judul, fontsize=11)
+    gambar_safety_set(gambar1, gambar2)
 
     # Gambar 1: X = psi, Y = dpsi
     gambar1.plot(potong_pd["psi_rad"], potong_pd["dpsi_rad_s"], color=WARNA_PD, linewidth=1.0, label=label_pd)
     gambar1.plot(potong_cbf["psi_rad"], potong_cbf["dpsi_rad_s"], color=WARNA_PD_CBF, linewidth=1.0,
                  label=label_cbf)
-    gambar1.axvline(config.psi_max, color="gray", linestyle="--", linewidth=0.8, label="batas safety set")
-    gambar1.axvline(config.psi_min, color="gray", linestyle="--", linewidth=0.8)
-    gambar1.axhline(config.dpsi_max, color="gray", linestyle="--", linewidth=0.8)
-    gambar1.axhline(config.dpsi_min, color="gray", linestyle="--", linewidth=0.8)
     gambar1.set_xlabel("psi [rad]")
     gambar1.set_ylabel("dpsi [rad/s]")
     gambar1.set_title("Gambar 1", fontsize=10)
@@ -633,9 +652,7 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal):
     gambar2.plot(potong_pd["theta_rad"], potong_pd["dtheta_rad_s"], color=WARNA_PD, linewidth=1.0, label=label_pd)
     gambar2.plot(potong_cbf["theta_rad"], potong_cbf["dtheta_rad_s"], color=WARNA_PD_CBF, linewidth=1.0,
                  label=label_cbf)
-    gambar2.axhline(config.dtheta_max, color="gray", linestyle="--", linewidth=0.8, label="batas safety set")
-    gambar2.axhline(config.dtheta_min, color="gray", linestyle="--", linewidth=0.8)
-    gambar2.set_xlabel("theta [rad]")
+    gambar2.set_xlabel("theta [rad]   (s = R*theta)")
     gambar2.set_ylabel("dtheta [rad/s]")
     gambar2.set_title("Gambar 2", fontsize=10)
     gambar2.grid(True, alpha=0.4)

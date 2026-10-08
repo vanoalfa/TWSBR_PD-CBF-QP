@@ -34,7 +34,7 @@ import config
 # Pengaturan khusus simulasi
 # =============================================================================
 SUBSTEP = 5                 # jumlah langkah fisika dalam satu siklus kontrol (config.DT)
-GAYA_DORONG_AWAL = 20.0      # [N] besar gaya dorongan (tombol O / P), bisa diubah di jendela Kontrol
+GAYA_DORONG_AWAL = 6.0      # [N] besar gaya dorongan (tombol O / P), bisa diubah di jendela Kontrol
 LAMA_DORONG = 0.10          # [s] lama gaya dorongan bekerja
 # Titik dorong: bidang DORONG_SISI x DORONG_SISI di sisi luar bagian ATAS badan.
 #   - tepi atas bidang = permukaan teratas badan (dihitung otomatis dari robot.urdf)
@@ -46,8 +46,8 @@ LAMA_DORONG = 0.10          # [s] lama gaya dorongan bekerja
 DORONG_SISI = 0.040         # [m] 40 mm x 40 mm
 DORONG_TITIK = 5            # titik per sisi (5 x 5 = 25 titik)
 DORONG_GESER_SAMPING = 0.0  # [m] geser bidang searah poros roda (+ = ke arah roda kiri)
-DORONG_WARNA = [0.10, 0.45, 0.95, 0.30]
-DORONG_WARNA_AKTIF = [0.10, 0.45, 0.95, 0.90]
+DORONG_WARNA = [0.10, 0.75, 0.25, 0.30]
+DORONG_WARNA_AKTIF = [0.10, 0.75, 0.25, 0.90]
 GESEKAN_RODA = 1.0          # koefisien gesek roda dengan lantai
 GESEKAN_PUTAR = 0.003       # gesekan roda saat robot berputar di tempat (yaw), supaya belok berhenti saat dilepas
 PSI_AWAL_DEG = 0.0          # [deg] kemiringan badan saat robot diletakkan
@@ -58,17 +58,28 @@ KAMERA_YAW = 60.0           # [deg]
 KAMERA_PITCH = -15.0        # [deg]
 KAMERA_BATAS_GESER = 0.25   # [m] kamera baru digeser bila robot sudah sejauh ini dari titik tengah layar
 
-# Garis merah safety set (batas psi)
-# Bentuk | | : garis TEGAK di depan dan di belakang robot, ikut berpindah bersama robot.
+# Bidang merah safety set (batas psi)
+# Bentuk | | : dua bidang (persegi panjang) TEGAK di depan dan di belakang robot, ikut berpindah bersama robot.
 # Letaknya dipilih supaya sisi terluar badan di ketinggian IMU tepat menyentuh bidang saat psi = +-psi_max:
 #     jarak mendatar dari poros = L_IMU*sin(psi_max) + JARAK_IMU_KE_SISI_LUAR*cos(psi_max)
 # ASUMSI: jarak IMU ke sisi terluar badan sama untuk sisi depan dan sisi belakang.
 JARAK_IMU_KE_SISI_LUAR = 0.044199   # [m] diukur di Fusion 360
-GARIS_JARAK_SAMPING = 0.18  # [m] garis dipasang di kiri dan kanan robot (searah poros roda), +-jarak ini
-GARIS_TINGGI = 0.42         # [m] dari lantai ke atas
-GARIS_TEBAL = 0.012         # [m]
-GARIS_WARNA = [0.70, 0.0, 0.0, 1.0]
-GARIS_WARNA_LANGGAR = [1.0, 0.15, 0.15, 1.0]       # lebih terang saat psi melewati batas
+BIDANG_LEBAR = 0.36         # [m] searah poros roda
+BIDANG_TINGGI = 0.42        # [m] dari lantai ke atas
+BIDANG_WARNA = [1.0, 0.0, 0.0, 0.22]
+BIDANG_WARNA_LANGGAR = [1.0, 0.0, 0.0, 0.60]       # lebih gelap saat psi melewati batas
+
+# Kotak biru safety set jarak tempuh s (s_min <= s <= s_max, s = R*theta dihitung dari posisi awal).
+# Panjang kotak searah lintasan = s_max - s_min (mengikuti config.py), lebar dan tinggi di bawah.
+# Kotak diam di dunia (tidak ikut robot), diletakkan di posisi awal robot, mengikuti kemiringan lantai.
+KUBUS_LEBAR = 1.0           # [m] searah poros roda
+KUBUS_TINGGI = 1.0          # [m] tegak lurus lantai
+KUBUS_WARNA = [0.10, 0.40, 1.0, 0.20]
+KUBUS_WARNA_LANGGAR = [0.10, 0.40, 1.0, 0.45]      # lebih gelap saat s melewati batas
+
+# Garis safety set di plot realtime (sama dengan ise.py)
+PLOT_SAFETY_WARNA = "red"
+PLOT_SAFETY_TEBAL = 2.2
 
 # Warna teks di jendela PyBullet
 WARNA_BIASA = [0.0, 0.0, 0.0]
@@ -351,7 +362,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         Gambar 1 : sumbu X = psi,   sumbu Y = dpsi
         Gambar 2 : sumbu X = theta, sumbu Y = dtheta
         bawah    : arus tiap motor terhadap waktu
-    Yang digambar hanya data PLOT_RENTANG detik terakhir. Titik merah = keadaan sekarang."""
+    Yang digambar hanya data PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang."""
     os.environ["QT_QPA_PLATFORM"] = platform
     try:
         import numpy as np
@@ -380,11 +391,11 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 
         # Gambar 1: X = psi, Y = dpsi
         garis_psi, = gambar1.plot([], [], color="tab:blue", linewidth=1.0)
-        titik_psi, = gambar1.plot([], [], "o", color="tab:red", markersize=6, label="sekarang")
-        gambar1.axvline(config.psi_max, color="gray", linestyle="--", linewidth=0.8, label="batas safety set")
-        gambar1.axvline(config.psi_min, color="gray", linestyle="--", linewidth=0.8)
-        gambar1.axhline(config.dpsi_max, color="gray", linestyle="--", linewidth=0.8)
-        gambar1.axhline(config.dpsi_min, color="gray", linestyle="--", linewidth=0.8)
+        titik_psi, = gambar1.plot([], [], "o", color="black", markersize=6, label="sekarang")
+        gambar1.axvline(config.psi_max, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL, label="batas safety set")
+        gambar1.axvline(config.psi_min, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
+        gambar1.axhline(config.dpsi_max, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
+        gambar1.axhline(config.dpsi_min, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
         gambar1.set_xlabel("psi [rad]")
         gambar1.set_ylabel("dpsi [rad/s]")
         gambar1.set_title("Gambar 1", fontsize=10)
@@ -392,9 +403,17 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 
         # Gambar 2: X = theta, Y = dtheta
         garis_theta, = gambar2.plot([], [], color="tab:orange", linewidth=1.0)
-        titik_theta, = gambar2.plot([], [], "o", color="tab:red", markersize=6, label="sekarang")
-        gambar2.axhline(config.dtheta_max, color="gray", linestyle="--", linewidth=0.8, label="batas safety set")
-        gambar2.axhline(config.dtheta_min, color="gray", linestyle="--", linewidth=0.8)
+        titik_theta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang")
+        gambar2.axhline(config.dtheta_max, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL, label="batas safety set")
+        gambar2.axhline(config.dtheta_min, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
+        # Batas jarak tempuh s = R*theta  ->  theta = s / R
+        theta_batas_atas = None
+        theta_batas_bawah = None
+        if hasattr(config, "s_max") and hasattr(config, "s_min"):
+            theta_batas_atas = config.s_max / config.R
+            theta_batas_bawah = config.s_min / config.R
+            gambar2.axvline(theta_batas_atas, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
+            gambar2.axvline(theta_batas_bawah, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
         gambar2.set_xlabel("theta [rad]")
         gambar2.set_ylabel("dtheta [rad/s]")
         gambar2.set_title("Gambar 2", fontsize=10)
@@ -402,8 +421,8 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 
         # Arus terhadap waktu
         garis_arus, = ax_arus.plot([], [], color="tab:green")
-        ax_arus.axhline(config.MAX_CURRENT_A, color="gray", linestyle="--", linewidth=0.8)
-        ax_arus.axhline(config.MIN_CURRENT_A, color="gray", linestyle="--", linewidth=0.8)
+        ax_arus.axhline(config.MAX_CURRENT_A, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
+        ax_arus.axhline(config.MIN_CURRENT_A, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
         ax_arus.set_ylim(1.2 * config.MIN_CURRENT_A, 1.2 * config.MAX_CURRENT_A)
         ax_arus.set_ylabel("arus per motor [A]")
         ax_arus.set_xlabel("waktu [s]")
@@ -465,6 +484,9 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     gambar1.set_ylim(-batas_y, batas_y)
                     bawah = np.nanmin(theta)
                     atas = np.nanmax(theta)
+                    if theta_batas_atas is not None:      # batas s selalu terlihat
+                        bawah = min(bawah, theta_batas_bawah)
+                        atas = max(atas, theta_batas_atas)
                     lebar = max(1.0, atas - bawah)
                     gambar2.set_xlim(bawah - 0.1 * lebar, atas + 0.1 * lebar)
                     batas_y = max(1.2 * config.dtheta_max, 1.1 * np.nanmax(np.abs(dtheta)))
@@ -964,6 +986,8 @@ class Simulasi:
         self.bidang_depan = None
         self.bidang_belakang = None
         self.bidang_langgar = {"depan": False, "belakang": False}
+        self.kubus_jarak = None
+        self.kubus_langgar = False
 
         # Jendela Kontrol
         self.kontrol = None
@@ -997,6 +1021,7 @@ class Simulasi:
             p.resetDebugVisualizerCamera(cameraDistance=KAMERA_JARAK, cameraYaw=KAMERA_YAW,
                                          cameraPitch=KAMERA_PITCH, cameraTargetPosition=posisi)
             self.buat_bidang_safety_set()
+            self.buat_kubus_jarak()
             self.buat_bidang_dorong()
             self.buat_jangkar_teks()
             self.kontrol = PenghubungKontrol()
@@ -1043,6 +1068,7 @@ class Simulasi:
         self.normal = np.array([0.0, -math.sin(self.zeta), math.cos(self.zeta)])
         p.resetBasePositionAndOrientation(self.lantai, [0.0, 0.0, 0.0],
                                           p.getQuaternionFromEuler([self.zeta, 0.0, 0.0]))
+        self.atur_kubus_jarak()
         self.reset()
 
     def tinggi_lantai(self, titik):
@@ -1228,9 +1254,9 @@ class Simulasi:
                 hasil.append(huruf)
         return hasil
 
-    # ------------------------------------------------------ bidang biru dorong
+    # ----------------------------------------------------- bidang hijau dorong
     def buat_bidang_dorong(self):
-        """Dua kotak biru 40 x 40 mm di sisi depan dan belakang puncak badan (titik dorong O / P).
+        """Dua kotak hijau 40 x 40 mm di sisi depan dan belakang puncak badan (titik dorong O / P).
         Hanya gambar, tanpa collision. Menyala terang saat dorongan bekerja."""
         setengah = [DORONG_SISI / 2.0, 0.0015, DORONG_SISI / 2.0]
         for sisi in (1, -1):
@@ -1257,20 +1283,18 @@ class Simulasi:
                 self.dorong_menyala[sisi] = menyala
                 p.changeVisualShape(bidang, -1, rgbaColor=DORONG_WARNA_AKTIF if menyala else DORONG_WARNA)
 
-    # -------------------------------------------------- garis merah safety set
+    # ------------------------------------------------- bidang merah safety set
     def buat_bidang_safety_set(self):
-        """Garis merah tegak berbentuk | | di depan dan di belakang robot (lihat JARAK_IMU_KE_SISI_LUAR).
-        Dua garis per sisi (kiri dan kanan robot) supaya terlihat dari sudut kamera mana pun.
+        """Dua bidang merah transparan berbentuk | | di depan dan di belakang robot (lihat JARAK_IMU_KE_SISI_LUAR).
         Hanya gambar (tanpa collision), jadi tidak memengaruhi fisika."""
-        setengah = [GARIS_TEBAL / 2.0, GARIS_TEBAL / 2.0, GARIS_TINGGI / 2.0]
-        self.garis_safety = {"depan": [], "belakang": []}
-        for sisi in ("depan", "belakang"):
-            for _ in range(2):
-                bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=GARIS_WARNA)
-                garis = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1, baseVisualShapeIndex=bentuk,
-                                          basePosition=[0.0, 0.0, -5.0])
-                self.garis_safety[sisi].append(garis)
-        self.bidang_depan = True
+        setengah = [BIDANG_LEBAR / 2.0, 0.001, BIDANG_TINGGI / 2.0]
+        hasil = []
+        for _ in range(2):
+            bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=BIDANG_WARNA)
+            hasil.append(p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1, baseVisualShapeIndex=bentuk,
+                                           basePosition=[0.0, 0.0, -5.0]))
+        self.bidang_depan = hasil[0]
+        self.bidang_belakang = hasil[1]
         self.gambar_bidang_safety_set()
 
     def gambar_bidang_safety_set(self):
@@ -1285,21 +1309,52 @@ class Simulasi:
         orientasi = quaternion_dari_matriks(matriks)
         psi = self.x_terakhir[2]
 
-        # Jarak mendatar garis dari poros roda
+        # Jarak mendatar bidang dari poros roda
         jarak = config.L_IMU * math.sin(config.psi_max) + JARAK_IMU_KE_SISI_LUAR * math.cos(config.psi_max)
 
-        for sisi, tanda in (("depan", 1.0), ("belakang", -1.0)):
-            for k in range(2):
-                samping = GARIS_JARAK_SAMPING if k == 0 else -GARIS_JARAK_SAMPING
-                pusat = poros + tanda * jarak * depan + samping * sumbu_datar
-                pusat[2] = self.tinggi_lantai(pusat) + 0.5 * GARIS_TINGGI
-                p.resetBasePositionAndOrientation(self.garis_safety[sisi][k], pusat.tolist(), orientasi)
+        for nama, bidang, tanda in (("depan", self.bidang_depan, 1.0), ("belakang", self.bidang_belakang, -1.0)):
+            pusat = poros + tanda * jarak * depan
+            pusat[2] = self.tinggi_lantai(pusat) + 0.5 * BIDANG_TINGGI      # bidang berdiri di lantai
+            p.resetBasePositionAndOrientation(bidang, pusat.tolist(), orientasi)
 
-            langgar = psi > config.psi_max if sisi == "depan" else psi < config.psi_min
-            if langgar != self.bidang_langgar[sisi]:
-                self.bidang_langgar[sisi] = langgar
-                for garis in self.garis_safety[sisi]:
-                    p.changeVisualShape(garis, -1, rgbaColor=GARIS_WARNA_LANGGAR if langgar else GARIS_WARNA)
+            langgar = psi > config.psi_max if nama == "depan" else psi < config.psi_min
+            if langgar != self.bidang_langgar[nama]:
+                self.bidang_langgar[nama] = langgar
+                p.changeVisualShape(bidang, -1, rgbaColor=BIDANG_WARNA_LANGGAR if langgar else BIDANG_WARNA)
+
+    # ----------------------------------------------- kotak biru safety set jarak s
+    def buat_kubus_jarak(self):
+        """Kotak biru transparan = daerah s_min <= s <= s_max. Hanya gambar, tanpa collision.
+        Tidak dibuat bila config.py belum punya s_max / s_min."""
+        if not hasattr(config, "s_max") or not hasattr(config, "s_min"):
+            print("Kotak jarak tidak digambar: s_max / s_min belum ada di config.py.")
+            return
+        panjang = config.s_max - config.s_min
+        setengah = [KUBUS_LEBAR / 2.0, panjang / 2.0, KUBUS_TINGGI / 2.0]
+        bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=KUBUS_WARNA)
+        self.kubus_jarak = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1, baseVisualShapeIndex=bentuk,
+                                             basePosition=[0.0, 0.0, -5.0])
+        self.atur_kubus_jarak()
+
+    def atur_kubus_jarak(self):
+        """Letakkan kotak di posisi awal robot (s = 0 di titik (0, 0, 0)), searah lintasan dan mengikuti lantai."""
+        if self.kubus_jarak is None:
+            return
+        arah_lintasan = np.array([0.0, math.cos(self.zeta), math.sin(self.zeta)])   # +Y dunia, sepanjang lantai
+        tengah_s = 0.5 * (config.s_max + config.s_min)
+        pusat = tengah_s * arah_lintasan + 0.5 * KUBUS_TINGGI * self.normal
+        p.resetBasePositionAndOrientation(self.kubus_jarak, pusat.tolist(),
+                                          p.getQuaternionFromEuler([self.zeta, 0.0, 0.0]))
+
+    def warnai_kubus_jarak(self):
+        """Kotak lebih gelap bila s = R*theta di luar batas."""
+        if self.kubus_jarak is None:
+            return
+        jarak = config.R * self.x_terakhir[0]
+        langgar = jarak > config.s_max or jarak < config.s_min
+        if langgar != self.kubus_langgar:
+            self.kubus_langgar = langgar
+            p.changeVisualShape(self.kubus_jarak, -1, rgbaColor=KUBUS_WARNA_LANGGAR if langgar else KUBUS_WARNA)
 
     # ------------------------------------------------- teks di jendela PyBullet
     # PyBullet hanya bisa menulis teks di ruang 3D. Supaya teks tetap di tempat yang sama di layar,
@@ -1431,6 +1486,7 @@ class Simulasi:
                                          cameraTargetPosition=tengah)
 
         self.gambar_bidang_safety_set()
+        self.warnai_kubus_jarak()
         self.gambar_bidang_dorong()
         self.atur_jangkar_teks(kamera, tengah)
         self.gambar_teks(baris)
