@@ -19,6 +19,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+tempCodeRunnerFile.py
 
 # Virtual environments
 venv/
@@ -35,6 +36,7 @@ acados_ocp.json
 *.o
 *.a
 build_acados/
+acados_ocp_*.json
 
 # pybullet / simulation artifacts
 *.bullet

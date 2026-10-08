@@ -1,4 +1,38 @@
 <?xml version="1.0" ?>
+<!--
+  ATERA_URDF - versi yang sudah diperbaiki secara manual dari hasil ekspor fusion2urdf.
+
+  Frame body_link = frame Fusion: X = arah poros roda, Y = atas, Z = arah maju/mundur.
+  Poros roda berada di y = -0.01055 m.
+
+  PERUBAHAN TERHADAP HASIL EKSPOR:
+  1. <inertial> roda dipindahkan dari koordinat dunia Fusion ke frame link roda
+     (frame link roda = frame joint; sumbu Z link = sumbu putar).
+  2. Sumbu putar kedua roda disamakan menjadi +X body_link, sehingga kecepatan
+     joint positif pada KEDUA roda menggerakkan robot ke arah +Z body_link.
+  3. Massa, pusat massa, dan inersia memakai nilai robot asli / parameter skripsi:
+     m_b = 2.225 kg (timbangan: total 3.715 kg - 2 x 0.745 kg), m_r = 0.745 kg per roda,
+     L = 0.100408 m (diukur di Fusion ATERA v40: pusat massa kedua roda -> pusat massa badan),
+     j_theta = 9.2e-4 kg.m^2.
+  4. Nama joint diganti (tanpa spasi): Lwheel_joint, Rwheel_joint.
+
+  Inersia badan: dihitung mundur dari inersia ROBOT UTUH di Fusion (ATERA v40, di pusat
+          massa: Ixx 0.03133, Iyy 0.04957, Izz 0.07664 kg.m^2; massa Fusion 3.480299 kg,
+          roda 0.745084 kg, badan 1.990131 kg) dengan teorema sumbu sejajar.
+          Inersia badan versi Fusion: Ixx = 0.02090 kg.m^2.
+  ASUMSI: selisih massa badan asli vs Fusion (2.225 - 1.990 = 0.235 kg; kabel, baut, dll.)
+          tersebar sebanding dengan massa badan, sehingga inersia badan = nilai Fusion
+          x (2.225 / 1.990131) dan posisi pusat massa (L) tidak berubah.
+          Hasil: j_psi = ixx = 0.02337 kg.m^2.
+  ASUMSI: posisi poros roda (y = -0.01055 m) dan posisi roda (x = +-0.114 m) masih dari
+          ekspor lama, belum diperbarui ke geometri ATERA v40.
+  ASUMSI: geseran pusat massa badan x = -0.304 mm, z = -0.419 mm diambil dari XYZ Delta
+          pengukuran Fusion (arah: badan relatif terhadap roda).
+  ASUMSI: pusat massa roda tepat di sumbu putarnya; ixx, iyy roda = nilai Fusion lama
+          dikali j_theta / 0.0037; product of inertia roda = 0.
+
+  Kalau diekspor ulang dari Fusion, file ini akan tertimpa dan perubahan di atas hilang.
+-->
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="ATERA_URDF">
   <xacro:macro name="ATERA_URDF" params="">
     <xacro:include filename="$(find ATERA_URDF_description)/urdf/materials.xacro"/>
@@ -6,19 +40,20 @@
     <xacro:include filename="$(find ATERA_URDF_description)/urdf/ATERA_URDF.gazebo"/>
     <link name="body_link">
       <inertial>
-        <origin xyz="0.000271 0.104088 -0.0" rpy="0 0 0"/>
-        <mass value="5.125591"/>
-        <inertia ixx="0.03509" iyy="0.038427" izz="0.065912" ixy="-5.2e-05" iyz="0.0" ixz="-0.0"/>
+        <!-- y = -0.01055 (poros roda) + 0.100408 (L) -->
+        <origin xyz="-0.000304 0.089858 -0.000419" rpy="0 0 0"/>
+        <mass value="2.225"/>
+        <inertia ixx="0.02337" iyy="0.01654" izz="0.0372" ixy="-0.0003686" iyz="-7.555e-05" ixz="-3.894e-06"/>
       </inertial>
       <visual>
-        <origin xyz="-0.0 -0.0 -0.0" rpy="0.0 -0.0 0.0"/>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
         <geometry>
           <mesh filename="package://ATERA_URDF_description/meshes/body_link.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="silver"/>
       </visual>
       <collision>
-        <origin xyz="-0.0 -0.0 -0.0" rpy="0.0 -0.0 0.0"/>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0"/>
         <geometry>
           <mesh filename="package://ATERA_URDF_description/meshes/body_link.stl" scale="0.001 0.001 0.001"/>
         </geometry>
@@ -26,19 +61,20 @@
     </link>
     <link name="Lwheel_link">
       <inertial>
-        <origin xyz="0.150088 -0.00897 -0.0" rpy="0 0 0"/>
-        <mass value="3.009733"/>
-        <inertia ixx="0.0037" iyy="0.002323" izz="0.002519" ixy="6e-06" iyz="-0.0" ixz="-0.0"/>
+        <!-- frame link roda: Z = sumbu putar; pusat massa 36.088 mm ke arah luar robot -->
+        <origin xyz="0.0 0.0 -0.036088" rpy="0 0 0"/>
+        <mass value="0.745"/>
+        <inertia ixx="0.000626" iyy="0.000578" izz="0.00092" ixy="0.0" iyz="0.0" ixz="0.0"/>
       </inertial>
       <visual>
-        <origin xyz="-0.0 -0.0 -0.0" rpy="-0.0 1.570796 0"/>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 1.570796 0"/>
         <geometry>
           <mesh filename="package://ATERA_URDF_description/meshes/Lwheel_link.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="silver"/>
       </visual>
       <collision>
-        <origin xyz="-0.0 -0.0 -0.0" rpy="-0.0 1.570796 0"/>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 1.570796 0"/>
         <geometry>
           <mesh filename="package://ATERA_URDF_description/meshes/Lwheel_link.stl" scale="0.001 0.001 0.001"/>
         </geometry>
@@ -46,34 +82,36 @@
     </link>
     <link name="Rwheel_link">
       <inertial>
-        <origin xyz="-0.150088 -0.00897 0.0" rpy="0 0 0"/>
-        <mass value="3.009733"/>
-        <inertia ixx="0.0037" iyy="0.002323" izz="0.002519" ixy="-6e-06" iyz="0.0" ixz="-0.0"/>
+        <origin xyz="0.0 0.0 -0.036088" rpy="0 0 0"/>
+        <mass value="0.745"/>
+        <inertia ixx="0.000626" iyy="0.000578" izz="0.00092" ixy="0.0" iyz="0.0" ixz="0.0"/>
       </inertial>
       <visual>
-        <origin xyz="-0.0 -0.0 -0.0" rpy="-0.0 1.570796 0"/>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 1.570796 0"/>
         <geometry>
           <mesh filename="package://ATERA_URDF_description/meshes/Rwheel_link.stl" scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="silver"/>
       </visual>
       <collision>
-        <origin xyz="-0.0 -0.0 -0.0" rpy="-0.0 1.570796 0"/>
+        <origin xyz="0.0 0.0 0.0" rpy="0.0 1.570796 0"/>
         <geometry>
           <mesh filename="package://ATERA_URDF_description/meshes/Rwheel_link.stl" scale="0.001 0.001 0.001"/>
         </geometry>
       </collision>
     </link>
-    <joint name="Revolute 3" type="continuous">
-      <origin xyz="0.114 -0.01055 0.0" rpy="-0.0 -1.570796 0"/>
+    <joint name="Lwheel_joint" type="continuous">
+      <origin xyz="0.114 -0.01055 0.0" rpy="0.0 -1.570796 0"/>
       <parent link="body_link"/>
       <child link="Lwheel_link"/>
-      <axis xyz="0 0 1"/>
+      <!-- Z link roda kiri = -X body_link, jadi axis dibalik supaya sumbu putar = +X body_link -->
+      <axis xyz="0 0 -1"/>
     </joint>
-    <joint name="Revolute 4" type="continuous">
+    <joint name="Rwheel_joint" type="continuous">
       <origin xyz="-0.114 -0.01055 0.0" rpy="0.0 1.570796 0"/>
       <parent link="body_link"/>
       <child link="Rwheel_link"/>
+      <!-- Z link roda kanan = +X body_link -->
       <axis xyz="0 0 1"/>
     </joint>
   </xacro:macro>

@@ -1,3 +1,4 @@
+-e git+https://github.com/acados/acados.git@4c23274e49e1304cf3c859d59ea6694ce36305a7#egg=acados_template&subdirectory=interfaces/acados_template
 casadi==3.7.2
 contourpy==1.3.2
 crcmod==1.7
