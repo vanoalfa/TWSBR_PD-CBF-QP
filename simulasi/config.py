@@ -128,7 +128,7 @@ MOTOR_RAW_FULL_SCALE = 32767
 MOTOR_POSITION_COUNTS = 32767       # posisi 0..32767 <-> 0..360 deg
 
 # ASUMSI: batas arus per roda mengikuti apalah_bisa/tunning.py (di atas rated 1.5 A, di bawah stall 2.7 A).
-MAX_CURRENT_A = 1.80                # [A] per roda
+MAX_CURRENT_A = 2.00                # [A] per roda
 # BUTUH PENGUJIAN ARUS MAKSIMUM: jalankan balancing di 1.80 A, pantau error code dan suhu DDSM115.
 MIN_CURRENT_A = -MAX_CURRENT_A
 
@@ -174,3 +174,18 @@ DT = 1.0 / CONTROL_HZ               # [s]
 UI_HZ = 20.0
 SAFE_TILT_DEG = 30.0                # |psi| di atas ini -> roda dimatikan
 ISE_PLOT_DIR = "PLOT_EVALUASI"
+
+# =============================================================================
+# 11. REALISME SIMULASI  (hanya dipakai simulasi.py, tidak dipakai robot fisik)
+# =============================================================================
+# Hasil testing/DELAY/atera_delay_testing.py, 20261009.
+# K efektif = G x j_theta, G = 255 (kiri) dan 264 (kanan) rad/s^2 per A -> 0.234 dan 0.243 N m/A.
+# ASUMSI: benar bila j_theta = 9.2e-4 (lihat BUTUH PENGUJIAN BEBAN TAMBAHAN di atas).
+MOTOR_KT_EFEKTIF = 0.238            # [N m/A] torsi roda nyata per A arus perintah (rata-rata kiri dan kanan)
+# Uji loop: perintah terkirim 1.8 ms setelah IMU dibaca (+ hitungan PD / CBF-QP), torsi mulai 0..4 ms kemudian.
+# ASUMSI: dibulatkan menjadi 1 periode kontrol.
+SIM_JEDA_TORSI = 0.005              # [s] jeda dari state dibaca sampai torsi bekerja (kelipatan 1 ms)
+SIM_MODEL_IMU = True                # True: psi dari model MPU6050 + Kalman, False: psi sempurna
+# Noise saat robot diam (0.5 s pertama delay_imu_20261009_134728.csv).
+SIM_GYRO_NOISE_DEG_S = 0.10         # [deg/s] simpangan baku gyro
+SIM_ACC_NOISE_DEG = 0.14            # [deg]   simpangan baku sudut akselerometer

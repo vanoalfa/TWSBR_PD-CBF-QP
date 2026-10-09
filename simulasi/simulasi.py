@@ -5,6 +5,10 @@ Jalankan:  python3 atera_main.py --PD   atau   python3 atera_main.py --CBFQP
 
 File ini hanya mengurus simulasinya:
     - dunia (plane.urdf bawaan PyBullet), robot, sensor, motor, dorongan
+    - realisme dari uji hardware (nilai di config.py, bagian 11):
+        a. torsi roda = arus perintah x MOTOR_KT_EFEKTIF (bukan MOTOR_KT)
+        b. torsi baru bekerja SIM_JEDA_TORSI detik setelah perintah dihitung
+        c. psi dibaca lewat model MPU6050 (akselerometer + gyro + noise) dan Kalman yang sama dengan robot
     - jendela "ATERA - Kontrol" (Qt): tombol W A S D B N O P + slider / kolom angka parameter (input utama)
     - keyboard di jendela PyBullet (input cadangan, tombolnya sama)
     - tampilan di jendela PyBullet: teks parameter dan bidang merah safety set
@@ -104,6 +108,47 @@ WARNA_QT_UJI = "#c26a00"         # mode pengujian aktif
 
 # Parameter di jendela Kontrol: (nama, batas bawah slider, batas atas slider, langkah slider, jumlah desimal)
 # Kolom angka boleh diisi di luar batas slider; batas slider akan ikut melebar.
+class KalmanIMU:
+    """Salinan persis atera_program/kalman.py (KalmanAngle). Satuan derajat, sama seperti robot nyata."""
+
+    def __init__(self):
+        self.QAngle = 0.001
+        self.QBias = 0.003
+        self.RMeasure = 0.03
+        self.angle = 0.0
+        self.bias = 0.0
+        self.rate = 0.0
+        self.P = [[0.0, 0.0], [0.0, 0.0]]
+
+    def setAngle(self, angle):
+        self.angle = angle
+
+    def getAngle(self, newAngle, newRate, dt):
+        # Langkah 1: prediksi dari gyro
+        self.rate = newRate - self.bias
+        self.angle += dt * self.rate
+        # Langkah 2: kovarians prediksi
+        self.P[0][0] += dt * (dt * self.P[1][1] - self.P[0][1] - self.P[1][0] + self.QAngle)
+        self.P[0][1] -= dt * self.P[1][1]
+        self.P[1][0] -= dt * self.P[1][1]
+        self.P[1][1] += self.QBias * dt
+        # Langkah 3-5: inovasi dan Kalman gain
+        y = newAngle - self.angle
+        s = self.P[0][0] + self.RMeasure
+        K = [self.P[0][0] / s, self.P[1][0] / s]
+        # Langkah 6: koreksi dengan akselerometer
+        self.angle += K[0] * y
+        self.bias += K[1] * y
+        # Langkah 7: kovarians baru
+        P00Temp = self.P[0][0]
+        P01Temp = self.P[0][1]
+        self.P[0][0] -= K[0] * P00Temp
+        self.P[0][1] -= K[0] * P01Temp
+        self.P[1][0] -= K[1] * P00Temp
+        self.P[1][1] -= K[1] * P01Temp
+        return self.angle
+
+
 def cari_nama_alpha():
     """Nama Alpha di config.py: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada)."""
     hasil = []
@@ -1033,6 +1078,17 @@ class Simulasi:
         self.plot_berhenti = None
         self.plot_kiriman = []         # data yang belum dikirim
 
+        # Realisme dari uji hardware (config.py bagian 11)
+        self.skala_torsi = config.MOTOR_KT_EFEKTIF / config.MOTOR_KT     # torsi nyata / torsi perintah
+        self.jeda_substep = int(round(config.SIM_JEDA_TORSI / self.dt_fisika))
+        self.antrean_torsi = []        # torsi yang sudah diperintah tetapi belum bekerja (satu per langkah fisika)
+        self.kalman = KalmanIMU()
+        self.psi_imu = 0.0             # [rad]   psi hasil Kalman (yang dibaca kontrol)
+        self.dpsi_imu = 0.0            # [rad/s] dpsi dari gyro
+        self.v_imu_lama = np.zeros(3)  # kecepatan titik IMU siklus lalu (untuk percepatan)
+        self.acak = np.random.default_rng()
+        self.x_benar = np.zeros(4)     # state sebenarnya (tanpa kesalahan sensor), untuk gambar di PyBullet
+
         self.reset()
 
         # Tinggi pusat bidang dorong dari poros roda: permukaan teratas badan - setengah sisi bidang.
@@ -1045,6 +1101,9 @@ class Simulasi:
         self.dorong_menyala = {1: None, -1: None}
 
         if gui:
+            print("Realisme: torsi roda x%.2f (K efektif %.3f N m/A), jeda torsi %.1f ms, model IMU + Kalman %s."
+                  % (self.skala_torsi, config.MOTOR_KT_EFEKTIF, self.jeda_substep * self.dt_fisika * 1000,
+                     "AKTIF" if config.SIM_MODEL_IMU else "MATI (psi sempurna)"))
             print("Titik dorong O / P: bidang %.0f x %.0f mm, pusatnya %.1f mm di atas poros roda "
                   "(puncak badan %.1f mm), %.1f mm dari garis tengah badan."
                   % (DORONG_SISI * 1000, DORONG_SISI * 1000, self.tinggi_dorong * 1000, self.tinggi_atas * 1000,
@@ -1090,6 +1149,12 @@ class Simulasi:
         self.tanda_kiri = self.tanda_joint(self.joint_kiri)
         self.tanda_kanan = self.tanda_joint(self.joint_kanan)
 
+        # Belum ada torsi yang menunggu, IMU mulai dari sudut sebenarnya (seperti kalibrasi di robot nyata).
+        self.antrean_torsi = []
+        for _ in range(self.jeda_substep):
+            self.antrean_torsi.append((0.0, 0.0))
+        self.mulai_imu()
+
         # Sudut roda dinolkan di sini (theta_setpoint = 0 berarti diam di tempat ini).
         self.theta_nol = 0.0
         self.theta_nol = self.baca_state()[0]
@@ -1133,13 +1198,27 @@ class Simulasi:
         # Roda maju = berputar terhadap arah +sumbu_roda (kaidah tangan kanan).
         return 1.0 if np.dot(sumbu_dunia, sumbu_roda) > 0.0 else -1.0
 
-    def baca_state(self):
-        """State x = [theta, dtheta, psi, dpsi] (pengganti IMU dan encoder)."""
+    def baca_psi_benar(self):
+        """psi dan dpsi SEBENARNYA dari PyBullet (tanpa kesalahan sensor)."""
         sumbu_roda, atas_badan, depan = self.sumbu_badan()
         _, kecepatan_sudut = p.getBaseVelocity(self.robot)
-
         psi = math.atan2(np.dot(atas_badan, depan), atas_badan[2]) + self.sudut_com
         dpsi = float(np.dot(kecepatan_sudut, sumbu_roda))
+        return psi, dpsi
+
+    def baca_state(self):
+        """State x = [theta, dtheta, psi, dpsi] seperti yang dibaca robot nyata (IMU + encoder).
+
+        Dengan config.SIM_MODEL_IMU = True, psi dari Kalman dan dpsi dari gyro (lihat perbarui_imu).
+        State sebenarnya disimpan di self.x_benar.
+        """
+        psi_benar, dpsi_benar = self.baca_psi_benar()
+        if config.SIM_MODEL_IMU:
+            psi = self.psi_imu
+            dpsi = self.dpsi_imu
+        else:
+            psi = psi_benar
+            dpsi = dpsi_benar
 
         kiri = p.getJointState(self.robot, self.joint_kiri)
         kanan = p.getJointState(self.robot, self.joint_kanan)
@@ -1149,8 +1228,63 @@ class Simulasi:
 
         theta = theta_encoder + psi - self.theta_nol
         dtheta = dtheta_encoder + dpsi
+        self.x_benar = np.array([theta_encoder + psi_benar - self.theta_nol, dtheta_encoder + dpsi_benar,
+                                 psi_benar, dpsi_benar])
         self.x_terakhir = np.array([theta, dtheta, psi, dpsi])
         return self.x_terakhir
+
+    # -------------------------------------------------------------- model IMU
+    def titik_imu(self):
+        """Letak IMU (dunia). ASUMSI: IMU di garis tengah badan, sejauh L_IMU dari poros searah sumbu atas badan."""
+        posisi_link, rot = self.pose_badan()
+        poros = posisi_link + rot @ self.poros_badan
+        return poros + config.L_IMU * rot[:, 1]
+
+    def kecepatan_imu(self):
+        """Kecepatan titik IMU (dunia) = v pusat massa badan + omega x (r_IMU - r_pusat_massa)."""
+        pusat, _ = p.getBasePositionAndOrientation(self.robot)
+        v, omega = p.getBaseVelocity(self.robot)
+        lengan = self.titik_imu() - np.array(pusat)
+        return np.array(v) + np.cross(np.array(omega), lengan)
+
+    def mulai_imu(self):
+        """Kalman baru, sudut awalnya = psi sebenarnya (seperti setelah kalibrasi di robot nyata)."""
+        psi_benar, dpsi_benar = self.baca_psi_benar()
+        self.kalman = KalmanIMU()
+        self.kalman.setAngle(math.degrees(psi_benar))
+        self.psi_imu = psi_benar
+        self.dpsi_imu = dpsi_benar
+        self.v_imu_lama = self.kecepatan_imu()
+
+    def perbarui_imu(self):
+        """Satu sampel MPU6050 + Kalman per siklus kontrol, sama seperti mpu6050.read() di robot nyata.
+
+        Akselerometer mengukur (percepatan titik IMU - gravitasi), jadi ikut terganggu saat robot
+        berakselerasi. Gyro mengukur kecepatan sudut badan. Keduanya diberi noise hasil uji.
+        """
+        v_imu = self.kecepatan_imu()
+        percepatan = (v_imu - self.v_imu_lama) / config.DT
+        self.v_imu_lama = v_imu
+        gaya_spesifik = percepatan + np.array([0.0, 0.0, config.g])
+
+        sumbu_roda, atas_badan, depan = self.sumbu_badan()
+        maju_badan = np.cross(sumbu_roda, atas_badan)
+        maju_badan = maju_badan / np.linalg.norm(maju_badan)
+        if np.dot(maju_badan, depan) < 0.0:
+            maju_badan = -maju_badan
+        # Sumbu sensor: ax ke depan badan, ay searah poros roda, az ke atas badan (IMU_AXIS = "pitch").
+        ax = float(np.dot(gaya_spesifik, maju_badan))
+        ay = float(np.dot(gaya_spesifik, sumbu_roda))
+        az = float(np.dot(gaya_spesifik, atas_badan))
+        psi_akselerometer = math.degrees(math.atan2(-ax, math.sqrt(ay * ay + az * az)) + self.sudut_com)
+        psi_akselerometer = psi_akselerometer + self.acak.normal(0.0, config.SIM_ACC_NOISE_DEG)
+
+        _, dpsi_benar = self.baca_psi_benar()
+        gyro = math.degrees(dpsi_benar) + self.acak.normal(0.0, config.SIM_GYRO_NOISE_DEG_S)
+
+        psi_kalman = self.kalman.getAngle(psi_akselerometer, gyro, config.DT)
+        self.psi_imu = math.radians(psi_kalman)
+        self.dpsi_imu = math.radians(gyro)
 
     def nolkan_theta(self):
         """Sudut roda dinolkan di posisi sekarang (dipakai saat Mode Balancing mulai)."""
@@ -1215,17 +1349,28 @@ class Simulasi:
         # Belok kanan: roda kiri lebih cepat, roda kanan lebih lambat.
         u_kiri = u + u_belok
         u_kanan = u - u_belok
-        # Batas arus motor berlaku untuk tiap roda.
+        # Batas arus motor berlaku untuk tiap roda (u = MOTOR_KT x arus perintah).
         u_kiri = max(config.u_min, min(config.u_max, u_kiri))
         u_kanan = max(config.u_min, min(config.u_max, u_kanan))
+        # (a) Torsi yang benar-benar keluar dari roda = arus perintah x MOTOR_KT_EFEKTIF.
+        torsi_kiri = self.skala_torsi * u_kiri
+        torsi_kanan = self.skala_torsi * u_kanan
 
         for _ in range(SUBSTEP):
-            p.setJointMotorControl2(self.robot, self.joint_kiri, p.TORQUE_CONTROL, force=self.tanda_kiri * u_kiri)
-            p.setJointMotorControl2(self.robot, self.joint_kanan, p.TORQUE_CONTROL, force=self.tanda_kanan * u_kanan)
+            # (b) Torsi baru bekerja jeda_substep langkah fisika (SIM_JEDA_TORSI detik) setelah diperintah.
+            self.antrean_torsi.append((torsi_kiri, torsi_kanan))
+            kiri_bekerja, kanan_bekerja = self.antrean_torsi.pop(0)
+            p.setJointMotorControl2(self.robot, self.joint_kiri, p.TORQUE_CONTROL,
+                                    force=self.tanda_kiri * kiri_bekerja)
+            p.setJointMotorControl2(self.robot, self.joint_kanan, p.TORQUE_CONTROL,
+                                    force=self.tanda_kanan * kanan_bekerja)
             if self.sisa_dorong > 0.0:
                 self.beri_gaya_dorong()
                 self.sisa_dorong = self.sisa_dorong - self.dt_fisika
             p.stepSimulation()
+
+        # (c) Sampel IMU baru untuk siklus berikutnya.
+        self.perbarui_imu()
 
         # Catat data plot: psi, theta, dan arus tiap motor (i = u / K_t).
         self.waktu = self.waktu + config.DT
@@ -1345,7 +1490,7 @@ class Simulasi:
         sumbu_datar = np.cross(depan, atas)                 # arah poros roda, mendatar
         matriks = np.column_stack([sumbu_datar, depan, atas])
         orientasi = quaternion_dari_matriks(matriks)
-        psi = self.x_terakhir[2]
+        psi = self.x_benar[2]             # dunia PyBullet: sudut badan sebenarnya
 
         # Jarak mendatar bidang dari poros roda
         jarak = config.L_IMU * math.sin(config.psi_max) + JARAK_IMU_KE_SISI_LUAR * math.cos(config.psi_max)
@@ -1388,7 +1533,7 @@ class Simulasi:
         """Kotak lebih gelap bila s = R*theta di luar batas."""
         if self.kubus_jarak is None:
             return
-        jarak = config.R * self.x_terakhir[0]
+        jarak = config.R * self.x_benar[0]
         langgar = jarak > config.s_max or jarak < config.s_min
         if langgar != self.kubus_langgar:
             self.kubus_langgar = langgar

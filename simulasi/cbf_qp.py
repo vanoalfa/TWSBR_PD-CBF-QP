@@ -186,7 +186,7 @@ def workplace(x, u, f, g, zeta):
     c_h8 = lie(h8, f) + lie(h8, g) * u + Alpha_6 * h8
 
     # 3. Daftarkan constraint yang dipakai
-    DAFTAR_C = [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6]
+    DAFTAR_C = [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6, c_h7, c_h8]
 
     # =========================================================================================
     #                                 AKHIR WORKPLACE PROGRAM
