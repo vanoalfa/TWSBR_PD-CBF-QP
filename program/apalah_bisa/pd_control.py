@@ -37,7 +37,7 @@ class BalancePDController:
         if abs(error_deg) < self.deadband_deg:
             error_deg = 0.0
 
-        # PD dengan D memakai laju sudut terukur.
+        # PD
         error_rate_deg_s = -float(angular_rate_deg_s)
         base_output = (self.kp * error_deg) + (self.kd * error_rate_deg_s)
         base_output *= self.balance_direction_sign
