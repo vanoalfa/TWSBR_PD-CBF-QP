@@ -3,11 +3,15 @@
 Jalankan:
     python3 atera_main.py --PD            kontrol PD saja
     python3 atera_main.py --CBFQP         kontrol PD + CBF-QP
-    tambahkan --plot untuk membuka jendela plot realtime (psi, theta, arus)
+    tambahkan --plot untuk membuka jendela plot realtime
 
 Satu kali jalan = satu mode kontrol. Semua perintah dan tombol dicetak di terminal saat program mulai.
 
-Satu percobaan ISE = dari robot diletakkan (atau sejak E terakhir) sampai E ditekan, robot jatuh, atau keluar.
+Dua jenis perekaman ISE:
+    PERCOBAAN : dari robot diletakkan (atau sejak E terakhir) sampai E ditekan, robot jatuh, atau keluar.
+                Disimpan di PLOT_EVALUASI/PERCOBAAN.
+    PENGUJIAN : mode pengujian (tombol T). Perekaman dimulai saat dorongan O / P diberikan dan berhenti
+                otomatis setelah DURASI_PENGUJIAN detik. Disimpan di PLOT_EVALUASI/PENGUJIAN.
 """
 
 import argparse
@@ -22,8 +26,10 @@ import ise
 from pd_control import PDControl
 from simulasi import NAMA_ALPHA, Simulasi
 
-ZETA_TUNGGU = 0.5   # [s] zeta baru dipakai bila nilainya di jendela Kontrol tidak berubah selama ini
-                    # (supaya robot tidak diletakkan ulang berkali-kali saat slider sedang digeser)
+ZETA_TUNGGU = 0.5        # [s] zeta baru dipakai bila nilainya di jendela Kontrol tidak berubah selama ini
+                         # (supaya robot tidak diletakkan ulang berkali-kali saat slider sedang digeser)
+# ASUMSI: satu pengujian = DURASI_PENGUJIAN detik waktu simulasi sejak dorongan O / P dimulai, lalu disimpan otomatis.
+DURASI_PENGUJIAN = 30.0   # [s]
 
 MODE_PD = "PD"
 MODE_PD_CBF = "PD+CBF"
@@ -33,7 +39,7 @@ BANTUAN = """
 MENJALANKAN (satu kali jalan = satu mode kontrol)
   python3 atera_main.py --PD             kontrol PD saja
   python3 atera_main.py --CBFQP          kontrol PD + CBF-QP
-  python3 atera_main.py --CBFQP --plot   --plot = tambah jendela plot realtime (psi, theta, arus)
+  python3 atera_main.py --CBFQP --plot   --plot = tambah jendela plot realtime
 
 TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya dengan mouse;
         keyboard di jendela PyBullet juga tetap bisa sebagai cadangan)
@@ -43,12 +49,14 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
   A / D    belok kiri / kanan (ditahan)
   O        dorong robot ke depan
   P        dorong robot ke belakang
-  E        simpan data dan plot ISE percobaan sekarang; robot tetap berjalan, percobaan baru dimulai
+  E        simpan data dan plot ISE sekarang; robot tetap berjalan, perekaman baru dimulai
   Q        keluar dan simpan data dan plot ISE
-  R        reset: robot diletakkan ulang di posisi awal, ISE mulai dari 0 (percobaan yang belum
-           disimpan DIBUANG; tekan E dulu bila ingin disimpan). Nilai parameter di jendela Kontrol tetap.
-  ROBOT JATUH (|psi| > SAFE_TILT_DEG): motor dimatikan, badan jatuh ke lantai, perekaman berhenti.
-           Lanjutkan dengan R (ulang), E (simpan), atau Q (keluar + simpan).
+  R        reset: robot diletakkan ulang di posisi awal, ISE dan plot realtime mulai dari 0 (data yang
+           belum disimpan DIBUANG; tekan E dulu bila ingin disimpan). Nilai parameter tetap.
+  T        masuk / keluar MODE PENGUJIAN. Di mode ini perekaman biasa berhenti; setiap O / P memulai
+           satu PENGUJIAN: direkam %.0f s sejak dorongan, lalu disimpan otomatis (_PENGUJIAN KE-XX).
+  ROBOT JATUH (|psi| > SAFE_TILT_DEG): motor dimatikan, badan jatuh ke lantai, perekaman berhenti
+           (pengujian yang sedang berjalan langsung disimpan). Lanjutkan dengan R, E, atau Q.
   Berhenti juga bisa: tutup jendela PyBullet, atau Ctrl+C di terminal (hasil ISE tetap tersimpan)
 
 JENDELA "ATERA - Kontrol"
@@ -58,19 +66,20 @@ JENDELA "ATERA - Kontrol"
   Nilai TIDAK ditulis ke config.py: tekan "Cetak nilai ke terminal", lalu salin sendiri.
   Gain diubah saat direkam -> nama file ISE diberi akhiran _TUNING.
   zeta_DEG = kemiringan lantai [deg] (+ = menanjak ke depan). Bila diubah: lantai ikut miring, robot
-           diletakkan ulang, percobaan yang belum disimpan dibuang (sama seperti R).
+           diletakkan ulang, data yang belum disimpan dibuang (sama seperti R).
 
-HASIL ISE (folder PLOT_EVALUASI)
+HASIL ISE (folder PLOT_EVALUASI/PERCOBAAN dan PLOT_EVALUASI/PENGUJIAN)
   python3 ise.py --daftar                                         daftar semua percobaan
   python3 ise.py --bandingkan                                     PD terbaru vs PD+CBF terbaru
   python3 ise.py --bandingkan --pd 3 --cbf 5                      PD KE-03 vs PD+CBF KE-05
   python3 ise.py --bandingkan --pd 3 --cbf 5 --tanggal 20261007   sama, untuk tanggal tertentu
+  tambahkan --pengujian untuk hasil mode pengujian, contoh:  python3 ise.py --daftar --pengujian
 =======================================================================
-"""
+""" % DURASI_PENGUJIAN
 
 
-def simpan_percobaan(perekam):
-    """Simpan percobaan ISE dan tulis hasilnya di terminal (berhasil, tidak ada data, atau gagal)."""
+def simpan_ise(perekam):
+    """Simpan perekaman ISE dan tulis hasilnya di terminal (berhasil, tidak ada data, atau gagal)."""
     try:
         nama = perekam.simpan()
     except Exception as kesalahan:
@@ -83,10 +92,11 @@ def simpan_percobaan(perekam):
 
 
 def letakkan_ulang(sim, pd, perekam, mode):
-    """Robot diletakkan ulang di posisi awal, posisi tahan roda kembali ke awal, percobaan baru dimulai."""
+    """Robot diletakkan ulang di posisi awal (plot realtime ikut direset), posisi tahan roda kembali ke awal,
+    perekaman percobaan baru dimulai."""
     sim.reset()
     pd.theta_setpoint = float(config.theta_setpoint)
-    perekam.mulai(mode)
+    perekam.mulai(mode, ise.JENIS_PERCOBAAN)
 
 
 def main():
@@ -138,14 +148,22 @@ def main():
     mode_balancing = True          # True = Mode Balancing (B), False = Mode Jalan (N)
     jatuh = False                  # True = robot jatuh, motor mati, menunggu R / E / Q
 
+    # Mode pengujian (tombol T)
+    mode_pengujian = False         # True = perekaman biasa berhenti, O / P memulai pengujian
+    pengujian_berjalan = False     # True = sedang merekam satu pengujian
+    t_uji = 0.0                    # waktu sejak dorongan pengujian [s]
+
     # Kemiringan lantai yang sedang dipakai, dan nilai baru yang sedang ditunggu (lihat ZETA_TUNGGU)
     zeta_dipakai = float(config.zeta_DEG)
     zeta_tunggu = zeta_dipakai
     waktu_zeta = time.time()
 
-    perekam = ise.PerekamISE()
-    perekam.mulai(mode)
-    print("Hasil ISE disimpan di folder:", os.path.abspath(ise.FOLDER_PLOT))
+    perekam = ise.PerekamISE()             # perekaman biasa (PERCOBAAN)
+    perekam.mulai(mode, ise.JENIS_PERCOBAAN)
+    perekam_uji = ise.PerekamISE()         # mode pengujian (PENGUJIAN)
+    print("Hasil ISE disimpan di folder:")
+    print("   ", os.path.abspath(ise.folder_jenis(ise.JENIS_PERCOBAAN)))
+    print("   ", os.path.abspath(ise.folder_jenis(ise.JENIS_PENGUJIAN)))
     print("Mulai. Mode kontrol: %s | Mode Balancing | zeta %.1f deg" % (mode, zeta_dipakai))
 
     t = 0.0
@@ -169,14 +187,42 @@ def main():
                 print("Tombol Q: keluar dan simpan.")
                 break
 
+            if "t" in tombol_baru:
+                if not mode_pengujian:
+                    mode_pengujian = True
+                    pengujian_berjalan = False
+                    perekam.mulai(mode, ise.JENIS_PERCOBAAN)     # perekaman biasa berhenti (data dibuang)
+                    print("MODE PENGUJIAN: perekaman biasa berhenti (data yang belum disimpan dibuang). "
+                          "Tekan O / P untuk memulai satu pengujian (%.0f s). Tekan T lagi untuk keluar."
+                          % DURASI_PENGUJIAN)
+                else:
+                    if pengujian_berjalan:
+                        print("Pengujian yang sedang berjalan dibatalkan (tidak disimpan).")
+                    mode_pengujian = False
+                    pengujian_berjalan = False
+                    perekam.mulai(mode, ise.JENIS_PERCOBAAN)
+                    t = 0.0
+                    print("Keluar dari MODE PENGUJIAN: perekaman biasa dimulai lagi.")
+
             if "e" in tombol_baru:
-                print("Tombol E: simpan data dan plot.")
-                simpan_percobaan(perekam)
-                perekam.mulai(mode)            # percobaan baru dimulai dari keadaan sekarang
-                t = 0.0
+                if mode_pengujian:
+                    if pengujian_berjalan:
+                        print("Tombol E: pengujian disimpan sebelum %.0f s." % DURASI_PENGUJIAN)
+                        simpan_ise(perekam_uji)
+                        pengujian_berjalan = False
+                    else:
+                        print("Tombol E: tidak ada pengujian yang sedang berjalan.")
+                else:
+                    print("Tombol E: simpan data dan plot.")
+                    simpan_ise(perekam)
+                    perekam.mulai(mode, ise.JENIS_PERCOBAAN)     # percobaan baru dari keadaan sekarang
+                    t = 0.0
 
             if "r" in tombol_baru:
-                print("Tombol R: robot diletakkan ulang, ISE mulai dari 0 (data yang belum disimpan dibuang).")
+                if pengujian_berjalan:
+                    print("Pengujian yang sedang berjalan dibatalkan (tidak disimpan).")
+                    pengujian_berjalan = False
+                print("Tombol R: robot diletakkan ulang, ISE dan plot mulai dari 0 (data yang belum disimpan dibuang).")
                 letakkan_ulang(sim, pd, perekam, mode)
                 mode_balancing = True
                 jatuh = False
@@ -194,6 +240,9 @@ def main():
                 config.zeta_DEG = zeta_dipakai
                 config.zeta = math.radians(zeta_dipakai)       # dipakai model.py dan cbf_qp.py
                 sim.ubah_zeta(config.zeta)
+                if pengujian_berjalan:
+                    print("Pengujian yang sedang berjalan dibatalkan (tidak disimpan).")
+                    pengujian_berjalan = False
                 letakkan_ulang(sim, pd, perekam, mode)
                 mode_balancing = True
                 jatuh = False
@@ -213,12 +262,24 @@ def main():
                 if tombol == "n":
                     mode_balancing = False
                     print("Mode Jalan: W A S D dipakai")
-                if tombol == "o":
-                    sim.dorong(+1)
-                    print("Didorong ke depan %.1f N" % sim.gaya_dorong)
-                if tombol == "p":
-                    sim.dorong(-1)
-                    print("Didorong ke belakang %.1f N" % sim.gaya_dorong)
+                if tombol == "o" or tombol == "p":
+                    arah_dorong = 1 if tombol == "o" else -1
+                    teks_arah = "depan" if arah_dorong > 0 else "belakang"
+                    if not mode_pengujian:
+                        sim.dorong(arah_dorong)
+                        print("Didorong ke %s %.1f N" % (teks_arah, sim.gaya_dorong))
+                    elif jatuh:
+                        print("Robot jatuh: tekan R dulu sebelum memulai pengujian.")
+                    elif pengujian_berjalan:
+                        print("Pengujian masih berjalan (%.1f / %.0f s), dorongan diabaikan."
+                              % (t_uji, DURASI_PENGUJIAN))
+                    else:
+                        sim.dorong(arah_dorong)
+                        perekam_uji.mulai(mode, ise.JENIS_PENGUJIAN)
+                        t_uji = 0.0
+                        pengujian_berjalan = True
+                        print("PENGUJIAN dimulai: didorong ke %s %.1f N, direkam %.0f s."
+                              % (teks_arah, sim.gaya_dorong, DURASI_PENGUJIAN))
 
             # ------------------------------------------------ gain dari Kontrol
             # Nilai di jendela Kontrol langsung dipakai. Bila jendelanya tidak ada, isinya nilai config.py.
@@ -245,6 +306,10 @@ def main():
                 jatuh = True
                 print("ROBOT JATUH (psi = %.1f deg): motor dimatikan, perekaman berhenti. "
                       "Tekan R (ulang), E (simpan data), atau Q (keluar + simpan)." % math.degrees(psi))
+                if pengujian_berjalan:
+                    print("Robot jatuh saat pengujian: pengujian disimpan sampai saat jatuh.")
+                    simpan_ise(perekam_uji)
+                    pengujian_berjalan = False
 
             if jatuh:
                 # Motor mati: tidak ada torsi, badan dibiarkan jatuh ke lantai.
@@ -277,21 +342,47 @@ def main():
                 waktu_ukur = sekarang
                 siklus_ukur = 0
 
-            # Data ISE hanya direkam selama robot belum jatuh.
+            # ------------------------------------------------------- perekaman ISE
+            # Data hanya direkam selama robot belum jatuh.
             if not jatuh:
-                t = t + config.DT
-                perekam.tambah(t, x, pd.error_theta, pd.error_dtheta, pd.error_psi, pd.error_dpsi,
-                               u_PD, u, status_cbf, params, dorong)
+                if not mode_pengujian:
+                    t = t + config.DT
+                    perekam.tambah(t, x, pd.error_theta, pd.error_dtheta, pd.error_psi, pd.error_dpsi,
+                                   u_PD, u, status_cbf, params, dorong)
+                elif pengujian_berjalan:
+                    t_uji = t_uji + config.DT
+                    perekam_uji.tambah(t_uji, x, pd.error_theta, pd.error_dtheta, pd.error_psi, pd.error_dpsi,
+                                       u_PD, u, status_cbf, params, dorong)
+                    if t_uji >= DURASI_PENGUJIAN - 0.5 * config.DT:
+                        print("PENGUJIAN selesai (%.0f s)." % DURASI_PENGUJIAN)
+                        simpan_ise(perekam_uji)
+                        pengujian_berjalan = False
 
             # ----------------------------------------------------------- tampilan
             if mode_balancing:
                 gerak = "Mode Balancing"
             else:
                 gerak = "Mode Jalan"
+            if mode_pengujian:
+                perekam_aktif = perekam_uji
+                t_tampil = t_uji
+                if pengujian_berjalan:
+                    teks_uji = "MODE PENGUJIAN | %s | pengujian berjalan t %.1f / %.0f s" \
+                        % (mode, t_uji, DURASI_PENGUJIAN)
+                else:
+                    teks_uji = "MODE PENGUJIAN | %s | tekan O / P untuk mulai (%.0f s), T untuk keluar" \
+                        % (mode, DURASI_PENGUJIAN)
+            else:
+                perekam_aktif = perekam
+                t_tampil = t
+                teks_uji = ""
+
             if siklus % 10 == 0:
                 baris = []
                 if jatuh:
                     baris.append("ROBOT JATUH, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
+                elif mode_pengujian:
+                    baris.append(teks_uji)
                 elif mode == MODE_PD:
                     baris.append("%s | %s | zeta %.1f deg" % (mode, gerak, zeta_dipakai))
                 else:
@@ -302,15 +393,16 @@ def main():
                              % (x[0], config.R * x[0], x[1], config.dtheta_max))
                 baris.append("u_PD %+.3f   u %+.3f N m    arus %+.2f / %.2f A"
                              % (u_PD, u, u / config.MOTOR_KT, config.MAX_CURRENT_A))
-                baris.append("ISE psi %.6f    t %.1f s  (kecepatan x%.2f waktu nyata)" % (perekam.ise_psi, t, kecepatan))
-                if len(perekam.gain_berubah) > 0:
-                    baris.append("TUNING: " + " ".join(perekam.gain_berubah) + " diubah saat direkam")
-                sim.tampilkan(baris, mode_balancing, jatuh)
+                baris.append("ISE psi %.6f    t %.1f s  (kecepatan x%.2f waktu nyata)"
+                             % (perekam_aktif.ise_psi, t_tampil, kecepatan))
+                if len(perekam_aktif.gain_berubah) > 0:
+                    baris.append("TUNING: " + " ".join(perekam_aktif.gain_berubah) + " diubah saat direkam")
+                sim.tampilkan(baris, mode_balancing, jatuh, teks_uji)
 
             if siklus % 200 == 0 and not jatuh:
                 print("t %6.1f s (x%.2f) | %-6s | %-14s | psi %+6.2f deg | s %+5.2f m | dtheta %+6.2f rad/s | "
-                      "u_PD %+6.3f | u %+6.3f | %s" % (t, kecepatan, mode, gerak, math.degrees(psi), config.R * x[0],
-                                                       x[1], u_PD, u, status_cbf))
+                      "u_PD %+6.3f | u %+6.3f | %s" % (t_tampil, kecepatan, mode, gerak, math.degrees(psi),
+                                                       config.R * x[0], x[1], u_PD, u, status_cbf))
 
             # Jalankan simulasi dengan kecepatan waktu nyata.
             waktu_berikutnya = waktu_berikutnya + config.DT
@@ -326,7 +418,13 @@ def main():
         print("Jendela PyBullet ditutup.")
     finally:
         # Selalu dijalankan, juga bila program berhenti karena error: simpan dulu, baru tutup jendela.
-        simpan_percobaan(perekam)
+        if pengujian_berjalan:
+            print("Pengujian belum selesai: disimpan sampai saat ini.")
+            simpan_ise(perekam_uji)
+        elif not mode_pengujian:
+            simpan_ise(perekam)
+        else:
+            print("Mode pengujian: tidak ada pengujian yang belum disimpan.")
         sim.cetak_params()
         sim.tutup()
 

@@ -100,6 +100,7 @@ PLOT_BACKEND = ["QtAgg", "Qt5Agg", "TkAgg"]
 WARNA_QT_TEKAN = "#1d9e5a"       # tombol sedang ditekan
 WARNA_QT_MODE = "#544bb8"        # mode yang sedang aktif
 WARNA_QT_ABAI = "#9a9a9a"        # tulisan tombol yang sedang diabaikan
+WARNA_QT_UJI = "#c26a00"         # mode pengujian aktif
 
 # Parameter di jendela Kontrol: (nama, batas bawah slider, batas atas slider, langkah slider, jumlah desimal)
 # Kolom angka boleh diisi di luar batas slider; batas slider akan ikut melebar.
@@ -358,14 +359,16 @@ class PenghubungKontrol:
 
 
 def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
-    """Isi proses jendela plot realtime (bentuknya sama dengan gambar di ise.py):
+    """Isi proses jendela plot realtime (bentuk dan garis batasnya sama dengan gambar di ise.py):
         Gambar 1 : sumbu X = psi,   sumbu Y = dpsi
         Gambar 2 : sumbu X = theta, sumbu Y = dtheta
+        Gambar 3 : sumbu X = s = R*theta, sumbu Y = 0
         bawah    : arus tiap motor terhadap waktu
     Yang digambar hanya data PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang."""
     os.environ["QT_QPA_PLATFORM"] = platform
     try:
         import numpy as np
+        import ise                       # garis batas safety set digambar dengan fungsi yang sama
         import matplotlib.pyplot as plt
         berhasil = False
         for backend in daftar_backend:
@@ -379,47 +382,41 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
             jawaban.put(("gagal", "matplotlib tidak punya backend jendela (pip install PyQt5)"))
             return
 
-        fig = plt.figure(figsize=(10.0, 7.5))
-        kisi = fig.add_gridspec(2, 2, height_ratios=[1.6, 1.0])
+        fig = plt.figure(figsize=(10.0, 9.0))
+        kisi = fig.add_gridspec(3, 2, height_ratios=[1.6, 0.5, 0.9])
         gambar1 = fig.add_subplot(kisi[0, 0])
         gambar2 = fig.add_subplot(kisi[0, 1])
-        ax_arus = fig.add_subplot(kisi[1, :])
+        gambar3 = fig.add_subplot(kisi[1, :])
+        ax_arus = fig.add_subplot(kisi[2, :])
         try:
             fig.canvas.manager.set_window_title("ATERA - plot realtime " + judul)
         except Exception:
             pass
+        ise.gambar_safety_set(gambar1, gambar2)
+        ise.gambar_batas_jarak(gambar3)
 
         # Gambar 1: X = psi, Y = dpsi
         garis_psi, = gambar1.plot([], [], color="tab:blue", linewidth=1.0)
         titik_psi, = gambar1.plot([], [], "o", color="black", markersize=6, label="sekarang")
-        gambar1.axvline(config.psi_max, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL, label="batas safety set")
-        gambar1.axvline(config.psi_min, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
-        gambar1.axhline(config.dpsi_max, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
-        gambar1.axhline(config.dpsi_min, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
         gambar1.set_xlabel("psi [rad]")
         gambar1.set_ylabel("dpsi [rad/s]")
         gambar1.set_title("Gambar 1", fontsize=10)
-        gambar1.legend(fontsize=8, loc="upper right")
+        gambar1.legend(fontsize=7, loc="upper right")
 
         # Gambar 2: X = theta, Y = dtheta
         garis_theta, = gambar2.plot([], [], color="tab:orange", linewidth=1.0)
         titik_theta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang")
-        gambar2.axhline(config.dtheta_max, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL, label="batas safety set")
-        gambar2.axhline(config.dtheta_min, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
-        # Batas jarak tempuh s = R*theta  ->  theta = s / R
-        theta_batas_atas = None
-        theta_batas_bawah = None
-        if hasattr(config, "s_max") and hasattr(config, "s_min"):
-            theta_batas_atas = config.s_max / config.R
-            theta_batas_bawah = config.s_min / config.R
-            gambar2.axvline(theta_batas_atas, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
-            gambar2.axvline(theta_batas_bawah, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
-        gambar2.set_xlabel("theta [rad]")
+        gambar2.set_xlabel("theta [rad]   (s = R*theta)")
         gambar2.set_ylabel("dtheta [rad/s]")
         gambar2.set_title("Gambar 2", fontsize=10)
-        gambar2.legend(fontsize=8, loc="upper right")
+        gambar2.legend(fontsize=7, loc="upper right")
 
-        # Arus terhadap waktu
+        # Gambar 3: X = s, Y = 0
+        garis_s, = gambar3.plot([], [], color="tab:purple", linewidth=2.0)
+        titik_s, = gambar3.plot([], [], "o", color="black", markersize=6, label="sekarang")
+        gambar3.legend(fontsize=7, loc="upper right")
+
+        # Arus terhadap waktu (hanya 2 batas, garis tebal menyambung)
         garis_arus, = ax_arus.plot([], [], color="tab:green")
         ax_arus.axhline(config.MAX_CURRENT_A, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
         ax_arus.axhline(config.MIN_CURRENT_A, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
@@ -433,6 +430,12 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         fig.tight_layout()
         fig.show()
         jawaban.put(("siap", ""))
+
+        # Batas sumbu minimal: sedikit lebih lebar dari kotak safety set
+        ada_jarak = ise.ada_batas_jarak()
+        if ada_jarak:
+            theta_bawah = config.s_min / config.R
+            theta_atas = config.s_max / config.R
 
         data_t = []
         data_psi = []
@@ -448,7 +451,17 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     kiriman = antrean.get_nowait()
                 except Exception:
                     break
-                for t, psi, dpsi, theta, dtheta, arus in kiriman:
+                for isi in kiriman:
+                    if isi[0] == "RESET":
+                        # Robot diletakkan ulang (R, jatuh lalu R, atau zeta diubah): plot mulai dari awal.
+                        data_t = []
+                        data_psi = []
+                        data_dpsi = []
+                        data_theta = []
+                        data_dtheta = []
+                        data_arus = []
+                        continue
+                    t, psi, dpsi, theta, dtheta, arus = isi
                     data_t.append(t)
                     data_psi.append(psi)
                     data_dpsi.append(dpsi)
@@ -456,6 +469,11 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     data_dtheta.append(dtheta)
                     data_arus.append(arus)
                 ada_baru = True
+            if ada_baru and len(data_t) == 0:
+                for garis in (garis_psi, garis_theta, garis_s, garis_arus, titik_psi, titik_theta, titik_s):
+                    garis.set_data([], [])
+                ax_arus.set_xlim(0.0, PLOT_RENTANG)
+                fig.canvas.draw_idle()
             if ada_baru and len(data_t) > 0:
                 while len(data_t) > 0 and data_t[0] < data_t[-1] - PLOT_RENTANG:
                     data_t.pop(0)
@@ -468,13 +486,16 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                 dpsi = np.array(data_dpsi)
                 theta = np.array(data_theta)
                 dtheta = np.array(data_dtheta)
+                jarak = config.R * theta
 
                 garis_psi.set_data(psi, dpsi)
                 garis_theta.set_data(theta, dtheta)
+                garis_s.set_data(jarak, np.zeros(len(jarak)))
                 garis_arus.set_data(data_t, data_arus)
                 if not math.isnan(data_psi[-1]):
                     titik_psi.set_data([data_psi[-1]], [data_dpsi[-1]])
                     titik_theta.set_data([data_theta[-1]], [data_dtheta[-1]])
+                    titik_s.set_data([config.R * data_theta[-1]], [0.0])
 
                 # Batas sumbu: minimal sedikit lebih lebar dari safety set, melebar bila data keluar.
                 if np.any(~np.isnan(psi)):
@@ -482,15 +503,20 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     batas_y = max(1.2 * config.dpsi_max, 1.1 * np.nanmax(np.abs(dpsi)))
                     gambar1.set_xlim(-batas_x, batas_x)
                     gambar1.set_ylim(-batas_y, batas_y)
+
                     bawah = np.nanmin(theta)
                     atas = np.nanmax(theta)
-                    if theta_batas_atas is not None:      # batas s selalu terlihat
-                        bawah = min(bawah, theta_batas_bawah)
-                        atas = max(atas, theta_batas_atas)
+                    if ada_jarak:                       # kotak batas jarak selalu terlihat
+                        bawah = min(bawah, theta_bawah)
+                        atas = max(atas, theta_atas)
                     lebar = max(1.0, atas - bawah)
                     gambar2.set_xlim(bawah - 0.1 * lebar, atas + 0.1 * lebar)
                     batas_y = max(1.2 * config.dtheta_max, 1.1 * np.nanmax(np.abs(dtheta)))
                     gambar2.set_ylim(-batas_y, batas_y)
+
+                    bawah = config.R * (bawah - 0.1 * lebar)
+                    atas = config.R * (atas + 0.1 * lebar)
+                    gambar3.set_xlim(bawah, atas)
                 ax_arus.set_xlim(max(0.0, data_t[-1] - PLOT_RENTANG), max(PLOT_RENTANG, data_t[-1]))
                 fig.canvas.draw_idle()
             fig.canvas.flush_events()
@@ -526,12 +552,12 @@ class JendelaKontrol:
         # Tombol ditahan, dipisah menurut sumbernya. Ditahan = keyboard ATAU mouse.
         self.tahan_keyboard = {}
         self.tahan_mouse = {}
-        for huruf in ("w", "a", "s", "d", "o", "p", "b", "n", "q", "r", "e"):
+        for huruf in ("w", "a", "s", "d", "o", "p", "b", "n", "q", "r", "e", "t"):
             self.tahan_keyboard[huruf] = False
             self.tahan_mouse[huruf] = False
         self.tahan_terkirim = None
         self.status = {"judul": "", "mode_balancing": True, "tahan": {}, "dorong": "dorong: -", "arah_dorong": 0,
-                       "jatuh": False}
+                       "jatuh": False, "mode_pengujian": False, "pengujian": ""}
 
         self.root = None               # jendela Qt; None bila gagal dibuat atau sudah ditutup
         self.pesan = ""
@@ -563,11 +589,12 @@ class JendelaKontrol:
         kisi_tombol = QtWidgets.QGridLayout()
         susunan.addLayout(kisi_tombol)
         letak = {"w": (0, 1), "a": (1, 0), "s": (1, 1), "d": (1, 2),
-                 "b": (0, 4), "n": (0, 5), "o": (1, 4), "p": (1, 5), "q": (0, 7), "r": (1, 7), "e": (0, 8)}
+                 "b": (0, 4), "n": (0, 5), "o": (1, 4), "p": (1, 5), "q": (0, 7), "r": (1, 7), "e": (0, 8), "t": (1, 8)}
         keterangan = {"w": "W\nmaju", "a": "A\nkiri", "s": "S\nmundur", "d": "D\nkanan",
                       "b": "B\nBalancing", "n": "N\nJalan", "o": "O\ndorong depan", "p": "P\ndorong belakang",
-                      "q": "Q\nkeluar + simpan", "r": "R\nreset robot", "e": "E\nsimpan data"}
-        for huruf in ("w", "a", "s", "d", "b", "n", "o", "p", "q", "r", "e"):
+                      "q": "Q\nkeluar + simpan", "r": "R\nreset robot", "e": "E\nsimpan data",
+                      "t": "T\nmode pengujian"}
+        for huruf in ("w", "a", "s", "d", "b", "n", "o", "p", "q", "r", "e", "t"):
             tombol = QtWidgets.QPushButton(keterangan[huruf])
             tombol.setFixedSize(92, 46)
             tombol.setFocusPolicy(QtCore.Qt.NoFocus)        # tombol tidak merebut keyboard
@@ -671,7 +698,7 @@ class JendelaKontrol:
         self.kode_tombol = {QtCore.Qt.Key_W: "w", QtCore.Qt.Key_A: "a", QtCore.Qt.Key_S: "s",
                             QtCore.Qt.Key_D: "d", QtCore.Qt.Key_B: "b", QtCore.Qt.Key_N: "n",
                             QtCore.Qt.Key_O: "o", QtCore.Qt.Key_P: "p", QtCore.Qt.Key_Q: "q",
-                            QtCore.Qt.Key_R: "r", QtCore.Qt.Key_E: "e"}
+                            QtCore.Qt.Key_R: "r", QtCore.Qt.Key_E: "e", QtCore.Qt.Key_T: "t"}
 
         self.root = jendela
         for nama in self.nilai:
@@ -710,8 +737,8 @@ class JendelaKontrol:
         else:
             sebelumnya = self.tahan_keyboard[huruf] or self.tahan_mouse[huruf]
             self.tahan_mouse[huruf] = ditekan
-        # B N O P Q R E: dikirim sekali saat mulai ditekan
-        if ditekan and not sebelumnya and huruf in ("b", "n", "o", "p", "q", "r", "e"):
+        # B N O P Q R E T: dikirim sekali saat mulai ditekan
+        if ditekan and not sebelumnya and huruf in ("b", "n", "o", "p", "q", "r", "e", "t"):
             self.kirim(("tombol", huruf))
         self.kirim_tahan()
         self.tampilkan_status(self.status)
@@ -776,9 +803,14 @@ class JendelaKontrol:
         self.tombol["o"].setStyleSheet(self.gaya_tombol(WARNA_QT_TEKAN, "white") if menyala_o else "")
         self.tombol["p"].setStyleSheet(self.gaya_tombol(WARNA_QT_TEKAN, "white") if menyala_p else "")
 
+        self.tombol["t"].setStyleSheet(self.gaya_tombol(WARNA_QT_UJI, "white")
+                                       if status.get("mode_pengujian", False) else "")
         if status.get("jatuh", False):
             self.label_mode.setText("ROBOT JATUH, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
             self.label_mode.setStyleSheet("font-weight: bold; color: #b3261e")
+        elif status.get("mode_pengujian", False):
+            self.label_mode.setText(status.get("pengujian", "MODE PENGUJIAN"))
+            self.label_mode.setStyleSheet("font-weight: bold; color: %s" % WARNA_QT_UJI)
         else:
             self.label_mode.setText("Mode kontrol: %s   |   %s" % (status["judul"],
                                     "Mode Balancing" if mode_balancing else "Mode Jalan"))
@@ -1052,7 +1084,7 @@ class Simulasi:
         p.resetJointState(self.robot, self.joint_kiri, 0.0, 0.0)
         p.resetJointState(self.robot, self.joint_kanan, 0.0, 0.0)
         self.sisa_dorong = 0.0
-        self.putus_garis_plot()
+        self.reset_plot()
 
         # Tanda tiap joint: +1 bila putaran positif joint membuat roda maju.
         self.tanda_kiri = self.tanda_joint(self.joint_kiri)
@@ -1124,6 +1156,12 @@ class Simulasi:
         """Sudut roda dinolkan di posisi sekarang (dipakai saat Mode Balancing mulai)."""
         self.theta_nol = self.theta_nol + self.baca_state()[0]
         self.putus_garis_plot()
+
+    def reset_plot(self):
+        """Plot realtime dikosongkan dan waktunya mulai lagi dari 0 (dipanggil setiap robot diletakkan ulang)."""
+        self.waktu = 0.0
+        if self.plot is not None:
+            self.plot_kiriman = [("RESET",)]
 
     def putus_garis_plot(self):
         """Garis di plot realtime diputus (robot diletakkan ulang atau theta dinolkan), supaya tidak ada
@@ -1212,7 +1250,7 @@ class Simulasi:
     def baca_keyboard(self):
         """Baca tombol dari jendela Kontrol (utama) dan dari keyboard di jendela PyBullet (cadangan).
 
-        Mengembalikan daftar tombol yang baru ditekan: 'b', 'n', 'o', 'p', 'q', 'r', 'e'.
+        Mengembalikan daftar tombol yang baru ditekan: 'b', 'n', 'o', 'p', 'q', 'r', 'e', 't'.
         Tombol gerak (ditahan) disimpan di:
             self.arah  : +1 maju (W), -1 mundur (S), 0 lepas
             self.belok : -1 kiri (A), +1 kanan (D), 0 lepas
@@ -1249,7 +1287,7 @@ class Simulasi:
         self.arah = int(self.ditahan["w"]) - int(self.ditahan["s"])
         self.belok = int(self.ditahan["d"]) - int(self.ditahan["a"])
 
-        for huruf in ("b", "n", "o", "p", "q", "r", "e"):
+        for huruf in ("b", "n", "o", "p", "q", "r", "e", "t"):
             if baru_ditekan(huruf) and huruf not in hasil:
                 hasil.append(huruf)
         return hasil
@@ -1414,7 +1452,7 @@ class Simulasi:
             self.giliran_baris = (self.giliran_baris + 1) % JUMLAH_BARIS_MAKS
             if isi_baris[i] == " " and ("baris%d" % i) not in self.id_teks:
                 continue                # baris kosong yang belum pernah dipakai
-            if isi_baris[i].startswith("TUNING") or isi_baris[i].startswith("ROBOT JATUH"):
+            if isi_baris[i].startswith(("TUNING", "ROBOT JATUH", "MODE PENGUJIAN")):
                 warna = WARNA_PERINGATAN
             else:
                 warna = WARNA_BIASA
@@ -1464,12 +1502,13 @@ class Simulasi:
         self.plot_kiriman = []
 
     # ---------------------------------------------------------------- tampilan
-    def tampilkan(self, baris, mode_balancing, jatuh=False):
+    def tampilkan(self, baris, mode_balancing, jatuh=False, pengujian=""):
         """Perbarui semua tampilan. Dipanggil dari atera_main.py beberapa kali per detik.
 
         baris          : daftar teks parameter (ditulis di kiri atas jendela PyBullet)
         mode_balancing : True = Mode Balancing, False = Mode Jalan
         jatuh          : True = robot jatuh, motor dimatikan (ditampilkan di jendela Kontrol)
+        pengujian      : teks status mode pengujian ("" = tidak dalam mode pengujian)
         """
         if not self.gui:
             return
@@ -1502,7 +1541,8 @@ class Simulasi:
                 arah_dorong = 0
             self.kontrol.kirim_status({"judul": self.judul, "mode_balancing": bool(mode_balancing),
                                        "tahan": dict(self.ditahan), "dorong": teks_dorong,
-                                       "arah_dorong": arah_dorong, "jatuh": bool(jatuh)})
+                                       "arah_dorong": arah_dorong, "jatuh": bool(jatuh),
+                                       "mode_pengujian": pengujian != "", "pengujian": pengujian})
         if self.hitung_tampil % PLOT_SETIAP == 0:
             self.gambar_plot()
 

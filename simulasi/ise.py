@@ -2,23 +2,32 @@
 
 ISE = jumlah (error^2 * dt), dihitung untuk theta, dtheta, psi, dan dpsi.
 
-Tiap percobaan disimpan di folder PLOT_EVALUASI (HHmmSS = jam, menit, detik saat disimpan):
-    YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.csv        (data)
-    YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.png        (gambar)
-    YYYYMMDD_HHmmSS_COBA PD+CBF_PERCOBAAN KE-XX.csv / .png
-Nomor KE-XX naik otomatis per tanggal dan per mode. File lama tanpa HHmmSS tetap terbaca.
-Bila gain diubah saat percobaan sedang direkam, nama file diberi akhiran _TUNING.
+Hasil disimpan di dua subfolder PLOT_EVALUASI (HHmmSS = jam, menit, detik saat disimpan):
+    PLOT_EVALUASI/PERCOBAAN/YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.csv / .png       (perekaman biasa)
+    PLOT_EVALUASI/PENGUJIAN/YYYYMMDD_HHmmSS_COBA PD_PENGUJIAN KE-XX.csv / .png       (mode pengujian, tombol T)
+    (PD diganti PD+CBF untuk mode PD + CBF-QP)
+Nomor KE-XX naik otomatis per tanggal, per mode, dan per jenis (PERCOBAAN / PENGUJIAN).
+File lama (langsung di PLOT_EVALUASI, atau tanpa HHmmSS) tetap terbaca sebagai PERCOBAAN.
+Bila gain diubah saat sedang direkam, nama file diberi akhiran _TUNING.
 
-Isi gambar (garis merah tebal = batas safety set):
-    Gambar 1: sumbu X = psi,   sumbu Y = dpsi       batas psi dan dpsi
-    Gambar 2: sumbu X = theta, sumbu Y = dtheta     batas dtheta, dan batas jarak s = R*theta (theta = s/R)
+Isi gambar:
+    Gambar 1: sumbu X = psi,   sumbu Y = dpsi       kotak batas psi dan dpsi
+    Gambar 2: sumbu X = theta, sumbu Y = dtheta     kotak batas jarak (theta = s/R) dan dtheta
+    Gambar 3: sumbu X = s = R*theta [m], sumbu Y = 0   batas s_min dan s_max
+Garis batas safety set (merah):
+    - bagian yang membentuk kotak barrier : garis tebal menyambung
+    - perpanjangan garis di luar kotak    : garis tipis putus-putus
+    - Gambar 3 (jarak s) hanya punya 2 batas, jadi keduanya garis tebal menyambung
 
-Perintah (dijalankan dari terminal):
+Perintah (dijalankan dari terminal), tambahkan --pengujian untuk memakai folder PENGUJIAN:
     python3 ise.py --daftar                                          daftar semua percobaan
     python3 ise.py --bandingkan                                      PD terbaru vs PD+CBF terbaru
     python3 ise.py --bandingkan --pd 3 --cbf 5                       PD KE-03 vs PD+CBF KE-05
     python3 ise.py --bandingkan --pd 3 --cbf 5 --tanggal 20261007    sama, untuk tanggal tertentu
-Hasil --bandingkan:  YYYYMMDD_BANDING PD KE-03 vs PD+CBF KE-05.png
+    python3 ise.py --bandingkan --pengujian --pd 1 --cbf 1           PENGUJIAN PD KE-01 vs PD+CBF KE-01
+Hasil --bandingkan disimpan di subfolder yang sama:
+    PERCOBAAN/YYYYMMDD_BANDING PD KE-03 vs PD+CBF KE-05.png
+    PENGUJIAN/YYYYMMDD_BANDING PENGUJIAN PD KE-01 vs PD+CBF KE-01.png
 """
 
 import argparse
@@ -35,6 +44,14 @@ import matplotlib.pyplot as plt
 import config
 
 FOLDER_PLOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.ISE_PLOT_DIR)
+
+JENIS_PERCOBAAN = "PERCOBAAN"       # perekaman biasa (E / Q / robot jatuh)
+JENIS_PENGUJIAN = "PENGUJIAN"       # mode pengujian (tombol T): dari dorongan O / P selama beberapa detik
+
+
+def folder_jenis(jenis):
+    """Subfolder PLOT_EVALUASI untuk jenis PERCOBAAN atau PENGUJIAN."""
+    return os.path.join(FOLDER_PLOT, jenis)
 
 MODE_PD = "PD"
 MODE_PD_CBF = "PD+CBF"
@@ -58,86 +75,124 @@ KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
              "u_PD_Nm", "u_Nm", "status_cbf", "dorong_N",
              "ISE_theta", "ISE_dtheta", "ISE_psi", "ISE_dpsi"] + KOLOM_GAIN + ["zeta_DEG"]
 
-# Contoh nama: 20261008_201530_COBA PD+CBF_PERCOBAAN KE-05_TUNING.csv  (bagian _HHmmSS boleh tidak ada: file lama)
-POLA_NAMA = re.compile(r"^(\d{8})(?:_(\d{6}))?_COBA (PD\+CBF|PD)_PERCOBAAN KE-(\d+)(_TUNING)?\.csv$")
+# Contoh nama: 20261008_201530_COBA PD+CBF_PENGUJIAN KE-05_TUNING.csv  (bagian _HHmmSS boleh tidak ada: file lama)
+POLA_NAMA = re.compile(r"^(\d{8})(?:_(\d{6}))?_COBA (PD\+CBF|PD)_(PERCOBAAN|PENGUJIAN) KE-(\d+)(_TUNING)?\.csv$")
 
 # Garis batas safety set di semua gambar
 SAFETY_WARNA = "red"
-SAFETY_TEBAL = 2.2
+SAFETY_TEBAL = 2.2          # garis yang membentuk kotak barrier (menyambung)
+SAFETY_TIPIS = 1.0          # perpanjangan garis di luar kotak (putus-putus)
 
 WARNA_PD = "tab:blue"
 WARNA_PD_CBF = "tab:orange"
 
 BANTUAN = """
-Perintah ise.py:
+Perintah ise.py (tambahkan --pengujian untuk hasil mode pengujian di folder PLOT_EVALUASI/PENGUJIAN):
   python3 ise.py --daftar
-        daftar semua percobaan di folder PLOT_EVALUASI
+        daftar semua percobaan di folder PLOT_EVALUASI/PERCOBAAN
   python3 ise.py --bandingkan
         bandingkan percobaan PD terbaru dengan percobaan PD+CBF terbaru (yang _TUNING dilewati)
   python3 ise.py --bandingkan --pd 3 --cbf 5
         bandingkan PD KE-03 dengan PD+CBF KE-05 (tanggal terbaru yang punya nomor itu)
   python3 ise.py --bandingkan --pd 3 --cbf 5 --tanggal 20261007
         sama, tetapi hanya percobaan tanggal 20261007
-Hasil: PLOT_EVALUASI/YYYYMMDD_BANDING PD KE-03 vs PD+CBF KE-05.png
+  python3 ise.py --daftar --pengujian
+  python3 ise.py --bandingkan --pengujian --pd 1 --cbf 1
+        sama, untuk hasil mode pengujian
+Hasil: PLOT_EVALUASI/PERCOBAAN/YYYYMMDD_BANDING PD KE-03 vs PD+CBF KE-05.png
+       PLOT_EVALUASI/PENGUJIAN/YYYYMMDD_BANDING PENGUJIAN PD KE-01 vs PD+CBF KE-01.png
 """
 
 
 # =============================================================================
 # Nama file
 # =============================================================================
-def daftar_percobaan():
-    """Semua percobaan di folder PLOT_EVALUASI, urut dari yang paling lama ke yang paling baru."""
+def daftar_percobaan(jenis=JENIS_PERCOBAAN):
+    """Semua file jenis PERCOBAAN atau PENGUJIAN, urut dari yang paling lama ke yang paling baru.
+    Untuk PERCOBAAN, file lama yang masih langsung di folder PLOT_EVALUASI ikut dibaca."""
+    folder_dicari = [folder_jenis(jenis)]
+    if jenis == JENIS_PERCOBAAN:
+        folder_dicari.append(FOLDER_PLOT)
     hasil = []
-    if not os.path.isdir(FOLDER_PLOT):
-        return hasil
-    for nama_file in os.listdir(FOLDER_PLOT):
-        cocok = POLA_NAMA.match(nama_file)
-        if cocok is None:
+    for folder in folder_dicari:
+        if not os.path.isdir(folder):
             continue
-        percobaan = {
-            "tanggal": cocok.group(1),
-            "jam": cocok.group(2) if cocok.group(2) is not None else "",
-            "mode": cocok.group(3),
-            "nomor": int(cocok.group(4)),
-            "tuning": cocok.group(5) is not None,
-            "nama": nama_file[:-4],
-            "path": os.path.join(FOLDER_PLOT, nama_file),
-        }
-        hasil.append(percobaan)
+        for nama_file in os.listdir(folder):
+            cocok = POLA_NAMA.match(nama_file)
+            if cocok is None or cocok.group(4) != jenis:
+                continue
+            percobaan = {
+                "tanggal": cocok.group(1),
+                "jam": cocok.group(2) if cocok.group(2) is not None else "",
+                "mode": cocok.group(3),
+                "jenis": cocok.group(4),
+                "nomor": int(cocok.group(5)),
+                "tuning": cocok.group(6) is not None,
+                "nama": nama_file[:-4],
+                "path": os.path.join(folder, nama_file),
+            }
+            hasil.append(percobaan)
     hasil.sort(key=lambda percobaan: (percobaan["tanggal"], percobaan["nomor"], percobaan["jam"], percobaan["mode"]))
     return hasil
 
 
-def nama_percobaan(mode, tuning):
-    """Contoh: 20261008_201530_COBA PD+CBF_PERCOBAAN KE-03 (nomor naik otomatis per tanggal dan per mode)."""
-    os.makedirs(FOLDER_PLOT, exist_ok=True)
+def nama_percobaan(mode, tuning, jenis=JENIS_PERCOBAAN):
+    """Contoh: 20261008_201530_COBA PD+CBF_PENGUJIAN KE-03 (nomor naik otomatis per tanggal, mode, dan jenis)."""
+    os.makedirs(folder_jenis(jenis), exist_ok=True)
     sekarang = datetime.now()
     tanggal = sekarang.strftime("%Y%m%d")
     jam = sekarang.strftime("%H%M%S")
     nomor = 1
-    for percobaan in daftar_percobaan():
+    for percobaan in daftar_percobaan(jenis):
         if percobaan["tanggal"] == tanggal and percobaan["mode"] == mode and percobaan["nomor"] >= nomor:
             nomor = percobaan["nomor"] + 1
-    nama = "%s_%s_COBA %s_PERCOBAAN KE-%02d" % (tanggal, jam, mode, nomor)
+    nama = "%s_%s_COBA %s_%s KE-%02d" % (tanggal, jam, mode, jenis, nomor)
     if tuning:
         nama = nama + "_TUNING"
     return nama
 
 
-def gambar_safety_set(gambar1, gambar2):
-    """Garis merah tebal batas safety set.
-    Gambar 1: psi_min, psi_max (tegak) dan dpsi_min, dpsi_max (mendatar).
-    Gambar 2: dtheta_min, dtheta_max (mendatar) dan batas jarak s_min/R, s_max/R (tegak, bila ada di config.py)."""
-    gambar1.axvline(config.psi_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, label="batas safety set")
-    gambar1.axvline(config.psi_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
-    gambar1.axhline(config.dpsi_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
-    gambar1.axhline(config.dpsi_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
+def gambar_kotak_safety(ax, x_min, x_max, y_min, y_max):
+    """Batas safety set dua variabel.
+    Kotak barrier (x_min..x_max, y_min..y_max): merah tebal menyambung.
+    Perpanjangan keempat garis di luar kotak: merah tipis putus-putus."""
+    ax.axvline(x_min, color=SAFETY_WARNA, linewidth=SAFETY_TIPIS, linestyle="--", zorder=1.4,
+               label="perpanjangan batas")
+    ax.axvline(x_max, color=SAFETY_WARNA, linewidth=SAFETY_TIPIS, linestyle="--", zorder=1.4)
+    ax.axhline(y_min, color=SAFETY_WARNA, linewidth=SAFETY_TIPIS, linestyle="--", zorder=1.4)
+    ax.axhline(y_max, color=SAFETY_WARNA, linewidth=SAFETY_TIPIS, linestyle="--", zorder=1.4)
+    ax.plot([x_min, x_max, x_max, x_min, x_min], [y_min, y_min, y_max, y_max, y_min],
+            color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, zorder=1.5, label="batas safety set (barrier)")
 
-    gambar2.axhline(config.dtheta_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, label="batas safety set")
-    gambar2.axhline(config.dtheta_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
-    if hasattr(config, "s_max") and hasattr(config, "s_min"):
-        gambar2.axvline(config.s_max / config.R, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
-        gambar2.axvline(config.s_min / config.R, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
+
+def ada_batas_jarak():
+    return hasattr(config, "s_max") and hasattr(config, "s_min")
+
+
+def gambar_safety_set(gambar1, gambar2):
+    """Gambar 1: kotak psi x dpsi.  Gambar 2: kotak theta (= s/R) x dtheta."""
+    gambar_kotak_safety(gambar1, config.psi_min, config.psi_max, config.dpsi_min, config.dpsi_max)
+    if ada_batas_jarak():
+        gambar_kotak_safety(gambar2, config.s_min / config.R, config.s_max / config.R,
+                            config.dtheta_min, config.dtheta_max)
+    else:
+        # tanpa batas jarak tidak ada kotak: hanya 2 garis dtheta
+        gambar2.axhline(config.dtheta_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, label="batas safety set")
+        gambar2.axhline(config.dtheta_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
+
+
+def gambar_batas_jarak(gambar3):
+    """Gambar 3 (jarak s): hanya 2 batas (s_min, s_max), keduanya garis tebal menyambung."""
+    if ada_batas_jarak():
+        gambar3.axvline(config.s_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, zorder=1.5,
+                        label="batas safety set (barrier)")
+        gambar3.axvline(config.s_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, zorder=1.5)
+    gambar3.axhline(0.0, color="gray", linewidth=0.6, zorder=1.0)
+    gambar3.set_ylim(-1.0, 1.0)
+    gambar3.set_yticks([0.0])
+    gambar3.set_xlabel("s = R*theta [m]   (jarak tempuh dari posisi awal)")
+    gambar3.set_title("Gambar 3", fontsize=10)
+    gambar3.grid(True, axis="x", alpha=0.4)
 
 
 def angka(nilai):
@@ -169,6 +224,7 @@ def teks_gain(mode, gain_awal, gain_akhir):
 class PerekamISE:
     def __init__(self):
         self.mode = ""
+        self.jenis = JENIS_PERCOBAAN
         self.data = []
         self.t_terakhir = 0.0
         self.ise_theta = 0.0
@@ -183,9 +239,10 @@ class PerekamISE:
         self.path_terakhir = ""
         self.alasan = ""               # alasan bila simpan() tidak menyimpan
 
-    def mulai(self, mode):
-        """Mulai percobaan baru. mode = "PD" atau "PD+CBF"."""
+    def mulai(self, mode, jenis=JENIS_PERCOBAAN):
+        """Mulai perekaman baru. mode = "PD" atau "PD+CBF", jenis = "PERCOBAAN" atau "PENGUJIAN"."""
         self.mode = mode
+        self.jenis = jenis
         self.data = []
         self.t_terakhir = 0.0
         self.ise_theta = 0.0
@@ -243,9 +300,10 @@ class PerekamISE:
         self.alasan = ""
 
         tuning = len(self.gain_berubah) > 0
-        nama = nama_percobaan(self.mode, tuning)
-        path_csv = os.path.join(FOLDER_PLOT, nama + ".csv")
-        path_png = os.path.join(FOLDER_PLOT, nama + ".png")
+        nama = nama_percobaan(self.mode, tuning, self.jenis)
+        folder = folder_jenis(self.jenis)
+        path_csv = os.path.join(folder, nama + ".csv")
+        path_png = os.path.join(folder, nama + ".png")
 
         # ----------------------------------------------------------------- CSV
         with open(path_csv, "w", newline="") as f:
@@ -276,9 +334,16 @@ class PerekamISE:
             judul = judul + "\nTUNING: gain diubah saat direkam (%s), ISE tidak untuk dibandingkan" \
                 % ", ".join(self.gain_berubah)
 
-        fig, (gambar1, gambar2) = plt.subplots(1, 2, figsize=(13, 6.0))
+        jarak = [config.R * nilai for nilai in theta]
+
+        fig = plt.figure(figsize=(13, 8.4))
+        kisi = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.32])
+        gambar1 = fig.add_subplot(kisi[0, 0])
+        gambar2 = fig.add_subplot(kisi[0, 1])
+        gambar3 = fig.add_subplot(kisi[1, :])
         fig.suptitle(judul, fontsize=10)
         gambar_safety_set(gambar1, gambar2)
+        gambar_batas_jarak(gambar3)
 
         # Gambar 1: X = psi, Y = dpsi
         gambar1.plot(psi, dpsi, color="tab:blue", linewidth=1.0)
@@ -302,12 +367,18 @@ class PerekamISE:
         gambar2.grid(True, alpha=0.4)
         gambar2.legend(fontsize=8)
 
+        # Gambar 3: X = s, Y = 0
+        gambar3.plot(jarak, [0.0] * len(jarak), color="tab:purple", linewidth=2.0)
+        gambar3.plot(jarak[0], 0.0, "o", color="tab:green", label="awal")
+        gambar3.plot(jarak[-1], 0.0, "x", color="black", markersize=9, label="akhir")
+        gambar3.legend(fontsize=8, loc="upper right")
+
         fig.tight_layout()
         fig.savefig(path_png, dpi=130)
         plt.close(fig)
 
         self.file_terakhir = nama
-        self.path_terakhir = os.path.join(FOLDER_PLOT, nama)
+        self.path_terakhir = os.path.join(folder, nama)
         self.data = []
         return nama
 
@@ -463,12 +534,12 @@ def gain_dari_data(data):
 # =============================================================================
 # python3 ise.py --daftar
 # =============================================================================
-def perintah_daftar():
-    semua = daftar_percobaan()
+def perintah_daftar(jenis):
+    semua = daftar_percobaan(jenis)
     if len(semua) == 0:
-        print("Belum ada percobaan di folder", FOLDER_PLOT)
+        print("Belum ada file %s di folder %s" % (jenis, folder_jenis(jenis)))
         return
-    print("Folder:", FOLDER_PLOT)
+    print("Folder:", folder_jenis(jenis))
     print("%-9s %-7s %-7s %-4s %-7s %8s %7s %12s %12s  %s"
           % ("tanggal", "jam", "mode", "KE", "", "durasi", "zeta", "ISE psi", "ISE theta", "gain"))
     for percobaan in semua:
@@ -484,19 +555,20 @@ def perintah_daftar():
                  "TUNING" if percobaan["tuning"] else "", hasil["durasi"], teks_zeta(data["zeta_deg"]),
                  hasil["ise_psi"], hasil["ise_theta"], gain))
     print("")
-    print("Bandingkan:  python3 ise.py --bandingkan --pd NOMOR --cbf NOMOR [--tanggal YYYYMMDD]")
+    tambahan = " --pengujian" if jenis == JENIS_PENGUJIAN else ""
+    print("Bandingkan:  python3 ise.py --bandingkan%s --pd NOMOR --cbf NOMOR [--tanggal YYYYMMDD]" % tambahan)
 
 
 # =============================================================================
 # python3 ise.py --bandingkan
 # =============================================================================
-def pilih_percobaan(mode, nomor, tanggal):
+def pilih_percobaan(mode, nomor, tanggal, jenis=JENIS_PERCOBAAN):
     """Percobaan paling baru yang cocok dengan mode, nomor (boleh None), dan tanggal (boleh None).
 
     Bila nomor tidak disebut, percobaan _TUNING dilewati (dipakai hanya bila tidak ada pilihan lain)."""
     terpilih = None
     terpilih_tuning = None
-    for percobaan in daftar_percobaan():
+    for percobaan in daftar_percobaan(jenis):
         if percobaan["mode"] != mode:
             continue
         if nomor is not None and percobaan["nomor"] != nomor:
@@ -520,21 +592,23 @@ def label_percobaan(percobaan):
     return label
 
 
-def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal):
-    coba_pd = pilih_percobaan(MODE_PD, nomor_pd, tanggal)
-    coba_cbf = pilih_percobaan(MODE_PD_CBF, nomor_cbf, tanggal)
+def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
+    coba_pd = pilih_percobaan(MODE_PD, nomor_pd, tanggal, jenis)
+    coba_cbf = pilih_percobaan(MODE_PD_CBF, nomor_cbf, tanggal, jenis)
+    kata = jenis.capitalize()
 
     keterangan = ""
     if tanggal is not None:
         keterangan = " tanggal " + tanggal
     if coba_pd is None:
-        print("Percobaan PD%s%s tidak ditemukan."
-              % ("" if nomor_pd is None else " KE-%02d" % nomor_pd, keterangan))
+        print("%s PD%s%s tidak ditemukan."
+              % (kata, "" if nomor_pd is None else " KE-%02d" % nomor_pd, keterangan))
     if coba_cbf is None:
-        print("Percobaan PD+CBF%s%s tidak ditemukan."
-              % ("" if nomor_cbf is None else " KE-%02d" % nomor_cbf, keterangan))
+        print("%s PD+CBF%s%s tidak ditemukan."
+              % (kata, "" if nomor_cbf is None else " KE-%02d" % nomor_cbf, keterangan))
     if coba_pd is None or coba_cbf is None:
-        print("Lihat yang tersedia dengan:  python3 ise.py --daftar")
+        print("Lihat yang tersedia dengan:  python3 ise.py --daftar%s"
+              % (" --pengujian" if jenis == JENIS_PENGUJIAN else ""))
         return ""
 
     data_pd = baca_csv(coba_pd["path"])
@@ -579,11 +653,13 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal):
         catatan.append("CBF-QP tidak selalu OK (saat tidak OK, u = u_PD yang dibatasi arus)")
 
     # ------------------------------------------------------------------ nama
-    nama = "%s_BANDING PD KE-%02d vs PD+CBF KE-%02d" % (coba_cbf["tanggal"], coba_pd["nomor"], coba_cbf["nomor"])
+    awalan = "BANDING" if jenis == JENIS_PERCOBAAN else "BANDING " + jenis
+    nama = "%s_%s PD KE-%02d vs PD+CBF KE-%02d" % (coba_cbf["tanggal"], awalan, coba_pd["nomor"], coba_cbf["nomor"])
     if coba_pd["tanggal"] != coba_cbf["tanggal"]:
-        nama = "%s_BANDING PD %s KE-%02d vs PD+CBF KE-%02d" \
-            % (coba_cbf["tanggal"], coba_pd["tanggal"], coba_pd["nomor"], coba_cbf["nomor"])
-    path_png = os.path.join(FOLDER_PLOT, nama + ".png")
+        nama = "%s_%s PD %s KE-%02d vs PD+CBF KE-%02d" \
+            % (coba_cbf["tanggal"], awalan, coba_pd["tanggal"], coba_pd["nomor"], coba_cbf["nomor"])
+    os.makedirs(folder_jenis(jenis), exist_ok=True)
+    path_png = os.path.join(folder_jenis(jenis), nama + ".png")
 
     # ----------------------------------------------------------------- tabel
     def teks_dorongan(hasil):
@@ -627,16 +703,18 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal):
     judul_kolom = ["0 - %.1f s" % t_banding, label_pd, label_cbf, "PD+CBF terhadap PD"]
 
     # ---------------------------------------------------------------- gambar
-    fig = plt.figure(figsize=(13, 10.5))
-    kisi = fig.add_gridspec(2, 2, height_ratios=[1.25, 1.0])
+    fig = plt.figure(figsize=(13, 13.0))
+    kisi = fig.add_gridspec(3, 2, height_ratios=[1.25, 0.34, 1.05])
     gambar1 = fig.add_subplot(kisi[0, 0])
     gambar2 = fig.add_subplot(kisi[0, 1])
-    kotak_tabel = fig.add_subplot(kisi[1, :])
+    gambar3 = fig.add_subplot(kisi[1, :])
+    kotak_tabel = fig.add_subplot(kisi[2, :])
 
     judul = "%s\nISE dihitung dan data digambar dari t = 0 sampai %.1f s (durasi percobaan yang lebih pendek)" \
         % (nama, t_banding)
     fig.suptitle(judul, fontsize=11)
     gambar_safety_set(gambar1, gambar2)
+    gambar_batas_jarak(gambar3)
 
     # Gambar 1: X = psi, Y = dpsi
     gambar1.plot(potong_pd["psi_rad"], potong_pd["dpsi_rad_s"], color=WARNA_PD, linewidth=1.0, label=label_pd)
@@ -657,6 +735,13 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal):
     gambar2.set_title("Gambar 2", fontsize=10)
     gambar2.grid(True, alpha=0.4)
     gambar2.legend(fontsize=8)
+
+    # Gambar 3: X = s, Y = 0 (kedua percobaan di garis yang sama; PD digambar lebih tebal di bawah)
+    jarak_pd = [config.R * nilai for nilai in potong_pd["theta_rad"]]
+    jarak_cbf = [config.R * nilai for nilai in potong_cbf["theta_rad"]]
+    gambar3.plot(jarak_pd, [0.0] * len(jarak_pd), color=WARNA_PD, linewidth=6.0, alpha=0.6, label=label_pd)
+    gambar3.plot(jarak_cbf, [0.0] * len(jarak_cbf), color=WARNA_PD_CBF, linewidth=2.0, label=label_cbf)
+    gambar3.legend(fontsize=8, loc="upper right")
 
     # Tabel ISE
     kotak_tabel.axis("off")
@@ -705,13 +790,15 @@ def main():
     parser.add_argument("--pd", type=int, default=None)
     parser.add_argument("--cbf", type=int, default=None)
     parser.add_argument("--tanggal", type=str, default=None)
+    parser.add_argument("--pengujian", action="store_true")
     parser.add_argument("-h", "--help", action="store_true")
     pilihan = parser.parse_args()
 
+    jenis = JENIS_PENGUJIAN if pilihan.pengujian else JENIS_PERCOBAAN
     if pilihan.daftar:
-        perintah_daftar()
+        perintah_daftar(jenis)
     elif pilihan.bandingkan:
-        perintah_bandingkan(pilihan.pd, pilihan.cbf, pilihan.tanggal)
+        perintah_bandingkan(pilihan.pd, pilihan.cbf, pilihan.tanggal, jenis)
     else:
         print(BANTUAN)
 
