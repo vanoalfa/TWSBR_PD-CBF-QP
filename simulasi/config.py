@@ -195,7 +195,7 @@ SIM_ACC_NOISE_DEG = 0.14            # [deg]   simpangan baku sudut akselerometer
 # =============================================================================
 # Satu trial = dua pengujian di lantai OPTUNA_ZETA_DEG: robot didorong ke depan, lalu (diletakkan ulang)
 # didorong ke belakang. Tiap pengujian direkam DURASI_PENGUJIAN detik (atera_main.py) sejak dorongan,
-# gaya dorong = GAYA_DORONG_AWAL (simulasi.py).
+# gaya dorong dan torsi roda mengikuti profil (OPTUNA_PROFIL di bawah).
 # Skor (makin kecil makin baik), dihitung dari state SEBENARNYA di PyBullet:
 #   skor = integral[(psi/psi_max)^2 + (s/s_max)^2] dt
 #        + OPTUNA_PENALTI_JARAK      x lama |s| > s_max          [per detik]
@@ -203,10 +203,46 @@ SIM_ACC_NOISE_DEG = 0.14            # [deg]   simpangan baku sudut akselerometer
 #        + OPTUNA_PENALTI_JATUH x (1 + sisa waktu / waktu total)  bila |psi| > SAFE_TILT_DEG atau |s| > OPTUNA_S_HENTI
 OPTUNA_TRIAL_PD = 163221013               # jumlah trial tahap 1 (gain PD)
 OPTUNA_TRIAL_CBF = 163221013              # jumlah trial tahap 2 (Alpha, gain PD dikunci ke hasil tahap 1)
-OPTUNA_BATAS_BAWAH = 0.0            # rentang pencarian semua gain dan Alpha
-OPTUNA_BATAS_ATAS = 500.0
+OPTUNA_BATAS_BAWAH = 0.0            # batas bawah semua gain dan Alpha
 OPTUNA_LANGKAH = 0.01             # 2 angka di belakang koma
 # Alpha = 0 membuat CBF-QP tidak aktif (status ALPHA_NOL), jadi batas bawah Alpha = OPTUNA_LANGKAH.
+
+# Batas ATAS pencarian tiap variabel. Edit sesuai kebutuhan (nilai awal = 500.0 seperti OPTUNA_BATAS_ATAS sebelumnya).
+# Variabel yang tidak ada di tabel (misalnya Alpha_7 nanti) memakai OPTUNA_BATAS_ATAS_LAINNYA.
+OPTUNA_BATAS_ATAS = {
+    "Kp_psi":   500.0,
+    "Kd_psi":   250.0,
+    "Kp_theta": 500.0,
+    "Kd_theta": 50.0,
+    "Alpha_1":  500.0,
+    "Alpha_2":  500.0,
+    "Alpha_3":  500.0,
+    "Alpha_4":  500.0,
+    "Alpha_5":  500.0,
+    "Alpha_6":  500.0,
+}
+OPTUNA_BATAS_ATAS_LAINNYA = 500.0
+
+# Profil optimasi. Tiap profil punya study Optuna sendiri (hasilnya tidak tercampur):
+#   tahap PD  -> ATERA_PD_<PROFIL>        tahap CBF -> ATERA_PD+CBF_<PROFIL>
+# kt_efektif  : torsi roda nyata per A arus perintah [N m/A], menggantikan MOTOR_KT_EFEKTIF saat tuning
+# gaya_dorong : gaya dorong saat tuning, menggantikan GAYA_DORONG_AWAL di simulasi.py saat tuning
+# Jalankan:  python3 tuning_optuna.py --profil TERUKUR --tahap PD
+OPTUNA_PROFIL = {
+    "TERUKUR": {
+        "kt_efektif": 0.238,        # hasil uji delay 20261009 (G x j_theta)
+        "gaya_dorong": 11.0,        # [N] ASUMSI: dorongan terbesar yang masih bisa dipulihkan pada 0.238 (uji simulasi)
+        "terverifikasi": True,
+        "catatan": "K diturunkan dari uji inersia/delay, bergantung pada j_theta = 9.2e-4",
+    },
+    "DATASHEET": {
+        "kt_efektif": 0.75,         # datasheet Waveshare DDSM115 (= MOTOR_KT)
+        "gaya_dorong": 26.0,        # [N]
+        "terverifikasi": False,
+        "catatan": "BELUM TERVERIFIKASI: nilai 0.75 belum cocok dengan uji delay (0.24). "
+                   "BUTUH PENGUJIAN TORSI RODA (ddsm115_torsi_statis_testing.py)",
+    },
+}
 OPTUNA_ZETA_DEG = 0.0               # [deg] lantai saat optimasi
 OPTUNA_ZETA_UJI_DEG = 5.2           # [deg] lantai untuk menguji hasil terbaik (tidak ikut dioptimasi)
 OPTUNA_WAKTU_SEBELUM_DORONG = 1.0   # [s] ASUMSI: robot dibiarkan tenang dulu sebelum didorong (tidak dinilai)
