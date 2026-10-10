@@ -210,16 +210,16 @@ OPTUNA_LANGKAH = 0.01             # 2 angka di belakang koma
 # Batas ATAS pencarian tiap variabel. Edit sesuai kebutuhan (nilai awal = 500.0 seperti OPTUNA_BATAS_ATAS sebelumnya).
 # Variabel yang tidak ada di tabel (misalnya Alpha_7 nanti) memakai OPTUNA_BATAS_ATAS_LAINNYA.
 OPTUNA_BATAS_ATAS = {
-    "Kp_psi":   500.0,
-    "Kd_psi":   250.0,
-    "Kp_theta": 500.0,
-    "Kd_theta": 50.0,
-    "Alpha_1":  500.0,
-    "Alpha_2":  500.0,
-    "Alpha_3":  500.0,
-    "Alpha_4":  500.0,
-    "Alpha_5":  500.0,
-    "Alpha_6":  500.0,
+    "Kp_psi":   500.00,
+    "Kd_psi":   250.00,
+    "Kp_theta": 500.00,
+    "Kd_theta": 50.00,
+    "Alpha_1":  500.00,
+    "Alpha_2":  500.00,
+    "Alpha_3":  500.00,
+    "Alpha_4":  500.00,
+    "Alpha_5":  500.00,
+    "Alpha_6":  500.00,
 }
 OPTUNA_BATAS_ATAS_LAINNYA = 500.0
 
