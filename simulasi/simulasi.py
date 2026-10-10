@@ -38,7 +38,7 @@ import config
 # Pengaturan khusus simulasi
 # =============================================================================
 SUBSTEP = 5                 # jumlah langkah fisika dalam satu siklus kontrol (config.DT)
-GAYA_DORONG_AWAL = 6.0      # [N] besar gaya dorongan (tombol O / P), bisa diubah di jendela Kontrol
+GAYA_DORONG_AWAL = 20.0     # [N] besar gaya dorongan (tombol O / P dan tuning_optuna.py), bisa diubah di jendela Kontrol
 LAMA_DORONG = 0.10          # [s] lama gaya dorongan bekerja
 # Titik dorong: bidang DORONG_SISI x DORONG_SISI di sisi luar bagian ATAS badan.
 #   - tepi atas bidang = permukaan teratas badan (dihitung otomatis dari robot.urdf)

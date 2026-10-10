@@ -189,3 +189,34 @@ SIM_MODEL_IMU = True                # True: psi dari model MPU6050 + Kalman, Fal
 # Noise saat robot diam (0.5 s pertama delay_imu_20261009_134728.csv).
 SIM_GYRO_NOISE_DEG_S = 0.10         # [deg/s] simpangan baku gyro
 SIM_ACC_NOISE_DEG = 0.14            # [deg]   simpangan baku sudut akselerometer
+
+# =============================================================================
+# 12. TUNING OPTUNA  (hanya dipakai tuning_optuna.py)
+# =============================================================================
+# Satu trial = dua pengujian di lantai OPTUNA_ZETA_DEG: robot didorong ke depan, lalu (diletakkan ulang)
+# didorong ke belakang. Tiap pengujian direkam DURASI_PENGUJIAN detik (atera_main.py) sejak dorongan,
+# gaya dorong = GAYA_DORONG_AWAL (simulasi.py).
+# Skor (makin kecil makin baik), dihitung dari state SEBENARNYA di PyBullet:
+#   skor = integral[(psi/psi_max)^2 + (s/s_max)^2] dt
+#        + OPTUNA_PENALTI_JARAK      x lama |s| > s_max          [per detik]
+#        + OPTUNA_PENALTI_INFEASIBLE x lama status CBF bukan OK  [per detik, hanya tahap PD+CBF]
+#        + OPTUNA_PENALTI_JATUH x (1 + sisa waktu / waktu total)  bila |psi| > SAFE_TILT_DEG atau |s| > OPTUNA_S_HENTI
+OPTUNA_TRIAL_PD = 163221013               # jumlah trial tahap 1 (gain PD)
+OPTUNA_TRIAL_CBF = 163221013              # jumlah trial tahap 2 (Alpha, gain PD dikunci ke hasil tahap 1)
+OPTUNA_BATAS_BAWAH = 0.0            # rentang pencarian semua gain dan Alpha
+OPTUNA_BATAS_ATAS = 500.0
+OPTUNA_LANGKAH = 0.01             # 2 angka di belakang koma
+# Alpha = 0 membuat CBF-QP tidak aktif (status ALPHA_NOL), jadi batas bawah Alpha = OPTUNA_LANGKAH.
+OPTUNA_ZETA_DEG = 0.0               # [deg] lantai saat optimasi
+OPTUNA_ZETA_UJI_DEG = 5.2           # [deg] lantai untuk menguji hasil terbaik (tidak ikut dioptimasi)
+OPTUNA_WAKTU_SEBELUM_DORONG = 1.0   # [s] ASUMSI: robot dibiarkan tenang dulu sebelum didorong (tidak dinilai)
+OPTUNA_SEED = 1                     # seed sampler Optuna dan noise IMU (semua trial dinilai dengan noise yang sama)
+OPTUNA_PENALTI_JATUH = 1000.0
+OPTUNA_PENALTI_JARAK = 10.0         # [per detik]
+OPTUNA_PENALTI_INFEASIBLE = 10.0    # [per detik]
+OPTUNA_S_HENTI = 3.0                # [m] |s| di atas ini dianggap lari (dihentikan seperti jatuh)
+# Pruning (auto-stop trial yang jelek): skor dilaporkan tiap 1 detik; trial dihentikan bila skornya lebih buruk
+# dari median trial sebelumnya pada detik yang sama. Baru aktif setelah OPTUNA_PRUNER_STARTUP trial selesai dan
+# setelah OPTUNA_PRUNER_WARMUP_S detik pertama.
+OPTUNA_PRUNER_STARTUP = 10
+OPTUNA_PRUNER_WARMUP_S = 5
