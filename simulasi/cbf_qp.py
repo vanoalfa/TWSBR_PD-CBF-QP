@@ -1,13 +1,18 @@
 """cbf_qp.py - safety filter CBF-QP ATERA, diselesaikan acados (HPIPM, N = 1).
 
     u* = argmin_u  || u - u_PD ||^2
-    s.t.  c_k(x, u) >= 0      untuk setiap c_k di DAFTAR_C   (ditulis di WORKPLACE PROGRAM, di bawah)
+    s.t.  c_k(x, u) >= 0      untuk setiap c_k di DAFTAR_C yang aktif di mode gerak sekarang
+                              (DAFTAR_C dan pilihan constraint per mode ditulis di WORKPLACE PROGRAM, di bawah)
           -i_max <= u / K_t <= i_max                           batas arus motor
 
     u = torsi SATU roda [N m].   Hard constraint, tanpa slack.
     Alpha_1, Alpha_2, ... diambil dari config.py (semua Alpha_<nomor> yang berurutan mulai dari 1).
     zeta (kemiringan bidang) juga parameter: nilainya dibaca dari config.zeta tiap siklus, jadi bisa diubah
     saat program berjalan tanpa membangun ulang solver.
+
+Mode gerak (mode_cbf): Balancing dan Navigate memakai SATU solver acados yang sama. Setiap constraint diberi
+parameter mask m_k (1 = aktif, 0 = dilewati): c_k dipakai sebagai  m_k*c_k + (1 - m_k),  jadi constraint dengan
+m_k = 0 selalu terpenuhi dan tidak ikut membatasi u. Yang berganti saat mode berganti hanya mask, bukan solver.
 
 Susunan di acados (OCP dengan N = 1):
     stage 0 : state x dikunci ke state terukur (lbx_0 = ubx_0 = x), variabel keputusan u,
@@ -36,18 +41,11 @@ import numpy as np
 
 import config
 import model
+from pd_control import MODE_BALANCING, MODE_NAVIGATE
 
-STATUS_OK = "OK"                    # u = u* dari acados
-STATUS_INFEASIBLE = "INFEASIBLE"    # constraint saling bertentangan, tidak ada u yang memenuhi
-STATUS_SOLVER = "SOLVER_GAGAL"      # acados/HPIPM gagal atau hasilnya melanggar constraint
+STATUS_AMAN = "AMAN"                # u = u* dari acados
+STATUS_GAGAL = "GAGAL"              # tidak ada u yang memenuhi semua constraint, atau acados gagal secara numerik
 STATUS_ALPHA = "ALPHA_NOL"          # ada Alpha <= 0, CBF-QP tidak dijalankan
-
-# Toleransi numerik (bukan besaran fisik)
-ACADOS_INFTY = 1.0e9                # batas atas "tak hingga" constraint h
-CONSTRAINT_TOL = 1.0e-6             # pelanggaran constraint yang masih diterima saat memeriksa hasil solver
-BOUND_TOL = 1.0e-6                  # [N m] pelanggaran batas u yang masih diterima
-ACTIVE_TOL = 1.0e-4                 # [N m] |u* - u_PD| di atas ini -> filter dianggap mengoreksi
-COEFF_EPS = 1.0e-12                 # |koefisien u| di bawah ini dianggap nol
 
 
 def cari_folder_acados():
@@ -106,18 +104,8 @@ def siapkan_acados():
     return folder
 
 
-def cari_nama_alpha():
-    """Nama Alpha di config.py: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada)."""
-    hasil = []
-    nomor = 1
-    while hasattr(config, "Alpha_%d" % nomor):
-        hasil.append("Alpha_%d" % nomor)
-        nomor = nomor + 1
-    return hasil
-
-
 def workplace(x, u, f, g, zeta):
-    """Tempat menulis barrier function h dan constraint CBF. Mengembalikan DAFTAR_C.
+    """Tempat menulis barrier function h dan constraint CBF. Mengembalikan (DAFTAR_C, C_MODE).
 
     Yang bisa dipakai di dalam WORKPLACE:
         theta, dtheta, psi, dpsi  : state (simbol)
@@ -126,13 +114,14 @@ def workplace(x, u, f, g, zeta):
         zeta                      : kemiringan bidang [rad] (simbol, nilainya dari config.zeta)
         lie(h, v)                 : turunan Lie, L_v h = (dh/dx) * v
         Alpha_1, Alpha_2, ...     : semua Alpha_<nomor> di config.py (otomatis, nilainya bisa diubah di jendela Kontrol)
+        MODE_BALANCING, MODE_NAVIGATE : nama mode gerak (kunci C_MODE)
         config.<nama>             : nilai lain dari config.py (psi_max, dpsi_max, dtheta_max, MAX_CURRENT_A, ...)
     """
     theta = x[config.IDX_THETA]
     dtheta = x[config.IDX_DTHETA]
     psi = x[config.IDX_PSI]
     dpsi = x[config.IDX_DPSI]
-    s = config.R * theta                # jarak tempuh [m], dihitung dari posisi awal (R = reset)
+    s = model.hitung_s(x)               # jarak tempuh [m] dari titik nol s (direset tiap masuk mode Balancing)
 
     def lie(h, v):
         """Turunan Lie: L_v h = (dh/dx) * v"""
@@ -155,7 +144,7 @@ def workplace(x, u, f, g, zeta):
     #       c_arus_bawah = u / config.MOTOR_KT - config.MIN_CURRENT_A        # i >= i_min
     #
     #   Alpha baru: tambahkan Alpha_4 = ... (dst, nomor berurutan) di config.py, lalu pakai di sini.
-    #   Constraint hanya dipakai bila dimasukkan ke DAFTAR_C.
+    #   Constraint hanya dipakai bila dimasukkan ke DAFTAR_C, dan hanya aktif di mode yang memuatnya di C_MODE.
     # -----------------------------------------------------------------------------------------
 
     # 1. Tulis definisi h di bawah
@@ -181,22 +170,29 @@ def workplace(x, u, f, g, zeta):
     c_h5 = lie(Lf_h5, f) + lie(Lf_h5, g) * u + Alpha_4 * Lf_h5 + Alpha_5 * (Lf_h5 + Alpha_4 * h5)
     Lf_h6 = lie(h6, f)
     c_h6 = lie(Lf_h6, f) + lie(Lf_h6, g) * u + Alpha_4 * Lf_h6 + Alpha_5 * (Lf_h6 + Alpha_4 * h6)
-    
+
     c_h7 = lie(h7, f) + lie(h7, g) * u + Alpha_6 * h7
     c_h8 = lie(h8, f) + lie(h8, g) * u + Alpha_6 * h8
 
-    # 3. Daftarkan constraint yang dipakai
+    # 3. Daftarkan semua constraint yang bisa dipakai
     DAFTAR_C = [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6, c_h7, c_h8]
+
+    # 4. Pilih constraint yang aktif di tiap mode gerak (urutan di dalam daftar bebas, isinya dari DAFTAR_C)
+    C_MODE = {
+        MODE_BALANCING: [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6, c_h7, c_h8],
+        MODE_NAVIGATE:  [c_h1, c_h2, c_h3, c_h4, c_h7, c_h8],      # tanpa h5, h6 (barrier jarak s)
+    }
 
     # =========================================================================================
     #                                 AKHIR WORKPLACE PROGRAM
     # =========================================================================================
-    return DAFTAR_C
+    return DAFTAR_C, C_MODE
 
 
 def _cbf_expressions():
-    """Simbol x, u, p = [Alpha_1, Alpha_2, ..., zeta] dan ekspresi c(x, u, p) dari WORKPLACE, constraint: c >= 0."""
-    nama_alpha = cari_nama_alpha()
+    """Simbol x, u, p = [Alpha_1, Alpha_2, ..., zeta], f, g, DAFTAR_C, C_MODE dan nama Alpha dari WORKPLACE.
+    Constraint: c >= 0."""
+    nama_alpha = config.NAMA_ALPHA
     x = ca.SX.sym("x", config.NX)
     u = ca.SX.sym("u", config.NU)
     p = ca.SX.sym("p", len(nama_alpha) + 1)        # elemen terakhir = zeta
@@ -208,7 +204,7 @@ def _cbf_expressions():
 
     f, g = model.fg_casadi(x, zeta)
     try:
-        daftar_c = workplace(x, u, f, g, zeta)
+        daftar_c, c_mode = workplace(x, u, f, g, zeta)
     except NameError as kesalahan:
         raise RuntimeError("WORKPLACE PROGRAM memakai nama yang belum ada (%s). Bila itu Alpha, tambahkan dulu "
                            "di config.py dengan nomor berurutan (Alpha_1, Alpha_2, ...)." % kesalahan)
@@ -220,7 +216,25 @@ def _cbf_expressions():
     for i in range(len(daftar_c)):
         if daftar_c[i].shape != (1, 1):
             raise RuntimeError("isi DAFTAR_C nomor %d bukan satu angka (ukuran %s)." % (i + 1, daftar_c[i].shape))
-    return x, u, p, f, g, ca.vertcat(*daftar_c), nama_alpha
+    return x, u, p, f, g, daftar_c, c_mode, nama_alpha
+
+
+def _mask_tiap_mode(daftar_c, c_mode):
+    """Mask 0 / 1 tiap mode: 1 bila constraint di DAFTAR_C ikut di daftar C_MODE mode itu."""
+    mask = {}
+    for mode in (MODE_BALANCING, MODE_NAVIGATE):
+        if mode not in c_mode or len(c_mode[mode]) == 0:
+            raise RuntimeError("C_MODE di WORKPLACE PROGRAM belum memuat constraint untuk mode %s." % mode)
+        mask[mode] = np.zeros(len(daftar_c))
+        for c in c_mode[mode]:
+            ditemukan = False
+            for k in range(len(daftar_c)):
+                if c is daftar_c[k]:
+                    mask[mode][k] = 1.0
+                    ditemukan = True
+            if not ditemukan:
+                raise RuntimeError("C_MODE mode %s memuat constraint yang tidak ada di DAFTAR_C." % mode)
+    return mask
 
 
 class CBFQP:
@@ -232,25 +246,35 @@ class CBFQP:
         from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
 
         self.N = int(config.CBF_N_HORIZON)
-        x, u, p, f, g, c, self.nama_alpha = _cbf_expressions()
-        self.NH = int(c.shape[0])                       # jumlah constraint di DAFTAR_C
+        x, u, p, f, g, daftar_c, c_mode, self.nama_alpha = _cbf_expressions()
+        self.NH = len(daftar_c)                         # jumlah constraint di DAFTAR_C
 
-        # Alpha yang benar-benar dipakai di DAFTAR_C (hanya ini yang wajib > 0)
-        self.alpha_dipakai = []
-        for i in range(len(self.nama_alpha)):
-            if ca.depends_on(c, p[i]):
-                self.alpha_dipakai.append(i)
+        # Mask tiap mode sebagai parameter solver: c_efektif = m*c + (1 - m)  (m = 0 -> selalu terpenuhi, a = 0)
+        m = ca.SX.sym("m", self.NH)
+        c = ca.vertcat(*[m[k] * daftar_c[k] + (1.0 - m[k]) for k in range(self.NH)])
+        p_semua = ca.vertcat(p, m)                      # p_semua = [Alpha..., zeta, mask...]
+
+        # Alpha yang dipakai constraint aktif tiap mode (hanya ini yang wajib > 0 di mode itu)
+        self.mask_mode = _mask_tiap_mode(daftar_c, c_mode)
+        self.alpha_mode = {}
+        for mode in self.mask_mode:
+            self.alpha_mode[mode] = []
+            for i in range(len(self.nama_alpha)):
+                for k in range(self.NH):
+                    if self.mask_mode[mode][k] > 0.0 and ca.depends_on(daftar_c[k], p[i]):
+                        if i not in self.alpha_mode[mode]:
+                            self.alpha_mode[mode].append(i)
 
         # c(x, u, p) = a(x, p)*u + b(x, p): dipakai untuk memeriksa hasil solver dan untuk diagnosa
         a = ca.jacobian(c, u)
         b = ca.substitute(c, u, 0.0)
-        self._coeff = ca.Function("cbf_coeff", [x, p], [a, b])
+        self._coeff = ca.Function("cbf_coeff", [x, p_semua], [a, b])
 
         acados_model = AcadosModel()
         acados_model.name = "atera_cbf_qp"
         acados_model.x = x
         acados_model.u = u
-        acados_model.p = p
+        acados_model.p = p_semua
         acados_model.disc_dyn_expr = x + config.DT * (f + g * u)
         acados_model.con_h_expr_0 = c
 
@@ -261,7 +285,7 @@ class CBFQP:
         else:                                          # acados < 0.4
             ocp.dims.N = self.N
         ocp.solver_options.tf = float(self.N)          # langkah waktu 1 -> cost tidak diskalakan
-        ocp.parameter_values = np.ones(len(self.nama_alpha) + 1)
+        ocp.parameter_values = np.ones(len(self.nama_alpha) + 1 + self.NH)
 
         # cost stage 0: 1/2*(u - yref)' W (u - yref), W = 2  ->  (u - u_PD)^2 ; yref = u_PD diisi tiap siklus
         ocp.cost.cost_type_0 = "LINEAR_LS"
@@ -283,7 +307,7 @@ class CBFQP:
         # constraint
         ocp.constraints.x0 = np.zeros(config.NX)                     # diganti state terukur tiap siklus
         ocp.constraints.lh_0 = np.zeros(self.NH)                     # c(x, u, p) >= 0
-        ocp.constraints.uh_0 = ACADOS_INFTY * np.ones(self.NH)
+        ocp.constraints.uh_0 = config.CBF_INFTY * np.ones(self.NH)
         ocp.constraints.idxbu = np.arange(config.NU)                 # batas arus: u_min <= u <= u_max
         ocp.constraints.lbu = np.array([config.MIN_CURRENT_A * config.MOTOR_KT])
         ocp.constraints.ubu = np.array([config.MAX_CURRENT_A * config.MOTOR_KT])
@@ -308,8 +332,13 @@ class CBFQP:
         self.u_lb = float(ocp.constraints.lbu[0])
         self.u_ub = float(ocp.constraints.ubu[0])
 
+        # mode gerak awal = Balancing
+        self.mode = MODE_BALANCING
+        self.mask = self.mask_mode[MODE_BALANCING]
+        self.alpha_dipakai = self.alpha_mode[MODE_BALANCING]
+
         # hasil siklus terakhir
-        self.status = STATUS_OK
+        self.status = STATUS_AMAN
         self.acados_status = 0
         self.feasible = True
         self.active = False
@@ -318,7 +347,22 @@ class CBFQP:
         self.u = 0.0
         self.u_interval = (self.u_lb, self.u_ub)
         self.solve_ms = 0.0
-        self.count = {STATUS_OK: 0, STATUS_INFEASIBLE: 0, STATUS_SOLVER: 0, STATUS_ALPHA: 0}
+        self.count = {STATUS_AMAN: 0, STATUS_GAGAL: 0, STATUS_ALPHA: 0}
+
+    def mode_cbf(self, mode: str) -> None:
+        """Pilih constraint CBF sesuai mode gerak (MODE_BALANCING atau MODE_NAVIGATE).
+
+        Balancing : semua constraint di C_MODE[MODE_BALANCING] (h1 .. h8)
+        Navigate  : constraint di C_MODE[MODE_NAVIGATE] (tanpa h5, h6, supaya robot boleh berjalan jauh)
+        Solver acados tidak dibangun ulang: hanya mask-nya yang berganti. Aman dipanggil tiap siklus.
+        """
+        if mode == self.mode:
+            return
+        if mode not in self.mask_mode:
+            raise ValueError("mode CBF tidak dikenal: %s" % mode)
+        self.mode = mode
+        self.mask = self.mask_mode[mode]
+        self.alpha_dipakai = self.alpha_mode[mode]
 
     def zeta(self) -> float:
         """Kemiringan bidang yang dipakai sekarang [rad]."""
@@ -334,25 +378,25 @@ class CBFQP:
         return np.array(nilai)
 
     def _parameter(self, alphas=None) -> np.ndarray:
-        """p = [Alpha_1, Alpha_2, ..., zeta]."""
+        """p = [Alpha_1, Alpha_2, ..., zeta, mask_1, ..., mask_NH]."""
         if alphas is None:
             alphas = self._alphas()
-        return np.append(np.asarray(alphas, dtype=float), self.zeta())
+        return np.concatenate([np.asarray(alphas, dtype=float), [self.zeta()], self.mask])
 
     def constraint_coefficients(self, x, alphas=None):
-        """a, b (masing-masing ndarray(NH)) pada constraint a*u + b >= 0."""
+        """a, b (masing-masing ndarray(NH)) pada constraint a*u + b >= 0. Constraint yang dimask: a = 0, b = 1."""
         p = self._parameter(alphas)
         a, b = self._coeff(np.asarray(x, dtype=float), p)
         return np.array(a).ravel(), np.array(b).ravel()
 
     def allowed_interval(self, x, alphas=None):
-        """Selang u yang memenuhi semua constraint (termasuk batas arus). lo > hi berarti infeasible."""
+        """Selang u yang memenuhi semua constraint aktif (termasuk batas arus). lo > hi berarti tidak ada solusi."""
         a, b = self.constraint_coefficients(x, alphas)
         lo, hi = self.u_lb, self.u_ub
         for ak, bk in zip(a, b):
-            if ak > COEFF_EPS:
+            if ak > config.CBF_TOL_KOEFISIEN:
                 lo = max(lo, -bk / ak)
-            elif ak < -COEFF_EPS:
+            elif ak < -config.CBF_TOL_KOEFISIEN:
                 hi = min(hi, -bk / ak)
             elif bk < 0.0:
                 return np.inf, -np.inf
@@ -407,18 +451,17 @@ class CBFQP:
 
         scale = np.maximum(1.0, np.abs(a) + np.abs(b))
         solved = (self.acados_status == 0 and np.isfinite(u)
-                  and self.u_lb - BOUND_TOL <= u <= self.u_ub + BOUND_TOL
-                  and bool(np.all(a * u + b >= -CONSTRAINT_TOL * scale)))
+                  and self.u_lb - config.CBF_TOL_BATAS_U <= u <= self.u_ub + config.CBF_TOL_BATAS_U
+                  and bool(np.all(a * u + b >= -config.CBF_TOL_CONSTRAINT * scale)))
         if not solved:
-            lo, hi = self.u_interval
-            self._fallback(STATUS_INFEASIBLE if lo > hi else STATUS_SOLVER)
+            self._fallback(STATUS_GAGAL)
             self._catat_c(a, b)
             return self.u
 
-        self.status = STATUS_OK
+        self.status = STATUS_AMAN
         self.feasible = True
-        self.count[STATUS_OK] += 1
-        self.active = abs(u - self.u_pd) > ACTIVE_TOL
+        self.count[STATUS_AMAN] += 1
+        self.active = abs(u - self.u_pd) > config.CBF_TOL_AKTIF
         self.u = u
         self._catat_c(a, b)
         return u
@@ -426,22 +469,24 @@ class CBFQP:
 
 if __name__ == "__main__":
     np.set_printoptions(precision=4, suppress=True)
-    for nama in cari_nama_alpha():
+    for nama in config.NAMA_ALPHA:
         if getattr(config, nama) <= 0.0:
             print("%s di config.py masih 0; uji ini memakai nilai sementara 20." % nama)
             setattr(config, nama, 20.0)
     cbf = CBFQP()
-    print("jumlah constraint (DAFTAR_C):", cbf.NH, "| Alpha:", cbf.nama_alpha,
-          "| Alpha yang dipakai:", [cbf.nama_alpha[i] for i in cbf.alpha_dipakai])
     rng = np.random.default_rng(0)
-    worst = 0.0
-    for _ in range(2000):
-        x = rng.uniform(-1.0, 1.0, config.NX) * np.array([5.0, config.dtheta_max, config.psi_max, config.dpsi_max])
-        u_pd = rng.uniform(2.0 * config.u_min, 2.0 * config.u_max)
-        u = cbf.compute(x, u_pd)
-        lo, hi = cbf.u_interval
-        if lo <= hi:
-            worst = max(worst, abs(u - min(max(u_pd, lo), hi)))
-    print("jumlah per status:", cbf.count)
-    print(f"selisih maksimum u* acados terhadap solusi eksak (kasus feasible): {worst:.2e} N m")
+    for mode in (MODE_BALANCING, MODE_NAVIGATE):
+        cbf.mode_cbf(mode)
+        print("mode %s | constraint aktif: %d dari %d | Alpha yang dipakai: %s"
+              % (mode, int(cbf.mask.sum()), cbf.NH, [cbf.nama_alpha[i] for i in cbf.alpha_dipakai]))
+        worst = 0.0
+        for _ in range(2000):
+            x = rng.uniform(-1.0, 1.0, config.NX) * np.array([5.0, config.dtheta_max, config.psi_max, config.dpsi_max])
+            u_pd = rng.uniform(2.0 * config.u_min, 2.0 * config.u_max)
+            u = cbf.compute(x, u_pd)
+            lo, hi = cbf.u_interval
+            if lo <= hi:
+                worst = max(worst, abs(u - min(max(u_pd, lo), hi)))
+        print("  jumlah per status:", cbf.count)
+        print(f"  selisih maksimum u* acados terhadap solusi eksak (kasus feasible): {worst:.2e} N m")
     print(f"waktu solve terakhir: {cbf.solve_ms:.3f} ms")

@@ -5,11 +5,12 @@ Jalankan:  python3 atera_main.py --PD   atau   python3 atera_main.py --CBFQP
 
 File ini hanya mengurus simulasinya:
     - dunia (plane.urdf bawaan PyBullet), robot, sensor, motor, dorongan
-    - realisme dari uji hardware (nilai di config.py, bagian 11):
+    - realisme dari uji hardware (nilai di config.py, bagian 11; semua pengaturan simulasi di bagian 12):
         a. torsi roda = arus perintah x MOTOR_KT_EFEKTIF (bukan MOTOR_KT)
         b. torsi baru bekerja SIM_JEDA_TORSI detik setelah perintah dihitung
         c. psi dibaca lewat model MPU6050 (akselerometer + gyro + noise) dan Kalman yang sama dengan robot
     - jendela "ATERA - Kontrol" (Qt): tombol W A S D B N O P + slider / kolom angka parameter (input utama)
+      (B = mode Balancing, N = mode Navigate)
     - keyboard di jendela PyBullet (input cadangan, tombolnya sama)
     - tampilan di jendela PyBullet: teks parameter dan bidang merah safety set
     - jendela plot realtime (hanya bila dijalankan dengan --plot)
@@ -19,7 +20,7 @@ Arah di simulasi:
     DEPAN robot = sumbu +Y dunia.  Sumbu roda = sumbu X.  Atas = sumbu Z.
     Roda kiri (Lwheel_link) ada di sisi -X dunia, roda kanan (Rwheel_link) di sisi +X.
     psi   > 0 : badan miring ke depan (diukur dari garis vertikal)
-    theta > 0 : roda menggelinding ke depan (sudut roda absolut)
+    theta > 0 : roda menggelinding ke depan (sudut roda absolut, definisi di model.hitung_theta)
     u     > 0 : torsi mendorong roda ke depan (torsi SATU roda, kedua roda diberi u yang sama)
 """
 
@@ -33,88 +34,17 @@ import pybullet as p
 import pybullet_data
 
 import config
+import model
+from pd_control import MODE_BALANCING
 
-# =============================================================================
-# Pengaturan khusus simulasi
-# =============================================================================
-SUBSTEP = 5                 # jumlah langkah fisika dalam satu siklus kontrol (config.DT)
-GAYA_DORONG_AWAL = 20.0     # [N] besar gaya dorongan (tombol O / P dan tuning_optuna.py), bisa diubah di jendela Kontrol
-LAMA_DORONG = 0.10          # [s] lama gaya dorongan bekerja
-# Titik dorong: bidang DORONG_SISI x DORONG_SISI di sisi luar bagian ATAS badan.
-#   - tepi atas bidang = permukaan teratas badan (dihitung otomatis dari robot.urdf)
-#   - jarak bidang dari garis tengah badan = JARAK_IMU_KE_SISI_LUAR (sisi luar badan)
-#   - O (ke depan)    : bidang di sisi BELAKANG badan, gaya ke arah depan badan
-#   - P (ke belakang) : bidang di sisi DEPAN badan, gaya ke arah belakang badan
-#   - gaya dibagi rata ke DORONG_TITIK x DORONG_TITIK titik di bidang itu, tegak lurus permukaan badan
-# ASUMSI: bidang berada di tengah lebar badan (DORONG_GESER_SAMPING = 0), sisi depan dan belakang sama.
-DORONG_SISI = 0.040         # [m] 40 mm x 40 mm
-DORONG_TITIK = 5            # titik per sisi (5 x 5 = 25 titik)
-DORONG_GESER_SAMPING = 0.0  # [m] geser bidang searah poros roda (+ = ke arah roda kiri)
-DORONG_WARNA = [0.10, 0.75, 0.25, 0.30]
-DORONG_WARNA_AKTIF = [0.10, 0.75, 0.25, 0.90]
-GESEKAN_RODA = 1.0          # koefisien gesek roda dengan lantai
-GESEKAN_PUTAR = 0.003       # gesekan roda saat robot berputar di tempat (yaw), supaya belok berhenti saat dilepas
-PSI_AWAL_DEG = 0.0          # [deg] kemiringan badan saat robot diletakkan
 
-# Kamera
-KAMERA_JARAK = 0.9          # [m]
-KAMERA_YAW = 60.0           # [deg]
-KAMERA_PITCH = -15.0        # [deg]
-KAMERA_BATAS_GESER = 0.25   # [m] kamera baru digeser bila robot sudah sejauh ini dari titik tengah layar
-
-# Bidang merah safety set (batas psi)
-# Bentuk | | : dua bidang (persegi panjang) TEGAK di depan dan di belakang robot, ikut berpindah bersama robot.
-# Letaknya dipilih supaya sisi terluar badan di ketinggian IMU tepat menyentuh bidang saat psi = +-psi_max:
-#     jarak mendatar dari poros = L_IMU*sin(psi_max) + JARAK_IMU_KE_SISI_LUAR*cos(psi_max)
-# ASUMSI: jarak IMU ke sisi terluar badan sama untuk sisi depan dan sisi belakang.
-JARAK_IMU_KE_SISI_LUAR = 0.044199   # [m] diukur di Fusion 360
-BIDANG_LEBAR = 0.36         # [m] searah poros roda
-BIDANG_TINGGI = 0.42        # [m] dari lantai ke atas
-BIDANG_WARNA = [1.0, 0.0, 0.0, 0.22]
-BIDANG_WARNA_LANGGAR = [1.0, 0.0, 0.0, 0.60]       # lebih gelap saat psi melewati batas
-
-# Kotak biru safety set jarak tempuh s (s_min <= s <= s_max, s = R*theta dihitung dari posisi awal).
-# Panjang kotak searah lintasan = s_max - s_min (mengikuti config.py), lebar dan tinggi di bawah.
-# Kotak diam di dunia (tidak ikut robot), diletakkan di posisi awal robot, mengikuti kemiringan lantai.
-KUBUS_LEBAR = 1.0           # [m] searah poros roda
-KUBUS_TINGGI = 1.0          # [m] tegak lurus lantai
-KUBUS_WARNA = [0.10, 0.40, 1.0, 0.20]
-KUBUS_WARNA_LANGGAR = [0.10, 0.40, 1.0, 0.45]      # lebih gelap saat s melewati batas
-
-# Garis safety set di plot realtime (sama dengan ise.py)
-PLOT_SAFETY_WARNA = "red"
-PLOT_SAFETY_TEBAL = 2.2
-
-# Warna teks di jendela PyBullet
-WARNA_BIASA = [0.0, 0.0, 0.0]
-WARNA_PERINGATAN = [0.85, 0.30, 0.0]
-JARAK_TEKS = 0.10           # [m] jarak bidang teks dari kamera (dekat kamera supaya tidak tertutup lantai / robot)
-JARAK_BARIS = 0.055         # jarak antar baris teks parameter (1.0 = setengah tinggi layar)
-BARIS_PER_TAMPIL = 1        # jumlah baris parameter yang ditulis ulang tiap tampilkan() dipanggil.
-                            # Satu kali menulis teks di PyBullet memakan waktu sekitar satu frame layar,
-                            # jadi baris ditulis bergiliran supaya simulasi tidak melambat.
-JUMLAH_BARIS_MAKS = 8
-
-# Plot realtime (jendela matplotlib, hanya dengan --plot)
-PLOT_RENTANG = 10.0         # [s] lebar jendela waktu yang ditampilkan
-PLOT_SETIAP = 2             # plot digambar ulang tiap sekian kali tampilkan() dipanggil
-PLOT_BACKEND = ["QtAgg", "Qt5Agg", "TkAgg"]
-
-# Warna tombol di jendela Kontrol (Qt)
-WARNA_QT_TEKAN = "#1d9e5a"       # tombol sedang ditekan
-WARNA_QT_MODE = "#544bb8"        # mode yang sedang aktif
-WARNA_QT_ABAI = "#9a9a9a"        # tulisan tombol yang sedang diabaikan
-WARNA_QT_UJI = "#c26a00"         # mode pengujian aktif
-
-# Parameter di jendela Kontrol: (nama, batas bawah slider, batas atas slider, langkah slider, jumlah desimal)
-# Kolom angka boleh diisi di luar batas slider; batas slider akan ikut melebar.
 class KalmanIMU:
     """Salinan persis atera_program/kalman.py (KalmanAngle). Satuan derajat, sama seperti robot nyata."""
 
     def __init__(self):
-        self.QAngle = 0.001
-        self.QBias = 0.003
-        self.RMeasure = 0.03
+        self.QAngle = config.KALMAN_Q_ANGLE
+        self.QBias = config.KALMAN_Q_BIAS
+        self.RMeasure = config.KALMAN_R_MEASURE
         self.angle = 0.0
         self.bias = 0.0
         self.rate = 0.0
@@ -149,36 +79,17 @@ class KalmanIMU:
         return self.angle
 
 
-def cari_nama_alpha():
-    """Nama Alpha di config.py: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada)."""
-    hasil = []
-    nomor = 1
-    while hasattr(config, "Alpha_%d" % nomor):
-        hasil.append("Alpha_%d" % nomor)
-        nomor = nomor + 1
-    return hasil
-
-
-NAMA_ALPHA = cari_nama_alpha()          # semua Alpha di config.py -> otomatis dapat slider
-DAFTAR_PARAMS = [
-    ("Kp_psi", 0.0, 60.0, 0.1, 2),
-    ("Kd_psi", 0.0, 10.0, 0.01, 3),
-    ("Kp_theta", 0.0, 0.5, 0.001, 4),
-    ("Kd_theta", 0.0, 0.5, 0.001, 4),
-    ("Kvel", -0.5, 0.5, 0.001, 4),
-]
-for _nama in NAMA_ALPHA:
-    DAFTAR_PARAMS.append((_nama, 0.0, 100.0, 0.1, 2))
-DAFTAR_PARAMS.append(("Gaya_dorong", 0.0, 40.0, 0.1, 2))
-DAFTAR_PARAMS.append(("zeta_DEG", -15.0, 15.0, 0.5, 1))     # kemiringan lantai [deg], + = menanjak ke depan
+NAMA_ALPHA = config.NAMA_ALPHA          # semua Alpha di config.py -> otomatis dapat slider
 NAMA_GAIN = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"] + NAMA_ALPHA
 
+# Parameter di jendela Kontrol: (nama, batas bawah slider, batas atas slider, langkah slider, jumlah desimal)
+# Isinya dari config.SLIDER dan config.SLIDER_ALPHA.
+DAFTAR_PARAMS = []
+for _nama in NAMA_GAIN + ["Gaya_dorong", "zeta_DEG"]:
+    DAFTAR_PARAMS.append((_nama,) + config.SLIDER.get(_nama, config.SLIDER_ALPHA))
+
 FOLDER_INI = os.path.dirname(os.path.abspath(__file__))
-PILIHAN_URDF = [
-    os.path.join(FOLDER_INI, "urdf", "robot.urdf"),
-    os.path.join(FOLDER_INI, "urdf", "urdf", "robot.urdf"),
-    os.path.join(FOLDER_INI, "..", "urdf", "urdf", "robot.urdf"),
-]
+PILIHAN_URDF = [os.path.join(FOLDER_INI, path) for path in config.URDF_PILIHAN]
 
 
 def cari_urdf():
@@ -219,11 +130,11 @@ def quaternion_dari_matriks(m):
 
 
 def nilai_awal_params():
-    """Nilai awal tiap parameter: gain dari config.py, gaya dorong dari GAYA_DORONG_AWAL."""
+    """Nilai awal tiap parameter: gain dari config.py, gaya dorong dari config.GAYA_DORONG_AWAL."""
     nilai = {}
     for nama, _, _, _, _ in DAFTAR_PARAMS:
         if nama == "Gaya_dorong":
-            nilai[nama] = float(GAYA_DORONG_AWAL)
+            nilai[nama] = float(config.GAYA_DORONG_AWAL)
         else:
             nilai[nama] = float(getattr(config, nama))
     return nilai
@@ -247,7 +158,7 @@ def cetak_nilai(nilai, awal):
     for nama, _, _, _, _ in DAFTAR_PARAMS:
         teks = "%s = %s" % (nama, tulis_angka(nama, nilai[nama]))
         if nama == "Gaya_dorong":
-            teks = "# %s N (GAYA_DORONG_AWAL di simulasi.py)" % teks
+            teks = "# %s N (GAYA_DORONG_AWAL di config.py)" % teks
         if abs(nilai[nama] - awal[nama]) > 1e-9:
             teks = "%-28s # berubah, sebelumnya %s" % (teks, tulis_angka(nama, awal[nama]))
         print(teks, flush=True)
@@ -409,7 +320,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         Gambar 2 : sumbu X = theta, sumbu Y = dtheta
         Gambar 3 : sumbu X = s = R*theta, sumbu Y = 0
         bawah    : arus tiap motor terhadap waktu
-    Yang digambar hanya data PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang."""
+    Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang."""
     os.environ["QT_QPA_PLATFORM"] = platform
     try:
         import numpy as np
@@ -463,15 +374,15 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 
         # Arus terhadap waktu (hanya 2 batas, garis tebal menyambung)
         garis_arus, = ax_arus.plot([], [], color="tab:green")
-        ax_arus.axhline(config.MAX_CURRENT_A, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
-        ax_arus.axhline(config.MIN_CURRENT_A, color=PLOT_SAFETY_WARNA, linewidth=PLOT_SAFETY_TEBAL)
+        ax_arus.axhline(config.MAX_CURRENT_A, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL)
+        ax_arus.axhline(config.MIN_CURRENT_A, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL)
         ax_arus.set_ylim(1.2 * config.MIN_CURRENT_A, 1.2 * config.MAX_CURRENT_A)
         ax_arus.set_ylabel("arus per motor [A]")
         ax_arus.set_xlabel("waktu [s]")
 
         for ax in (gambar1, gambar2, ax_arus):
             ax.grid(True, alpha=0.4)
-        fig.suptitle("data %.0f s terakhir" % PLOT_RENTANG, fontsize=9, color="gray")
+        fig.suptitle("data %.0f s terakhir" % config.PLOT_RENTANG, fontsize=9, color="gray")
         fig.tight_layout()
         fig.show()
         jawaban.put(("siap", ""))
@@ -498,7 +409,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     break
                 for isi in kiriman:
                     if isi[0] == "RESET":
-                        # Robot diletakkan ulang (R, jatuh lalu R, atau zeta diubah): plot mulai dari awal.
+                        # Robot diletakkan ulang (R, KOMET lalu R, atau zeta diubah): plot mulai dari awal.
                         data_t = []
                         data_psi = []
                         data_dpsi = []
@@ -517,10 +428,10 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
             if ada_baru and len(data_t) == 0:
                 for garis in (garis_psi, garis_theta, garis_s, garis_arus, titik_psi, titik_theta, titik_s):
                     garis.set_data([], [])
-                ax_arus.set_xlim(0.0, PLOT_RENTANG)
+                ax_arus.set_xlim(0.0, config.PLOT_RENTANG)
                 fig.canvas.draw_idle()
             if ada_baru and len(data_t) > 0:
-                while len(data_t) > 0 and data_t[0] < data_t[-1] - PLOT_RENTANG:
+                while len(data_t) > 0 and data_t[0] < data_t[-1] - config.PLOT_RENTANG:
                     data_t.pop(0)
                     data_psi.pop(0)
                     data_dpsi.pop(0)
@@ -562,7 +473,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     bawah = config.R * (bawah - 0.1 * lebar)
                     atas = config.R * (atas + 0.1 * lebar)
                     gambar3.set_xlim(bawah, atas)
-                ax_arus.set_xlim(max(0.0, data_t[-1] - PLOT_RENTANG), max(PLOT_RENTANG, data_t[-1]))
+                ax_arus.set_xlim(max(0.0, data_t[-1] - config.PLOT_RENTANG), max(config.PLOT_RENTANG, data_t[-1]))
                 fig.canvas.draw_idle()
             fig.canvas.flush_events()
             time.sleep(0.05)
@@ -602,7 +513,7 @@ class JendelaKontrol:
             self.tahan_mouse[huruf] = False
         self.tahan_terkirim = None
         self.status = {"judul": "", "mode_balancing": True, "tahan": {}, "dorong": "dorong: -", "arah_dorong": 0,
-                       "jatuh": False, "mode_pengujian": False, "pengujian": ""}
+                       "komet": False, "mode_pengujian": False, "pengujian": ""}
 
         self.root = None               # jendela Qt; None bila gagal dibuat atau sudah ditutup
         self.pesan = ""
@@ -636,7 +547,7 @@ class JendelaKontrol:
         letak = {"w": (0, 1), "a": (1, 0), "s": (1, 1), "d": (1, 2),
                  "b": (0, 4), "n": (0, 5), "o": (1, 4), "p": (1, 5), "q": (0, 7), "r": (1, 7), "e": (0, 8), "t": (1, 8)}
         keterangan = {"w": "W\nmaju", "a": "A\nkiri", "s": "S\nmundur", "d": "D\nkanan",
-                      "b": "B\nBalancing", "n": "N\nJalan", "o": "O\ndorong depan", "p": "P\ndorong belakang",
+                      "b": "B\nBalancing", "n": "N\nNavigate", "o": "O\ndorong depan", "p": "P\ndorong belakang",
                       "q": "Q\nkeluar + simpan", "r": "R\nreset robot", "e": "E\nsimpan data",
                       "t": "T\nmode pengujian"}
         for huruf in ("w", "a", "s", "d", "b", "n", "o", "p", "q", "r", "e", "t"):
@@ -836,29 +747,29 @@ class JendelaKontrol:
 
         for huruf in ("w", "a", "s", "d"):
             if mode_balancing:
-                self.tombol[huruf].setStyleSheet(self.gaya_tombol("#dddddd" if tahan[huruf] else "", WARNA_QT_ABAI))
+                self.tombol[huruf].setStyleSheet(self.gaya_tombol("#dddddd" if tahan[huruf] else "", config.WARNA_QT_ABAI))
             elif tahan[huruf]:
-                self.tombol[huruf].setStyleSheet(self.gaya_tombol(WARNA_QT_TEKAN, "white"))
+                self.tombol[huruf].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white"))
             else:
                 self.tombol[huruf].setStyleSheet("")
-        self.tombol["b"].setStyleSheet(self.gaya_tombol(WARNA_QT_MODE, "white") if mode_balancing else "")
-        self.tombol["n"].setStyleSheet("" if mode_balancing else self.gaya_tombol(WARNA_QT_MODE, "white"))
+        self.tombol["b"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_MODE, "white") if mode_balancing else "")
+        self.tombol["n"].setStyleSheet("" if mode_balancing else self.gaya_tombol(config.WARNA_QT_MODE, "white"))
         menyala_o = tahan["o"] or status["arah_dorong"] > 0
         menyala_p = tahan["p"] or status["arah_dorong"] < 0
-        self.tombol["o"].setStyleSheet(self.gaya_tombol(WARNA_QT_TEKAN, "white") if menyala_o else "")
-        self.tombol["p"].setStyleSheet(self.gaya_tombol(WARNA_QT_TEKAN, "white") if menyala_p else "")
+        self.tombol["o"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white") if menyala_o else "")
+        self.tombol["p"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white") if menyala_p else "")
 
-        self.tombol["t"].setStyleSheet(self.gaya_tombol(WARNA_QT_UJI, "white")
+        self.tombol["t"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_UJI, "white")
                                        if status.get("mode_pengujian", False) else "")
-        if status.get("jatuh", False):
-            self.label_mode.setText("ROBOT JATUH, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
+        if status.get("komet", False):
+            self.label_mode.setText("KOMET, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
             self.label_mode.setStyleSheet("font-weight: bold; color: #b3261e")
         elif status.get("mode_pengujian", False):
             self.label_mode.setText(status.get("pengujian", "MODE PENGUJIAN"))
-            self.label_mode.setStyleSheet("font-weight: bold; color: %s" % WARNA_QT_UJI)
+            self.label_mode.setStyleSheet("font-weight: bold; color: %s" % config.WARNA_QT_UJI)
         else:
             self.label_mode.setText("Mode kontrol: %s   |   %s" % (status["judul"],
-                                    "Mode Balancing" if mode_balancing else "Mode Jalan"))
+                                    "Mode Balancing" if mode_balancing else "Mode Navigate"))
             self.label_mode.setStyleSheet("font-weight: bold")
         if mode_balancing:
             ada = tahan["w"] or tahan["a"] or tahan["s"] or tahan["d"]
@@ -875,7 +786,7 @@ class JendelaKontrol:
                 gerak.append("kanan")
             self.label_gerak.setText("gerak: " + (" + ".join(gerak) if len(gerak) > 0 else "diam"))
         self.label_dorong.setText("%s   (%.1f N x %.2f s)" % (status["dorong"], self.nilai["Gaya_dorong"],
-                                                              LAMA_DORONG))
+                                                              config.LAMA_DORONG))
 
     # ------------------------------------------------ parameter
     def format(self, nama, nilai):
@@ -971,7 +882,7 @@ class JendelaKontrol:
 class Simulasi:
     def __init__(self, gui=True, plot=False, judul=""):
         self.gui = gui
-        self.dt_fisika = config.DT / SUBSTEP
+        self.dt_fisika = config.DT / config.SUBSTEP
         self.zeta = config.zeta
         self.judul = judul
 
@@ -990,7 +901,7 @@ class Simulasi:
         p.setAdditionalSearchPath(pybullet_data.getDataPath())
         self.lantai = p.loadURDF("plane.urdf", basePosition=[0.0, 0.0, 0.0],
                                  baseOrientation=p.getQuaternionFromEuler([self.zeta, 0.0, 0.0]))
-        p.changeDynamics(self.lantai, -1, lateralFriction=GESEKAN_RODA)
+        p.changeDynamics(self.lantai, -1, lateralFriction=config.GESEKAN_RODA)
 
         # Robot
         self.path_urdf = cari_urdf()
@@ -1038,12 +949,12 @@ class Simulasi:
         for link in (-1, self.joint_kiri, self.joint_kanan):
             p.changeDynamics(self.robot, link, linearDamping=0.0, angularDamping=0.0, jointDamping=0.0)
         for joint in (self.joint_kiri, self.joint_kanan):
-            p.changeDynamics(self.robot, joint, lateralFriction=GESEKAN_RODA, spinningFriction=GESEKAN_PUTAR)
+            p.changeDynamics(self.robot, joint, lateralFriction=config.GESEKAN_RODA, spinningFriction=config.GESEKAN_PUTAR)
             # Matikan motor bawaan PyBullet supaya roda hanya digerakkan torsi kita.
             p.setJointMotorControl2(self.robot, joint, p.VELOCITY_CONTROL, force=0.0)
 
         # Dorongan
-        self.gaya_dorong = float(GAYA_DORONG_AWAL)
+        self.gaya_dorong = float(config.GAYA_DORONG_AWAL)
         self.sisa_dorong = 0.0
         self.arah_dorong = 0
 
@@ -1057,8 +968,8 @@ class Simulasi:
         self.isi_teks = {}
         self.hitung_tampil = 0
         self.jangkar = None
-        self.setengah_lebar = JARAK_TEKS
-        self.setengah_tinggi = JARAK_TEKS
+        self.setengah_lebar = config.JARAK_TEKS
+        self.setengah_tinggi = config.JARAK_TEKS
         self.giliran_baris = 0
         self.bidang_depan = None
         self.bidang_belakang = None
@@ -1087,7 +998,6 @@ class Simulasi:
         self.dpsi_imu = 0.0            # [rad/s] dpsi dari gyro
         self.v_imu_lama = np.zeros(3)  # kecepatan titik IMU siklus lalu (untuk percepatan)
         self.acak = np.random.default_rng()
-        self.x_benar = np.zeros(4)     # state sebenarnya (tanpa kesalahan sensor), untuk gambar di PyBullet
 
         self.reset()
 
@@ -1096,7 +1006,7 @@ class Simulasi:
         posisi_link, rot = self.pose_badan()
         poros = posisi_link + rot @ self.poros_badan
         self.tinggi_atas = atas_aabb[2] - poros[2]
-        self.tinggi_dorong = self.tinggi_atas - 0.5 * DORONG_SISI
+        self.tinggi_dorong = self.tinggi_atas - 0.5 * config.DORONG_SISI
         self.bidang_dorong_visual = {}
         self.dorong_menyala = {1: None, -1: None}
 
@@ -1106,11 +1016,11 @@ class Simulasi:
                      "AKTIF" if config.SIM_MODEL_IMU else "MATI (psi sempurna)"))
             print("Titik dorong O / P: bidang %.0f x %.0f mm, pusatnya %.1f mm di atas poros roda "
                   "(puncak badan %.1f mm), %.1f mm dari garis tengah badan."
-                  % (DORONG_SISI * 1000, DORONG_SISI * 1000, self.tinggi_dorong * 1000, self.tinggi_atas * 1000,
-                     JARAK_IMU_KE_SISI_LUAR * 1000))
+                  % (config.DORONG_SISI * 1000, config.DORONG_SISI * 1000, self.tinggi_dorong * 1000, self.tinggi_atas * 1000,
+                     config.JARAK_IMU_KE_SISI_LUAR * 1000))
             posisi, _ = p.getBasePositionAndOrientation(self.robot)
-            p.resetDebugVisualizerCamera(cameraDistance=KAMERA_JARAK, cameraYaw=KAMERA_YAW,
-                                         cameraPitch=KAMERA_PITCH, cameraTargetPosition=posisi)
+            p.resetDebugVisualizerCamera(cameraDistance=config.KAMERA_JARAK, cameraYaw=config.KAMERA_YAW,
+                                         cameraPitch=config.KAMERA_PITCH, cameraTargetPosition=posisi)
             self.buat_bidang_safety_set()
             self.buat_kubus_jarak()
             self.buat_bidang_dorong()
@@ -1128,7 +1038,7 @@ class Simulasi:
     # ------------------------------------------------------------------ robot
     def reset(self):
         """Letakkan robot tegak di atas lantai dengan roda diam."""
-        psi0 = math.radians(PSI_AWAL_DEG)
+        psi0 = math.radians(config.PSI_AWAL_DEG)
         poros = (config.R + 0.001) * self.normal
         # URDF memakai sumbu y sebagai atas, PyBullet memakai sumbu z -> putar 90 derajat di sumbu x.
         # Lalu diputar 180 derajat di sumbu z supaya depan robot (+Z body_link) menghadap +Y dunia.
@@ -1155,7 +1065,7 @@ class Simulasi:
             self.antrean_torsi.append((0.0, 0.0))
         self.mulai_imu()
 
-        # Sudut roda dinolkan di sini (theta_setpoint = 0 berarti diam di tempat ini).
+        # Titik nol s (dan theta_setpoint = 0) = posisi robot diletakkan.
         self.theta_nol = 0.0
         self.theta_nol = self.baca_state()[0]
 
@@ -1210,7 +1120,7 @@ class Simulasi:
         """State x = [theta, dtheta, psi, dpsi] seperti yang dibaca robot nyata (IMU + encoder).
 
         Dengan config.SIM_MODEL_IMU = True, psi dari Kalman dan dpsi dari gyro (lihat perbarui_imu).
-        State sebenarnya disimpan di self.x_benar.
+        theta dari model.hitung_theta (encoder + psi Kalman), dikurangi theta_nol (titik nol s).
         """
         psi_benar, dpsi_benar = self.baca_psi_benar()
         if config.SIM_MODEL_IMU:
@@ -1226,10 +1136,8 @@ class Simulasi:
         theta_encoder = 0.5 * (self.tanda_kiri * kiri[0] + self.tanda_kanan * kanan[0])
         dtheta_encoder = 0.5 * (self.tanda_kiri * kiri[1] + self.tanda_kanan * kanan[1])
 
-        theta = theta_encoder + psi - self.theta_nol
-        dtheta = dtheta_encoder + dpsi
-        self.x_benar = np.array([theta_encoder + psi_benar - self.theta_nol, dtheta_encoder + dpsi_benar,
-                                 psi_benar, dpsi_benar])
+        theta = model.hitung_theta(theta_encoder, psi) - self.theta_nol
+        dtheta = model.hitung_theta(dtheta_encoder, dpsi)
         self.x_terakhir = np.array([theta, dtheta, psi, dpsi])
         return self.x_terakhir
 
@@ -1287,7 +1195,7 @@ class Simulasi:
         self.dpsi_imu = math.radians(gyro)
 
     def nolkan_theta(self):
-        """Sudut roda dinolkan di posisi sekarang (dipakai saat Mode Balancing mulai)."""
+        """Titik nol s dipindah ke posisi sekarang (dipanggil setiap robot masuk mode Balancing)."""
         self.theta_nol = self.theta_nol + self.baca_state()[0]
         self.putus_garis_plot()
 
@@ -1307,7 +1215,7 @@ class Simulasi:
     def dorong(self, arah):
         """arah = +1 didorong ke depan (O), -1 didorong ke belakang (P)."""
         self.arah_dorong = arah
-        self.sisa_dorong = LAMA_DORONG
+        self.sisa_dorong = config.LAMA_DORONG
 
     def bidang_dorong(self, sisi):
         """Letak bidang dorong. sisi = +1 bidang di sisi depan badan, -1 di sisi belakang.
@@ -1319,21 +1227,21 @@ class Simulasi:
         maju_badan = maju_badan / np.linalg.norm(maju_badan)
         if np.dot(maju_badan, depan) < 0.0:
             maju_badan = -maju_badan
-        pusat = poros + self.tinggi_dorong * atas_badan + sisi * JARAK_IMU_KE_SISI_LUAR * maju_badan \
-            + DORONG_GESER_SAMPING * sumbu_roda
+        pusat = poros + self.tinggi_dorong * atas_badan + sisi * config.JARAK_IMU_KE_SISI_LUAR * maju_badan \
+            + config.DORONG_GESER_SAMPING * sumbu_roda
         return pusat, sumbu_roda, atas_badan, maju_badan
 
     def beri_gaya_dorong(self):
-        """Gaya dorong dibagi rata ke DORONG_TITIK x DORONG_TITIK titik di bidang 40 x 40 mm."""
+        """Gaya dorong dibagi rata ke config.DORONG_TITIK x config.DORONG_TITIK titik di bidang 40 x 40 mm."""
         sisi = -self.arah_dorong               # dorong ke depan = kena sisi belakang badan
         pusat, sumbu_roda, atas_badan, maju_badan = self.bidang_dorong(sisi)
-        jumlah = DORONG_TITIK * DORONG_TITIK
+        jumlah = config.DORONG_TITIK * config.DORONG_TITIK
         gaya_titik = (self.arah_dorong * self.gaya_dorong / jumlah) * maju_badan
-        for i in range(DORONG_TITIK):
-            for j in range(DORONG_TITIK):
-                if DORONG_TITIK > 1:
-                    geser_a = (i / (DORONG_TITIK - 1) - 0.5) * DORONG_SISI
-                    geser_b = (j / (DORONG_TITIK - 1) - 0.5) * DORONG_SISI
+        for i in range(config.DORONG_TITIK):
+            for j in range(config.DORONG_TITIK):
+                if config.DORONG_TITIK > 1:
+                    geser_a = (i / (config.DORONG_TITIK - 1) - 0.5) * config.DORONG_SISI
+                    geser_b = (j / (config.DORONG_TITIK - 1) - 0.5) * config.DORONG_SISI
                 else:
                     geser_a = 0.0
                     geser_b = 0.0
@@ -1356,7 +1264,7 @@ class Simulasi:
         torsi_kiri = self.skala_torsi * u_kiri
         torsi_kanan = self.skala_torsi * u_kanan
 
-        for _ in range(SUBSTEP):
+        for _ in range(config.SUBSTEP):
             # (b) Torsi baru bekerja jeda_substep langkah fisika (SIM_JEDA_TORSI detik) setelah diperintah.
             self.antrean_torsi.append((torsi_kiri, torsi_kanan))
             kiri_bekerja, kanan_bekerja = self.antrean_torsi.pop(0)
@@ -1441,9 +1349,9 @@ class Simulasi:
     def buat_bidang_dorong(self):
         """Dua kotak hijau 40 x 40 mm di sisi depan dan belakang puncak badan (titik dorong O / P).
         Hanya gambar, tanpa collision. Menyala terang saat dorongan bekerja."""
-        setengah = [DORONG_SISI / 2.0, 0.0015, DORONG_SISI / 2.0]
+        setengah = [config.DORONG_SISI / 2.0, 0.0015, config.DORONG_SISI / 2.0]
         for sisi in (1, -1):
-            bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=DORONG_WARNA)
+            bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=config.DORONG_WARNA)
             self.bidang_dorong_visual[sisi] = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1,
                                                                  baseVisualShapeIndex=bentuk,
                                                                  basePosition=[0.0, 0.0, -5.0])
@@ -1464,16 +1372,16 @@ class Simulasi:
             menyala = self.sisa_dorong > 0.0 and sisi == -self.arah_dorong
             if menyala != self.dorong_menyala[sisi]:
                 self.dorong_menyala[sisi] = menyala
-                p.changeVisualShape(bidang, -1, rgbaColor=DORONG_WARNA_AKTIF if menyala else DORONG_WARNA)
+                p.changeVisualShape(bidang, -1, rgbaColor=config.DORONG_WARNA_AKTIF if menyala else config.DORONG_WARNA)
 
     # ------------------------------------------------- bidang merah safety set
     def buat_bidang_safety_set(self):
-        """Dua bidang merah transparan berbentuk | | di depan dan di belakang robot (lihat JARAK_IMU_KE_SISI_LUAR).
+        """Dua bidang merah transparan berbentuk | | di depan dan di belakang robot (lihat config.JARAK_IMU_KE_SISI_LUAR).
         Hanya gambar (tanpa collision), jadi tidak memengaruhi fisika."""
-        setengah = [BIDANG_LEBAR / 2.0, 0.001, BIDANG_TINGGI / 2.0]
+        setengah = [config.BIDANG_LEBAR / 2.0, 0.001, config.BIDANG_TINGGI / 2.0]
         hasil = []
         for _ in range(2):
-            bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=BIDANG_WARNA)
+            bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=config.BIDANG_WARNA)
             hasil.append(p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1, baseVisualShapeIndex=bentuk,
                                            basePosition=[0.0, 0.0, -5.0]))
         self.bidang_depan = hasil[0]
@@ -1490,20 +1398,20 @@ class Simulasi:
         sumbu_datar = np.cross(depan, atas)                 # arah poros roda, mendatar
         matriks = np.column_stack([sumbu_datar, depan, atas])
         orientasi = quaternion_dari_matriks(matriks)
-        psi = self.x_benar[2]             # dunia PyBullet: sudut badan sebenarnya
+        psi = self.x_terakhir[2]          # psi hasil Kalman, sama dengan yang dibaca kontrol
 
         # Jarak mendatar bidang dari poros roda
-        jarak = config.L_IMU * math.sin(config.psi_max) + JARAK_IMU_KE_SISI_LUAR * math.cos(config.psi_max)
+        jarak = config.L_IMU * math.sin(config.psi_max) + config.JARAK_IMU_KE_SISI_LUAR * math.cos(config.psi_max)
 
         for nama, bidang, tanda in (("depan", self.bidang_depan, 1.0), ("belakang", self.bidang_belakang, -1.0)):
             pusat = poros + tanda * jarak * depan
-            pusat[2] = self.tinggi_lantai(pusat) + 0.5 * BIDANG_TINGGI      # bidang berdiri di lantai
+            pusat[2] = self.tinggi_lantai(pusat) + 0.5 * config.BIDANG_TINGGI      # bidang berdiri di lantai
             p.resetBasePositionAndOrientation(bidang, pusat.tolist(), orientasi)
 
             langgar = psi > config.psi_max if nama == "depan" else psi < config.psi_min
             if langgar != self.bidang_langgar[nama]:
                 self.bidang_langgar[nama] = langgar
-                p.changeVisualShape(bidang, -1, rgbaColor=BIDANG_WARNA_LANGGAR if langgar else BIDANG_WARNA)
+                p.changeVisualShape(bidang, -1, rgbaColor=config.BIDANG_WARNA_LANGGAR if langgar else config.BIDANG_WARNA)
 
     # ----------------------------------------------- kotak biru safety set jarak s
     def buat_kubus_jarak(self):
@@ -1513,8 +1421,8 @@ class Simulasi:
             print("Kotak jarak tidak digambar: s_max / s_min belum ada di config.py.")
             return
         panjang = config.s_max - config.s_min
-        setengah = [KUBUS_LEBAR / 2.0, panjang / 2.0, KUBUS_TINGGI / 2.0]
-        bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=KUBUS_WARNA)
+        setengah = [config.KUBUS_LEBAR / 2.0, panjang / 2.0, config.KUBUS_TINGGI / 2.0]
+        bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=config.KUBUS_WARNA)
         self.kubus_jarak = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1, baseVisualShapeIndex=bentuk,
                                              basePosition=[0.0, 0.0, -5.0])
         self.atur_kubus_jarak()
@@ -1525,7 +1433,7 @@ class Simulasi:
             return
         arah_lintasan = np.array([0.0, math.cos(self.zeta), math.sin(self.zeta)])   # +Y dunia, sepanjang lantai
         tengah_s = 0.5 * (config.s_max + config.s_min)
-        pusat = tengah_s * arah_lintasan + 0.5 * KUBUS_TINGGI * self.normal
+        pusat = tengah_s * arah_lintasan + 0.5 * config.KUBUS_TINGGI * self.normal
         p.resetBasePositionAndOrientation(self.kubus_jarak, pusat.tolist(),
                                           p.getQuaternionFromEuler([self.zeta, 0.0, 0.0]))
 
@@ -1533,11 +1441,11 @@ class Simulasi:
         """Kotak lebih gelap bila s = R*theta di luar batas."""
         if self.kubus_jarak is None:
             return
-        jarak = config.R * self.x_benar[0]
+        jarak = model.hitung_s(self.x_terakhir)
         langgar = jarak > config.s_max or jarak < config.s_min
         if langgar != self.kubus_langgar:
             self.kubus_langgar = langgar
-            p.changeVisualShape(self.kubus_jarak, -1, rgbaColor=KUBUS_WARNA_LANGGAR if langgar else KUBUS_WARNA)
+            p.changeVisualShape(self.kubus_jarak, -1, rgbaColor=config.KUBUS_WARNA_LANGGAR if langgar else config.KUBUS_WARNA)
 
     # ------------------------------------------------- teks di jendela PyBullet
     # PyBullet hanya bisa menulis teks di ruang 3D. Supaya teks tetap di tempat yang sama di layar,
@@ -1559,13 +1467,13 @@ class Simulasi:
         ke_atas = ke_atas / np.linalg.norm(ke_atas)
 
         mata = np.array(tengah) - kamera[10] * maju
-        pusat = mata + JARAK_TEKS * maju
+        pusat = mata + config.JARAK_TEKS * maju
         matriks = np.column_stack([ke_kanan, ke_atas, -maju])
         p.resetBasePositionAndOrientation(self.jangkar, pusat.tolist(), quaternion_dari_matriks(matriks))
 
-        # Setengah lebar dan tinggi layar pada jarak JARAK_TEKS dari kamera.
-        self.setengah_lebar = JARAK_TEKS / proyeksi[0]
-        self.setengah_tinggi = JARAK_TEKS / proyeksi[5]
+        # Setengah lebar dan tinggi layar pada jarak config.JARAK_TEKS dari kamera.
+        self.setengah_lebar = config.JARAK_TEKS / proyeksi[0]
+        self.setengah_tinggi = config.JARAK_TEKS / proyeksi[5]
 
     def tulis(self, kunci, teks, sx, sy, warna, ukuran=1.2):
         """Tulis / perbarui satu teks di posisi layar (sx, sy): -1 kiri/bawah sampai +1 kanan/atas.
@@ -1587,23 +1495,23 @@ class Simulasi:
 
     def gambar_teks(self, baris):
         """Blok parameter di kiri atas jendela PyBullet. (Visual tombol ada di jendela Kontrol.)"""
-        # Blok parameter. Baris yang isinya berubah ditulis bergiliran, BARIS_PER_TAMPIL baris tiap panggilan.
-        isi_baris = list(baris[:JUMLAH_BARIS_MAKS])
-        while len(isi_baris) < JUMLAH_BARIS_MAKS:
+        # Blok parameter. Baris yang isinya berubah ditulis bergiliran, config.BARIS_PER_TAMPIL baris tiap panggilan.
+        isi_baris = list(baris[:config.JUMLAH_BARIS_MAKS])
+        while len(isi_baris) < config.JUMLAH_BARIS_MAKS:
             isi_baris.append(" ")
         ditulis = 0
-        for _ in range(JUMLAH_BARIS_MAKS):
+        for _ in range(config.JUMLAH_BARIS_MAKS):
             i = self.giliran_baris
-            self.giliran_baris = (self.giliran_baris + 1) % JUMLAH_BARIS_MAKS
+            self.giliran_baris = (self.giliran_baris + 1) % config.JUMLAH_BARIS_MAKS
             if isi_baris[i] == " " and ("baris%d" % i) not in self.id_teks:
                 continue                # baris kosong yang belum pernah dipakai
-            if isi_baris[i].startswith(("TUNING", "ROBOT JATUH", "MODE PENGUJIAN")):
-                warna = WARNA_PERINGATAN
+            if isi_baris[i].startswith(("TUNING", "KOMET", "MODE PENGUJIAN")):
+                warna = config.WARNA_PERINGATAN
             else:
-                warna = WARNA_BIASA
-            if self.tulis("baris%d" % i, isi_baris[i], -0.96, 0.90 - JARAK_BARIS * i, warna):
+                warna = config.WARNA_BIASA
+            if self.tulis("baris%d" % i, isi_baris[i], -0.96, 0.90 - config.JARAK_BARIS * i, warna):
                 ditulis = ditulis + 1
-                if ditulis >= BARIS_PER_TAMPIL:
+                if ditulis >= config.BARIS_PER_TAMPIL:
                     break
 
     # ------------------------------------------------------------------- plot
@@ -1622,7 +1530,7 @@ class Simulasi:
             self.plot_berhenti = konteks.Event()
             self.plot = konteks.Process(target=proses_plot,
                                         args=(self.plot_antrean, jawaban, self.plot_berhenti, self.judul,
-                                              PLOT_BACKEND, platform),
+                                              config.PLOT_BACKEND, platform),
                                         daemon=True)
             self.plot.start()
             jenis, isi = tunggu_jawaban(self.plot, jawaban, 30.0)
@@ -1647,12 +1555,12 @@ class Simulasi:
         self.plot_kiriman = []
 
     # ---------------------------------------------------------------- tampilan
-    def tampilkan(self, baris, mode_balancing, jatuh=False, pengujian=""):
+    def tampilkan(self, baris, mode_gerak, komet=False, pengujian=""):
         """Perbarui semua tampilan. Dipanggil dari atera_main.py beberapa kali per detik.
 
         baris          : daftar teks parameter (ditulis di kiri atas jendela PyBullet)
-        mode_balancing : True = Mode Balancing, False = Mode Jalan
-        jatuh          : True = robot jatuh, motor dimatikan (ditampilkan di jendela Kontrol)
+        mode_gerak     : MODE_BALANCING atau MODE_NAVIGATE
+        komet          : True = KOMET, motor dimatikan (ditampilkan di jendela Kontrol)
         pengujian      : teks status mode pengujian ("" = tidak dalam mode pengujian)
         """
         if not self.gui:
@@ -1664,7 +1572,7 @@ class Simulasi:
         posisi, _ = p.getBasePositionAndOrientation(self.robot)
         kamera = p.getDebugVisualizerCamera()
         tengah = kamera[11]
-        if np.linalg.norm(np.array(posisi) - np.array(tengah)) > KAMERA_BATAS_GESER:
+        if np.linalg.norm(np.array(posisi) - np.array(tengah)) > config.KAMERA_BATAS_GESER:
             tengah = posisi
             p.resetDebugVisualizerCamera(cameraDistance=kamera[10], cameraYaw=kamera[8], cameraPitch=kamera[9],
                                          cameraTargetPosition=tengah)
@@ -1684,11 +1592,11 @@ class Simulasi:
             else:
                 teks_dorong = "dorong: -"
                 arah_dorong = 0
-            self.kontrol.kirim_status({"judul": self.judul, "mode_balancing": bool(mode_balancing),
+            self.kontrol.kirim_status({"judul": self.judul, "mode_balancing": mode_gerak == MODE_BALANCING,
                                        "tahan": dict(self.ditahan), "dorong": teks_dorong,
-                                       "arah_dorong": arah_dorong, "jatuh": bool(jatuh),
+                                       "arah_dorong": arah_dorong, "komet": bool(komet),
                                        "mode_pengujian": pengujian != "", "pengujian": pengujian})
-        if self.hitung_tampil % PLOT_SETIAP == 0:
+        if self.hitung_tampil % config.PLOT_SETIAP == 0:
             self.gambar_plot()
 
     def masih_terbuka(self):

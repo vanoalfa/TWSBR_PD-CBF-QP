@@ -10,10 +10,13 @@ Rumus:
     state x = [theta, dtheta, psi, dpsi]
 
 Mode Balancing (Tombol B) : Kp_theta dipakai, D-Pad tidak dipakai (arah = 0).
-Mode Jalan (Tombol A)     : Kp_theta = 0, arah dari D-Pad (-1 mundur, 0 lepas, +1 maju).
+Mode Navigate  (Tombol A) : Kp_theta = 0, arah dari D-Pad (-1 mundur, 0 lepas, +1 maju).
 """
 
 import config
+
+MODE_BALANCING = "BALANCING"       # pengenal mode gerak (dipakai juga oleh cbf_qp.py dan atera_main.py)
+MODE_NAVIGATE = "NAVIGATE"
 
 
 class PDControl:
@@ -33,7 +36,7 @@ class PDControl:
         self.dpsi_setpoint = float(config.dpsi_setpoint)
 
         # Perintah dari joystick
-        self.mode_balancing = True     # True = Mode Balancing (Tombol B)
+        self.mode_gerak = MODE_BALANCING
         self.arah = 0                  # -1 mundur, 0 lepas, +1 maju
 
         # Nilai terakhir (untuk ditampilkan di GUI dan disimpan di CSV)
@@ -43,10 +46,10 @@ class PDControl:
         self.error_dpsi = 0.0
         self.u_PD = 0.0
 
-    def set_command(self, arah, mode_balancing):
-        """Dipanggil dari atera_main.py setiap ada perintah joystick."""
+    def set_command(self, arah, mode_gerak):
+        """Dipanggil dari atera_main.py setiap ada perintah joystick. mode_gerak = MODE_BALANCING / MODE_NAVIGATE."""
         # ASUMSI: arah = +1 berarti maju.
-        self.mode_balancing = bool(mode_balancing)
+        self.mode_gerak = mode_gerak
         self.arah = int(arah)
 
     def compute_PD(self, x):
@@ -63,7 +66,7 @@ class PDControl:
         error_dpsi = self.dpsi_setpoint - dpsi
 
         # Mode Balancing: Kp_theta dipakai dan D-Pad diabaikan.
-        if self.mode_balancing:
+        if self.mode_gerak == MODE_BALANCING:
             Kp_theta = self.Kp_theta
             arah = 0
         else:

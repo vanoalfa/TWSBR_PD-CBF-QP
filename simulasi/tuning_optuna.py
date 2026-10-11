@@ -5,19 +5,19 @@ Dua profil (config.OPTUNA_PROFIL), masing-masing dengan study sendiri supaya has
     DATASHEET : torsi roda 0.75 N m/A (datasheet Waveshare), dorong 26 N   -> BELUM TERVERIFIKASI
 Dua tahap per profil (dijalankan terpisah, disimpan di database OPTUNA/atera_optuna.db):
     tahap PD  : mencari Kp_psi, Kd_psi, Kp_theta, Kd_theta              (mode PD saja)    study ATERA_PD_<PROFIL>
-    tahap CBF : gain PD dikunci ke hasil terbaik tahap PD profil yang sama, mencari Alpha yang dipakai DAFTAR_C
-                (mode PD + CBF-QP)                                                        study ATERA_PD+CBF_<PROFIL>
+    tahap CBFQP : gain PD dikunci ke hasil terbaik tahap PD profil yang sama, mencari Alpha yang dipakai DAFTAR_C
+                (mode PD + CBF-QP)                                                      study ATERA_PD+CBF_<PROFIL>
 Batas atas pencarian tiap variabel diatur di config.OPTUNA_BATAS_ATAS (tabel per variabel).
 
-Satu trial = dua pengujian tanpa jendela (headless), di lantai config.OPTUNA_ZETA_DEG:
-    1. robot diletakkan, Mode Balancing, didorong ke DEPAN  (gaya dorong profil), direkam DURASI_PENGUJIAN s
-    2. robot diletakkan ulang, didorong ke BELAKANG, direkam DURASI_PENGUJIAN s
-Skor = ISE ternormalisasi + penalti (rumus di config.py bagian 12). Makin kecil makin baik.
-Trial dihentikan lebih awal bila robot jatuh / lari, atau dipangkas (pruning) bila skornya sudah jelek.
+Satu trial = satu pengujian tanpa jendela (headless) per isi config.OPTUNA_ARAH_DORONG (awal: hanya depan),
+di lantai config.OPTUNA_ZETA_DEG, mode Balancing:
+    robot diletakkan, dibiarkan OPTUNA_WAKTU_SEBELUM_DORONG s, didorong (gaya dorong profil), direkam OPTUNA_DURASI_UJI s
+Skor = ISE ternormalisasi + penalti (rumus di config.py bagian 13), dari state yang dibaca kontrol (psi Kalman).
+Makin kecil makin baik. Trial dihentikan lebih awal bila KOMET, atau dipangkas (pruning) bila skornya sudah jelek.
 
 Jalankan (di folder simulasi):
     python3 tuning_optuna.py --profil TERUKUR --tahap PD            tahap 1, config.OPTUNA_TRIAL_PD trial
-    python3 tuning_optuna.py --profil TERUKUR --tahap CBF           tahap 2, config.OPTUNA_TRIAL_CBF trial
+    python3 tuning_optuna.py --profil TERUKUR --tahap CBFQP         tahap 2, config.OPTUNA_TRIAL_CBFQP trial
     python3 tuning_optuna.py --profil DATASHEET --tahap PD          profil datasheet (belum terverifikasi)
     python3 tuning_optuna.py --profil TERUKUR --tahap PD --trial 50 jumlah trial lain (MENAMBAH trial ke study yang ada)
     python3 tuning_optuna.py --hasil                                cetak hasil terbaik semua profil dan tahap, buat ulang CSV + PNG
@@ -51,18 +51,17 @@ except ImportError:
     print("Library optuna belum terpasang:  pip install optuna")
     sys.exit(1)
 
-import atera_main
 import config
+import model
 import simulasi
-from pd_control import PDControl
+from pd_control import MODE_BALANCING, PDControl
 
 FOLDER_INI = os.path.dirname(os.path.abspath(__file__))
 FOLDER_HASIL = os.path.join(FOLDER_INI, "OPTUNA")
 DATABASE = "sqlite:///" + os.path.join(FOLDER_HASIL, "atera_optuna.db")
-AWAL_NAMA_STUDY = {"PD": "ATERA_PD", "CBF": "ATERA_PD+CBF"}
-AWAL_NAMA_FILE = {"PD": "OPTUNA_PD", "CBF": "OPTUNA_PD+CBF"}
+AWAL_NAMA_STUDY = {"PD": "ATERA_PD", "CBFQP": "ATERA_PD+CBF"}
+AWAL_NAMA_FILE = {"PD": "OPTUNA_PD", "CBFQP": "OPTUNA_PD+CBF"}
 NAMA_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta"]
-ARAH_DORONG = [1, -1]                       # depan, belakang
 TEKS_ARAH = {1: "depan", -1: "belakang"}
 
 
@@ -83,7 +82,7 @@ def batas_atas(nama):
 
 def batas_bawah(nama, tahap):
     """Batas bawah: Alpha tidak boleh 0 (CBF-QP jadi tidak aktif), jadi minimal satu langkah."""
-    if tahap == "CBF":
+    if tahap == "CBFQP":
         return max(float(config.OPTUNA_BATAS_BAWAH), float(config.OPTUNA_LANGKAH))
     return float(config.OPTUNA_BATAS_BAWAH)
 
@@ -116,7 +115,7 @@ class Penguji:
                 self.nama_alpha.append(self.cbf.nama_alpha[i])
         self.zeta_deg = None
         self.profil = None
-        self.gaya_dorong = float(simulasi.GAYA_DORONG_AWAL)
+        self.gaya_dorong = float(config.GAYA_DORONG_AWAL)
         self.atur_profil(profil)
 
     def atur_profil(self, profil):
@@ -143,7 +142,7 @@ class Penguji:
                 setattr(config, nama, float(gain[nama]))
 
     def jalankan(self, gain, zeta_deg, trial=None, rekam=False):
-        """Jalankan dua pengujian (dorong depan, lalu belakang).
+        """Jalankan satu pengujian per isi config.OPTUNA_ARAH_DORONG, mode Balancing.
 
         Mengembalikan (skor, keterangan, rekaman). rekaman berisi t, psi [deg], s [m] tiap pengujian (rekam=True).
         Melempar optuna.TrialPruned bila trial dipangkas.
@@ -153,22 +152,21 @@ class Penguji:
 
         dt = config.DT
         langkah_sebelum = int(round(config.OPTUNA_WAKTU_SEBELUM_DORONG / dt))
-        langkah_uji = int(round(atera_main.DURASI_PENGUJIAN / dt))
+        langkah_uji = int(round(config.OPTUNA_DURASI_UJI / dt))
         langkah_per_detik = int(round(1.0 / dt))
-        waktu_total = len(ARAH_DORONG) * atera_main.DURASI_PENGUJIAN
-        batas_jatuh = math.radians(config.SAFE_TILT_DEG)
+        waktu_total = len(config.OPTUNA_ARAH_DORONG) * config.OPTUNA_DURASI_UJI
+        batas_psi = math.radians(config.SAFE_TILT_DEG)
 
         skor = 0.0
         laporan_ke = 0
         rekaman = []
-        for nomor in range(len(ARAH_DORONG)):
-            arah = ARAH_DORONG[nomor]
-            # Robot diletakkan ulang, Mode Balancing, posisi tahan di s = 0.
+        for nomor in range(len(config.OPTUNA_ARAH_DORONG)):
+            arah = config.OPTUNA_ARAH_DORONG[nomor]
+            # Robot diletakkan ulang (titik nol s = posisi awal), mode Balancing.
             self.sim.reset()
             self.sim.acak = np.random.default_rng(config.OPTUNA_SEED + nomor)    # noise IMU sama tiap trial
             self.sim.gaya_dorong = self.gaya_dorong
-            self.pd.theta_setpoint = float(config.theta_setpoint)
-            self.pd.set_command(0, True)
+            self.pd.set_command(0, MODE_BALANCING)
             data = {"arah": arah, "t": [], "psi": [], "s": []}
 
             for k in range(langkah_sebelum + langkah_uji):
@@ -178,30 +176,32 @@ class Penguji:
                 u_PD = self.pd.compute_PD(x)
                 if self.cbf is None or not self.pakai_cbf:
                     u = max(config.u_min, min(config.u_max, u_PD))
-                    status = "OK"
+                    gagal = False
                 else:
                     u = self.cbf.compute(x, u_PD)
-                    status = self.cbf.status
+                    gagal = not self.cbf.feasible          # status CBF-QP bukan AMAN (GAGAL atau ALPHA_NOL)
                 self.sim.step(u)
 
-                # Dinilai dari state SEBENARNYA (bukan hasil sensor).
-                psi = float(self.sim.x_benar[2])
-                s = config.R * float(self.sim.x_benar[0])
+                # Dinilai dari state yang dibaca kontrol (psi hasil Kalman).
+                psi = float(x[2])
+                s = model.hitung_s(x)
                 t_uji = (k - langkah_sebelum) * dt
                 if rekam:
                     data["t"].append(t_uji)
                     data["psi"].append(math.degrees(psi))
                     data["s"].append(s)
 
-                if abs(psi) > batas_jatuh or abs(s) > config.OPTUNA_S_HENTI:
-                    sudah = nomor * atera_main.DURASI_PENGUJIAN + max(t_uji, 0.0)
+                # KOMET: |psi| > SAFE_TILT_DEG, atau |s| > S_KOMET (pengujian selalu di mode Balancing)
+                if abs(psi) > batas_psi or abs(s) > config.S_KOMET:
+                    sudah = nomor * config.OPTUNA_DURASI_UJI + max(t_uji, 0.0)
                     sisa = waktu_total - sudah
-                    skor = skor + config.OPTUNA_PENALTI_JATUH * (1.0 + sisa / waktu_total)
-                    if abs(psi) > batas_jatuh:
-                        keterangan = "JATUH (dorong %s, t %.1f s)" % (TEKS_ARAH[arah], t_uji)
+                    skor = skor + config.OPTUNA_PENALTI_KOMET * (1.0 + sisa / waktu_total)
+                    if abs(psi) > batas_psi:
+                        keterangan = "KOMET |psi| > %.0f deg (dorong %s, t %.1f s)" % (config.SAFE_TILT_DEG,
+                                                                                    TEKS_ARAH[arah], t_uji)
                     else:
-                        keterangan = "LARI |s| > %.1f m (dorong %s, t %.1f s)" % (config.OPTUNA_S_HENTI,
-                                                                                TEKS_ARAH[arah], t_uji)
+                        keterangan = "KOMET |s| > %.1f m (dorong %s, t %.1f s)" % (config.S_KOMET,
+                                                                                  TEKS_ARAH[arah], t_uji)
                     rekaman.append(data)
                     return skor, keterangan, rekaman
 
@@ -212,8 +212,8 @@ class Penguji:
                 skor = skor + (e_psi * e_psi + e_s * e_s) * dt
                 if s > config.s_max or s < config.s_min:
                     skor = skor + config.OPTUNA_PENALTI_JARAK * dt
-                if status != "OK":
-                    skor = skor + config.OPTUNA_PENALTI_INFEASIBLE * dt
+                if gagal:
+                    skor = skor + config.OPTUNA_PENALTI_GAGAL * dt
 
                 # Laporan tiap 1 detik untuk pruning.
                 if trial is not None and (k - langkah_sebelum + 1) % langkah_per_detik == 0:
@@ -252,7 +252,7 @@ def periksa_profil_study(study, profil):
             print("    study : torsi roda %.3f N m/A, dorong %.1f N" % (atribut["kt_efektif"], atribut["gaya_dorong"]))
             print("    config: torsi roda %.3f N m/A, dorong %.1f N" % (data["kt_efektif"], data["gaya_dorong"]))
             print("Trial lama dan baru tidak boleh dicampur. Kembalikan nilai config.py, atau hapus study:")
-            print("    python3 tuning_optuna.py --profil %s --hapus PD     (atau CBF)" % profil)
+            print("    python3 tuning_optuna.py --profil %s --hapus PD     (atau CBFQP)" % profil)
             sys.exit(1)
     study.set_user_attr("profil", profil)
     study.set_user_attr("kt_efektif", float(data["kt_efektif"]))
@@ -297,7 +297,7 @@ def gain_pd_terbaik(profil):
 
 def gain_dari_trial(tahap, params, gain_pd):
     gain = {}
-    if tahap == "CBF":
+    if tahap == "CBFQP":
         for nama in gain_pd:
             gain[nama] = gain_pd[nama]
     for nama in params:
@@ -306,7 +306,7 @@ def gain_dari_trial(tahap, params, gain_pd):
 
 
 def jalankan_tahap(tahap, profil, jumlah_trial):
-    penguji = Penguji(pakai_cbf=(tahap == "CBF"), profil=profil)
+    penguji = Penguji(pakai_cbf=(tahap == "CBFQP"), profil=profil)
     study = buat_study(tahap, profil)
 
     gain_pd = {}
@@ -319,7 +319,7 @@ def jalankan_tahap(tahap, profil, jumlah_trial):
             print("    %s = %.4f" % (nama, gain_pd[nama]))
         nama_dicari = list(penguji.nama_alpha)
         if len(nama_dicari) == 0:
-            print("Tidak ada Alpha yang dipakai DAFTAR_C di cbf_qp.py.")
+            print("Tidak ada Alpha yang dipakai DAFTAR_C (mode Balancing) di cbf_qp.py.")
             return
 
     # Rentang tiap variabel (batas atas dari config.OPTUNA_BATAS_ATAS).
@@ -349,9 +349,9 @@ def jalankan_tahap(tahap, profil, jumlah_trial):
     print("Rentang pencarian (langkah %.4f):" % config.OPTUNA_LANGKAH)
     for nama in nama_dicari:
         print("    %-9s %10.4f .. %10.4f" % (nama, bawah[nama], atas[nama]))
-    print("Lantai %.1f deg | dorong %.1f N depan + belakang | %.0f s per pengujian | %d trial (sudah ada %d)"
-          % (config.OPTUNA_ZETA_DEG, penguji.gaya_dorong, atera_main.DURASI_PENGUJIAN, jumlah_trial,
-             len(study.trials)))
+    print("Lantai %.1f deg | dorong %.1f N, %d pengujian | %.0f s per pengujian | %d trial (sudah ada %d)"
+          % (config.OPTUNA_ZETA_DEG, penguji.gaya_dorong, len(config.OPTUNA_ARAH_DORONG), config.OPTUNA_DURASI_UJI,
+             jumlah_trial, len(study.trials)))
     print("Ctrl+C untuk berhenti: trial yang sudah selesai tetap tersimpan dan bisa dilanjutkan.")
     print("=" * 78 + "\n")
 
@@ -405,12 +405,12 @@ def laporkan(tahap, profil, penguji):
     if len(selesai) == 0:
         print("Tahap %s profil %s: belum ada trial yang selesai." % (tahap, profil))
         return
-    penguji.pakai_cbf = (tahap == "CBF")
+    penguji.pakai_cbf = (tahap == "CBFQP")
     penguji.atur_profil(profil)
 
     terbaik = study.best_trial
     gain_pd = {}
-    if tahap == "CBF":
+    if tahap == "CBFQP":
         gain_pd, _ = gain_pd_terbaik(profil)
     gain = gain_dari_trial(tahap, terbaik.params, gain_pd)
 
@@ -433,11 +433,11 @@ def laporkan(tahap, profil, penguji):
     for zeta_deg, skor, keterangan, _ in hasil_uji:
         print("  uji lantai %4.1f deg: skor %10.4f  (%s)" % (zeta_deg, skor, keterangan))
     print("\nSalin ke config.py:")
-    if tahap == "CBF":
+    if tahap == "CBFQP":
         print("# gain PD (dari tahap PD)")
     for nama in NAMA_GAIN_PD:
         print("%s = %.4f" % (nama, gain[nama]))
-    if tahap == "CBF":
+    if tahap == "CBFQP":
         for nama in terbaik.params:
             print("%s = %.4f" % (nama, terbaik.params[nama]))
     print("=================================================\n")
@@ -530,8 +530,8 @@ def simpan_png(path, tahap, profil, study, gain, hasil_uji, gaya_dorong):
     ax[1].axhline(-batas_psi, color="red", lw=2.2)
     ax[2].axhline(config.s_max, color="red", lw=2.2)
     ax[2].axhline(config.s_min, color="red", lw=2.2)
-    ax[1].set_ylabel("psi sebenarnya [deg]")
-    ax[2].set_ylabel("s sebenarnya [m]")
+    ax[1].set_ylabel("psi Kalman [deg]")
+    ax[2].set_ylabel("s [m]")
     for a in (ax[1], ax[2]):
         a.set_xlabel("t sejak dorongan [s]")
         a.axvline(0.0, color="black", lw=0.8)
@@ -570,11 +570,11 @@ def main():
     parser = argparse.ArgumentParser(description="Tuning gain PD dan Alpha CBF-QP ATERA dengan Optuna")
     parser.add_argument("--profil", choices=daftar_profil,
                         help="profil torsi roda + gaya dorong (config.OPTUNA_PROFIL); wajib untuk --tahap dan --hapus")
-    parser.add_argument("--tahap", choices=["PD", "CBF"], help="PD = gain PD, CBF = Alpha (gain PD dikunci)")
+    parser.add_argument("--tahap", choices=["PD", "CBFQP"], help="PD = gain PD, CBFQP = Alpha (gain PD dikunci)")
     parser.add_argument("--trial", type=int, default=None, help="jumlah trial (default dari config.py)")
     parser.add_argument("--hasil", action="store_true",
                         help="cetak hasil terbaik, buat ulang CSV + PNG (tanpa --profil: semua profil)")
-    parser.add_argument("--hapus", choices=["PD", "CBF"], help="hapus study satu tahap dari satu profil")
+    parser.add_argument("--hapus", choices=["PD", "CBFQP"], help="hapus study satu tahap dari satu profil")
     args = parser.parse_args()
 
     if args.hapus:
@@ -589,9 +589,9 @@ def main():
         ada_cbf = False
         ada_apa_saja = False
         for profil in profil_dilaporkan:
-            if ada_study("CBF", profil):
+            if ada_study("CBFQP", profil):
                 ada_cbf = True
-            if ada_study("PD", profil) or ada_study("CBF", profil):
+            if ada_study("PD", profil) or ada_study("CBFQP", profil):
                 ada_apa_saja = True
         if not ada_apa_saja:
             print("Belum ada study untuk profil yang diminta.")
@@ -599,7 +599,7 @@ def main():
         penguji = Penguji(pakai_cbf=ada_cbf, profil=profil_dilaporkan[0])
         for profil in profil_dilaporkan:
             laporkan("PD", profil, penguji)
-            laporkan("CBF", profil, penguji)
+            laporkan("CBFQP", profil, penguji)
     elif args.tahap:
         if args.profil is None:
             parser.error("--tahap butuh --profil (%s)" % " / ".join(daftar_profil))
@@ -608,7 +608,7 @@ def main():
         elif args.tahap == "PD":
             jumlah = config.OPTUNA_TRIAL_PD
         else:
-            jumlah = config.OPTUNA_TRIAL_CBF
+            jumlah = config.OPTUNA_TRIAL_CBFQP
         jalankan_tahap(args.tahap, args.profil, jumlah)
     else:
         parser.print_help()

@@ -45,7 +45,7 @@ import config
 
 FOLDER_PLOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.ISE_PLOT_DIR)
 
-JENIS_PERCOBAAN = "PERCOBAAN"       # perekaman biasa (E / Q / robot jatuh)
+JENIS_PERCOBAAN = "PERCOBAAN"       # perekaman biasa (E / Q / KOMET)
 JENIS_PENGUJIAN = "PENGUJIAN"       # mode pengujian (tombol T): dari dorongan O / P selama beberapa detik
 
 
@@ -56,18 +56,8 @@ def folder_jenis(jenis):
 MODE_PD = "PD"
 MODE_PD_CBF = "PD+CBF"
 
-def cari_nama_alpha():
-    """Nama Alpha di config.py: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada)."""
-    hasil = []
-    nomor = 1
-    while hasattr(config, "Alpha_%d" % nomor):
-        hasil.append("Alpha_%d" % nomor)
-        nomor = nomor + 1
-    return hasil
-
-
 KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
-KOLOM_GAIN_CBF = cari_nama_alpha()
+KOLOM_GAIN_CBF = config.NAMA_ALPHA
 KOLOM_GAIN = KOLOM_GAIN_PD + KOLOM_GAIN_CBF
 
 KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
@@ -77,14 +67,6 @@ KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
 
 # Contoh nama: 20261008_201530_COBA PD+CBF_PENGUJIAN KE-05_TUNING.csv  (bagian _HHmmSS boleh tidak ada: file lama)
 POLA_NAMA = re.compile(r"^(\d{8})(?:_(\d{6}))?_COBA (PD\+CBF|PD)_(PERCOBAAN|PENGUJIAN) KE-(\d+)(_TUNING)?\.csv$")
-
-# Garis batas safety set di semua gambar
-SAFETY_WARNA = "red"
-SAFETY_TEBAL = 2.2          # garis yang membentuk kotak barrier (menyambung)
-SAFETY_TIPIS = 1.0          # perpanjangan garis di luar kotak (putus-putus)
-
-WARNA_PD = "tab:blue"
-WARNA_PD_CBF = "tab:orange"
 
 BANTUAN = """
 Perintah ise.py (tambahkan --pengujian untuk hasil mode pengujian di folder PLOT_EVALUASI/PENGUJIAN):
@@ -156,13 +138,13 @@ def gambar_kotak_safety(ax, x_min, x_max, y_min, y_max):
     """Batas safety set dua variabel.
     Kotak barrier (x_min..x_max, y_min..y_max): merah tebal menyambung.
     Perpanjangan keempat garis di luar kotak: merah tipis putus-putus."""
-    ax.axvline(x_min, color=SAFETY_WARNA, linewidth=SAFETY_TIPIS, linestyle="--", zorder=1.4,
+    ax.axvline(x_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--", zorder=1.4,
                label="perpanjangan batas")
-    ax.axvline(x_max, color=SAFETY_WARNA, linewidth=SAFETY_TIPIS, linestyle="--", zorder=1.4)
-    ax.axhline(y_min, color=SAFETY_WARNA, linewidth=SAFETY_TIPIS, linestyle="--", zorder=1.4)
-    ax.axhline(y_max, color=SAFETY_WARNA, linewidth=SAFETY_TIPIS, linestyle="--", zorder=1.4)
+    ax.axvline(x_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--", zorder=1.4)
+    ax.axhline(y_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--", zorder=1.4)
+    ax.axhline(y_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--", zorder=1.4)
     ax.plot([x_min, x_max, x_max, x_min, x_min], [y_min, y_min, y_max, y_max, y_min],
-            color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, zorder=1.5, label="batas safety set (barrier)")
+            color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, zorder=1.5, label="batas safety set (barrier)")
 
 
 def ada_batas_jarak():
@@ -177,16 +159,16 @@ def gambar_safety_set(gambar1, gambar2):
                             config.dtheta_min, config.dtheta_max)
     else:
         # tanpa batas jarak tidak ada kotak: hanya 2 garis dtheta
-        gambar2.axhline(config.dtheta_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, label="batas safety set")
-        gambar2.axhline(config.dtheta_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL)
+        gambar2.axhline(config.dtheta_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, label="batas safety set")
+        gambar2.axhline(config.dtheta_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL)
 
 
 def gambar_batas_jarak(gambar3):
     """Gambar 3 (jarak s): hanya 2 batas (s_min, s_max), keduanya garis tebal menyambung."""
     if ada_batas_jarak():
-        gambar3.axvline(config.s_max, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, zorder=1.5,
+        gambar3.axvline(config.s_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, zorder=1.5,
                         label="batas safety set (barrier)")
-        gambar3.axvline(config.s_min, color=SAFETY_WARNA, linewidth=SAFETY_TEBAL, zorder=1.5)
+        gambar3.axvline(config.s_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, zorder=1.5)
     gambar3.axhline(0.0, color="gray", linewidth=0.6, zorder=1.0)
     gambar3.set_ylim(-1.0, 1.0)
     gambar3.set_yticks([0.0])
@@ -477,7 +459,7 @@ def hitung_dorongan(dorong):
 
 
 def persen_cbf_ok(status):
-    """Persentase waktu CBF-QP berstatus OK. Selain OK (INFEASIBLE, SOLVER_GAGAL, ALPHA_NOL), keluaran
+    """Persentase waktu CBF-QP berstatus AMAN. Selain AMAN (GAGAL, ALPHA_NOL), keluaran
     cbf_qp.py adalah u_PD yang dibatasi arus saja. Mengembalikan None untuk mode PD (status "-")."""
     jumlah = 0
     jumlah_ok = 0
@@ -485,7 +467,7 @@ def persen_cbf_ok(status):
         if teks == "-":
             continue
         jumlah = jumlah + 1
-        if teks == "OK":
+        if teks == "AMAN":
             jumlah_ok = jumlah_ok + 1
     if jumlah == 0:
         return None
@@ -717,8 +699,8 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
     gambar_batas_jarak(gambar3)
 
     # Gambar 1: X = psi, Y = dpsi
-    gambar1.plot(potong_pd["psi_rad"], potong_pd["dpsi_rad_s"], color=WARNA_PD, linewidth=1.0, label=label_pd)
-    gambar1.plot(potong_cbf["psi_rad"], potong_cbf["dpsi_rad_s"], color=WARNA_PD_CBF, linewidth=1.0,
+    gambar1.plot(potong_pd["psi_rad"], potong_pd["dpsi_rad_s"], color=config.PLOT_WARNA_PD, linewidth=1.0, label=label_pd)
+    gambar1.plot(potong_cbf["psi_rad"], potong_cbf["dpsi_rad_s"], color=config.PLOT_WARNA_PD_CBF, linewidth=1.0,
                  label=label_cbf)
     gambar1.set_xlabel("psi [rad]")
     gambar1.set_ylabel("dpsi [rad/s]")
@@ -727,8 +709,8 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
     gambar1.legend(fontsize=8)
 
     # Gambar 2: X = theta, Y = dtheta
-    gambar2.plot(potong_pd["theta_rad"], potong_pd["dtheta_rad_s"], color=WARNA_PD, linewidth=1.0, label=label_pd)
-    gambar2.plot(potong_cbf["theta_rad"], potong_cbf["dtheta_rad_s"], color=WARNA_PD_CBF, linewidth=1.0,
+    gambar2.plot(potong_pd["theta_rad"], potong_pd["dtheta_rad_s"], color=config.PLOT_WARNA_PD, linewidth=1.0, label=label_pd)
+    gambar2.plot(potong_cbf["theta_rad"], potong_cbf["dtheta_rad_s"], color=config.PLOT_WARNA_PD_CBF, linewidth=1.0,
                  label=label_cbf)
     gambar2.set_xlabel("theta [rad]   (s = R*theta)")
     gambar2.set_ylabel("dtheta [rad/s]")
@@ -739,8 +721,8 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
     # Gambar 3: X = s, Y = 0 (kedua percobaan di garis yang sama; PD digambar lebih tebal di bawah)
     jarak_pd = [config.R * nilai for nilai in potong_pd["theta_rad"]]
     jarak_cbf = [config.R * nilai for nilai in potong_cbf["theta_rad"]]
-    gambar3.plot(jarak_pd, [0.0] * len(jarak_pd), color=WARNA_PD, linewidth=6.0, alpha=0.6, label=label_pd)
-    gambar3.plot(jarak_cbf, [0.0] * len(jarak_cbf), color=WARNA_PD_CBF, linewidth=2.0, label=label_cbf)
+    gambar3.plot(jarak_pd, [0.0] * len(jarak_pd), color=config.PLOT_WARNA_PD, linewidth=6.0, alpha=0.6, label=label_pd)
+    gambar3.plot(jarak_cbf, [0.0] * len(jarak_cbf), color=config.PLOT_WARNA_PD_CBF, linewidth=2.0, label=label_cbf)
     gambar3.legend(fontsize=8, loc="upper right")
 
     # Tabel ISE

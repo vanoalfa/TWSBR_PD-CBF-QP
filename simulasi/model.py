@@ -27,6 +27,34 @@ import numpy as np
 import config
 
 
+def hitung_theta(sudut_encoder, psi):
+    """Sudut roda theta untuk state x[0]. Dipakai juga untuk kecepatan: hitung_theta(dtheta_encoder, dpsi).
+
+    sudut_encoder : sudut roda dari encoder DDSM115 [rad] (simulasi: joint roda PyBullet)
+    psi           : sudut badan hasil Kalman [rad]
+
+    ENCODER_RELATIVE_TO_BODY = True  : encoder mengukur roda RELATIF terhadap badan, theta = encoder + psi
+                                       (sudut roda absolut, sesuai f(x) dan g(x) di bawah)
+    ENCODER_RELATIVE_TO_BODY = False : theta = encoder murni
+    Rumus lain (misalnya encoder murni tanpa flag) cukup ditulis di sini; semua file lain ikut berubah.
+    PERHATIAN: f(x) dan g(x) di bawah ditulis untuk theta = sudut roda ABSOLUT. Bila theta diganti definisinya,
+    persamaan dinamika ikut disesuaikan. Bila hanya jarak s yang ingin memakai encoder murni, ubah hitung_s().
+    """
+    if config.ENCODER_RELATIVE_TO_BODY:
+        return sudut_encoder + psi
+    return sudut_encoder
+
+
+def hitung_s(x):
+    """Jarak tempuh s [m] dari titik nol s (direset tiap masuk mode Balancing). x boleh ndarray atau simbol CasADi.
+
+    s = R * theta
+    Cadangan, s dari encoder murni (benar HANYA bila ENCODER_RELATIVE_TO_BODY = True, karena theta = encoder + psi):
+        ganti baris return di bawah menjadi   return config.R * (x[config.IDX_THETA] - x[config.IDX_PSI])
+    """
+    return config.R * x[config.IDX_THETA]
+
+
 def _zeta(zeta):
     """zeta dari config.py bila None. zeta boleh angka, atau simbol CasADi (dipakai cbf_qp.py)."""
     if zeta is None:
