@@ -9,7 +9,7 @@ File ini hanya mengurus simulasinya:
         a. torsi roda = arus perintah x MOTOR_KT_EFEKTIF (bukan MOTOR_KT)
         b. torsi baru bekerja SIM_JEDA_TORSI detik setelah perintah dihitung
         c. psi dibaca lewat model MPU6050 (akselerometer + gyro + noise) dan Kalman yang sama dengan robot
-    - jendela "ATERA - Kontrol" (Qt): tombol W A S D B N O P + slider / kolom angka parameter (input utama)
+    - jendela "ATERA - Kontrol" (Qt): tombol W A S D B N O P + kolom angka parameter (input utama)
       (B = mode Balancing, N = mode Navigate)
     - keyboard di jendela PyBullet (input cadangan, tombolnya sama)
     - tampilan di jendela PyBullet: teks parameter dan bidang merah safety set
@@ -24,6 +24,7 @@ Arah di simulasi:
     u     > 0 : torsi mendorong roda ke depan (torsi SATU roda, kedua roda diberi u yang sama)
 """
 
+import importlib.util
 import math
 import multiprocessing
 import os
@@ -38,55 +39,25 @@ import model
 from pd_control import MODE_BALANCING
 
 
-class KalmanIMU:
-    """Salinan persis atera_program/kalman.py (KalmanAngle). Satuan derajat, sama seperti robot nyata."""
-
-    def __init__(self):
-        self.QAngle = config.KALMAN_Q_ANGLE
-        self.QBias = config.KALMAN_Q_BIAS
-        self.RMeasure = config.KALMAN_R_MEASURE
-        self.angle = 0.0
-        self.bias = 0.0
-        self.rate = 0.0
-        self.P = [[0.0, 0.0], [0.0, 0.0]]
-
-    def setAngle(self, angle):
-        self.angle = angle
-
-    def getAngle(self, newAngle, newRate, dt):
-        # Langkah 1: prediksi dari gyro
-        self.rate = newRate - self.bias
-        self.angle += dt * self.rate
-        # Langkah 2: kovarians prediksi
-        self.P[0][0] += dt * (dt * self.P[1][1] - self.P[0][1] - self.P[1][0] + self.QAngle)
-        self.P[0][1] -= dt * self.P[1][1]
-        self.P[1][0] -= dt * self.P[1][1]
-        self.P[1][1] += self.QBias * dt
-        # Langkah 3-5: inovasi dan Kalman gain
-        y = newAngle - self.angle
-        s = self.P[0][0] + self.RMeasure
-        K = [self.P[0][0] / s, self.P[1][0] / s]
-        # Langkah 6: koreksi dengan akselerometer
-        self.angle += K[0] * y
-        self.bias += K[1] * y
-        # Langkah 7: kovarians baru
-        P00Temp = self.P[0][0]
-        P01Temp = self.P[0][1]
-        self.P[0][0] -= K[0] * P00Temp
-        self.P[0][1] -= K[0] * P01Temp
-        self.P[1][0] -= K[1] * P00Temp
-        self.P[1][1] -= K[1] * P01Temp
-        return self.angle
+# Kalman dipakai langsung dari kalman.py milik robot (tanpa salinan). Dimuat lewat path karena folder robot juga
+# punya config.py dan model.py yang namanya sama dengan milik simulasi. Susunan folder repo: simulasi/ dan program/atera_program/.
+_FOLDER = os.path.dirname(os.path.abspath(__file__))
+_PATH_KALMAN = [os.path.join(_FOLDER, "..", "program", "atera_program", "kalman.py"),
+                os.path.join(_FOLDER, "..", "atera_program", "kalman.py")]
+_ADA = [q for q in _PATH_KALMAN if os.path.isfile(q)]
+if not _ADA:
+    raise FileNotFoundError("kalman.py tidak ditemukan. Dicari di:\n  " + "\n  ".join(_PATH_KALMAN))
+_spec = importlib.util.spec_from_file_location("kalman", _ADA[0])
+kalman = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(kalman)
 
 
-NAMA_ALPHA = config.NAMA_ALPHA          # semua Alpha di config.py -> otomatis dapat slider
+NAMA_ALPHA = config.NAMA_ALPHA          # semua Alpha di config.py -> otomatis muncul di jendela Kontrol
 NAMA_GAIN = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"] + NAMA_ALPHA
 
-# Parameter di jendela Kontrol: (nama, batas bawah slider, batas atas slider, langkah slider, jumlah desimal)
-# Isinya dari config.SLIDER dan config.SLIDER_ALPHA.
-DAFTAR_PARAMS = []
-for _nama in NAMA_GAIN + ["Gaya_dorong", "zeta_DEG"]:
-    DAFTAR_PARAMS.append((_nama,) + config.SLIDER.get(_nama, config.SLIDER_ALPHA))
+# Parameter di jendela Kontrol: (nama, jumlah desimal). Isinya dari config.DESIMAL dan config.DESIMAL_ALPHA.
+DAFTAR_PARAMS = [(_nama, config.DESIMAL.get(_nama, config.DESIMAL_ALPHA))
+                 for _nama in NAMA_GAIN + ["Gaya_dorong", "zeta_DEG"]]
 
 FOLDER_INI = os.path.dirname(os.path.abspath(__file__))
 PILIHAN_URDF = [os.path.join(FOLDER_INI, path) for path in config.URDF_PILIHAN]
@@ -132,7 +103,7 @@ def quaternion_dari_matriks(m):
 def nilai_awal_params():
     """Nilai awal tiap parameter: gain dari config.py, gaya dorong dari config.GAYA_DORONG_AWAL."""
     nilai = {}
-    for nama, _, _, _, _ in DAFTAR_PARAMS:
+    for nama, _ in DAFTAR_PARAMS:
         if nama == "Gaya_dorong":
             nilai[nama] = float(config.GAYA_DORONG_AWAL)
         else:
@@ -142,7 +113,7 @@ def nilai_awal_params():
 
 def tulis_angka(nama, nilai):
     desimal = 2
-    for nama_params, _, _, _, jumlah_desimal in DAFTAR_PARAMS:
+    for nama_params, jumlah_desimal in DAFTAR_PARAMS:
         if nama_params == nama:
             desimal = jumlah_desimal
     teks = "%.*f" % (desimal, nilai)
@@ -155,7 +126,7 @@ def cetak_nilai(nilai, awal):
     """Cetak nilai parameter dalam bentuk baris config.py."""
     print("")
     print("--- nilai parameter sekarang (salin ke config.py) ---")
-    for nama, _, _, _, _ in DAFTAR_PARAMS:
+    for nama, _ in DAFTAR_PARAMS:
         teks = "%s = %s" % (nama, tulis_angka(nama, nilai[nama]))
         if nama == "Gaya_dorong":
             teks = "# %s N (GAYA_DORONG_AWAL di config.py)" % teks
@@ -484,7 +455,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 class JendelaKontrol:
     """Jendela Qt "ATERA - Kontrol":
         - bagian atas : tombol W A S D, B N, O P (bisa diklik / ditahan dengan mouse, atau ditekan di keyboard)
-        - bagian bawah: slider + kolom angka untuk tiap parameter
+        - bagian bawah: kolom angka tiap parameter (dua blok: gain + lingkungan, dan Alpha). Kolom berwarna = beda dari config.py
 
     Nilai awal parameter dari config.py. Nilai di jendela ini TIDAK ditulis ke config.py; salin sendiri
     dari hasil tombol "Cetak nilai ke terminal".
@@ -494,16 +465,6 @@ class JendelaKontrol:
         self.antrean = antrean         # jalur kirim ke simulasi (None saat diuji sendiri)
         self.awal = nilai_awal_params()
         self.nilai = dict(self.awal)
-        self.bawah = {}
-        self.atas = {}
-        self.langkah = {}
-        self.desimal = {}
-        for nama, bawah, atas, langkah, desimal in DAFTAR_PARAMS:
-            self.bawah[nama] = bawah
-            self.atas[nama] = atas
-            self.langkah[nama] = langkah
-            self.desimal[nama] = desimal
-            self.lebarkan(nama, self.awal[nama])
 
         # Tombol ditahan, dipisah menurut sumbernya. Ditahan = keyboard ATAU mouse.
         self.tahan_keyboard = {}
@@ -517,9 +478,7 @@ class JendelaKontrol:
 
         self.root = None               # jendela Qt; None bila gagal dibuat atau sudah ditutup
         self.pesan = ""
-        self.skala = {}
         self.isian = {}
-        self.tanda = {}
         self.tombol = {}
 
         try:
@@ -571,9 +530,8 @@ class JendelaKontrol:
         baris_label.addWidget(self.label_dorong)
         susunan.addLayout(baris_label)
 
-        petunjuk = QtWidgets.QLabel("Keyboard dibaca saat jendela ini aktif (keyboard di jendela PyBullet juga "
-                                    "bisa).\nSetelah mengetik angka, tekan Enter supaya keyboard kembali "
-                                    "dipakai untuk tombol.")
+        petunjuk = QtWidgets.QLabel("Keyboard dibaca saat jendela ini aktif. Setelah mengetik angka, tekan Enter "
+                                    "supaya keyboard kembali dipakai untuk tombol.")
         petunjuk.setStyleSheet("color: gray")
         susunan.addWidget(petunjuk)
 
@@ -581,55 +539,47 @@ class JendelaKontrol:
         garis.setFrameShape(QtWidgets.QFrame.HLine)
         susunan.addWidget(garis)
 
-        # ------------------------------------------------ bagian parameter
+        # ------------------------------------------------ bagian parameter (dua blok berdampingan)
+        # Blok kiri: gain PD, Kvel, gaya dorong, zeta. Blok kanan: semua Alpha.
         kisi = QtWidgets.QGridLayout()
+        kisi.setHorizontalSpacing(6)
+        kisi.setVerticalSpacing(3)
         susunan.addLayout(kisi)
 
-        judul = ("Parameter", "Slider", "Nilai", "config.py", "", "")
-        for kolom in range(len(judul)):
-            label = QtWidgets.QLabel(judul[kolom])
-            label.setStyleSheet("color: gray")
-            kisi.addWidget(label, 0, kolom)
+        blok = [[nama for nama, _ in DAFTAR_PARAMS if nama not in NAMA_ALPHA], list(NAMA_ALPHA)]
+        for b in range(2):
+            kolom = b * 5                       # per blok: Parameter | Nilai | config.py | reset | jarak
+            for k, judul in enumerate(("Parameter", "Nilai", "config.py")):
+                label = QtWidgets.QLabel(judul)
+                label.setStyleSheet("color: gray")
+                label.setAlignment(QtCore.Qt.AlignRight if k > 0 else QtCore.Qt.AlignLeft)
+                kisi.addWidget(label, 0, kolom + k)
+            for i, nama in enumerate(blok[b]):
+                baris = i + 1
+                kisi.addWidget(QtWidgets.QLabel(nama), baris, kolom)
 
-        baris = 1
-        for nama, _, _, _, _ in DAFTAR_PARAMS:
-            kisi.addWidget(QtWidgets.QLabel(nama), baris, 0)
+                isian = QtWidgets.QLineEdit()
+                isian.setFixedWidth(84)
+                isian.setAlignment(QtCore.Qt.AlignRight)
+                isian.editingFinished.connect(lambda n=nama: self.dari_isian(n))
+                isian.returnPressed.connect(lambda: self.lepas_fokus())
+                kisi.addWidget(isian, baris, kolom + 1)
+                self.isian[nama] = isian
 
-            skala = QtWidgets.QSlider(QtCore.Qt.Horizontal)
-            skala.setMinimumWidth(240)
-            skala.setMinimum(0)
-            skala.setFocusPolicy(QtCore.Qt.NoFocus)         # slider tidak merebut keyboard
-            skala.valueChanged.connect(lambda posisi, n=nama: self.dari_slider(n, posisi))
-            kisi.addWidget(skala, baris, 1)
-            self.skala[nama] = skala
+                label_config = QtWidgets.QLabel(self.format(nama, self.awal[nama]))
+                label_config.setStyleSheet("color: gray")
+                label_config.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+                kisi.addWidget(label_config, baris, kolom + 2)
 
-            isian = QtWidgets.QLineEdit()
-            isian.setFixedWidth(90)
-            isian.setAlignment(QtCore.Qt.AlignRight)
-            isian.editingFinished.connect(lambda n=nama: self.dari_isian(n))
-            isian.returnPressed.connect(lambda: self.lepas_fokus())
-            kisi.addWidget(isian, baris, 2)
-            self.isian[nama] = isian
-
-            label_config = QtWidgets.QLabel(self.format(nama, self.awal[nama]))
-            label_config.setStyleSheet("color: gray")
-            label_config.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-            kisi.addWidget(label_config, baris, 3)
-
-            # Tombol reset per parameter: kembali ke nilai config.py
-            tombol_reset = QtWidgets.QPushButton("reset")
-            tombol_reset.setFixedWidth(52)
-            tombol_reset.setFocusPolicy(QtCore.Qt.NoFocus)
-            tombol_reset.setToolTip("Kembalikan %s ke nilai config.py" % nama)
-            tombol_reset.clicked.connect(lambda dicentang=False, n=nama: self.atur(n, self.awal[n]))
-            kisi.addWidget(tombol_reset, baris, 4)
-
-            tanda = QtWidgets.QLabel("")
-            tanda.setStyleSheet("color: darkorange")
-            tanda.setMinimumWidth(60)
-            kisi.addWidget(tanda, baris, 5)
-            self.tanda[nama] = tanda
-            baris = baris + 1
+                # Tombol reset per parameter: kembali ke nilai config.py
+                tombol_reset = QtWidgets.QPushButton("reset")
+                tombol_reset.setFixedWidth(46)
+                tombol_reset.setFocusPolicy(QtCore.Qt.NoFocus)
+                tombol_reset.setToolTip("Kembalikan %s ke nilai config.py" % nama)
+                tombol_reset.clicked.connect(lambda dicentang=False, n=nama: self.atur(n, self.awal[n]))
+                kisi.addWidget(tombol_reset, baris, kolom + 3)
+        kisi.setColumnMinimumWidth(4, 28)
+        baris = max(len(blok[0]), len(blok[1])) + 1
 
         tombol_cetak = QtWidgets.QPushButton("Cetak nilai ke terminal")
         tombol_cetak.setFocusPolicy(QtCore.Qt.NoFocus)
@@ -637,8 +587,8 @@ class JendelaKontrol:
         tombol_kembali = QtWidgets.QPushButton("Reset SEMUA ke config.py")
         tombol_kembali.setFocusPolicy(QtCore.Qt.NoFocus)
         tombol_kembali.clicked.connect(lambda: self.kembalikan())
-        kisi.addWidget(tombol_cetak, baris, 0, 1, 2)
-        kisi.addWidget(tombol_kembali, baris, 2, 1, 4)
+        kisi.addWidget(tombol_cetak, baris, 0, 1, 4)
+        kisi.addWidget(tombol_kembali, baris, 5, 1, 4)
 
         # Keyboard: semua tombol keyboard di jendela ini disaring dulu oleh saring_keyboard().
         class Saringan(QtCore.QObject):
@@ -658,7 +608,6 @@ class JendelaKontrol:
 
         self.root = jendela
         for nama in self.nilai:
-            self.pasang_slider(nama)
             self.tampilkan_nilai(nama)
         self.tampilkan_status(self.status)
         jendela.show()
@@ -762,7 +711,7 @@ class JendelaKontrol:
         self.tombol["t"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_UJI, "white")
                                        if status.get("mode_pengujian", False) else "")
         if status.get("komet", False):
-            self.label_mode.setText("KOMET, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
+            self.label_mode.setText("komet, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
             self.label_mode.setStyleSheet("font-weight: bold; color: #b3261e")
         elif status.get("mode_pengujian", False):
             self.label_mode.setText(status.get("pengujian", "MODE PENGUJIAN"))
@@ -792,38 +741,11 @@ class JendelaKontrol:
     def format(self, nama, nilai):
         return tulis_angka(nama, nilai)
 
-    def lebarkan(self, nama, nilai):
-        """Bila nilai di luar batas slider, batas slider dilebarkan (tetap kelipatan langkah slider)."""
-        langkah = self.langkah[nama]
-        if nilai > self.atas[nama]:
-            self.atas[nama] = math.ceil(nilai / langkah - 1e-9) * langkah
-        if nilai < self.bawah[nama]:
-            self.bawah[nama] = math.floor(nilai / langkah + 1e-9) * langkah
-
-    def pasang_slider(self, nama):
-        """Geser slider mengikuti self.nilai[nama] tanpa memicu dari_slider()."""
-        skala = self.skala[nama]
-        jumlah = int(round((self.atas[nama] - self.bawah[nama]) / self.langkah[nama]))
-        posisi = int(round((self.nilai[nama] - self.bawah[nama]) / self.langkah[nama]))
-        posisi = max(0, min(jumlah, posisi))
-        skala.blockSignals(True)
-        skala.setMaximum(jumlah)
-        skala.setValue(posisi)
-        skala.blockSignals(False)
-
     def tampilkan_nilai(self, nama):
-        """Samakan kolom angka dan tanda 'berubah' dengan self.nilai[nama]."""
+        """Samakan kolom angka dengan self.nilai[nama]; kolom diberi warna bila beda dari config.py."""
         self.isian[nama].setText(self.format(nama, self.nilai[nama]))
         berubah = abs(self.nilai[nama] - self.awal[nama]) > 1e-9
-        self.tanda[nama].setText("berubah" if berubah else "")
-
-    def dari_slider(self, nama, posisi):
-        """Slider digeser oleh pengguna."""
-        nilai = self.bawah[nama] + posisi * self.langkah[nama]
-        self.nilai[nama] = round(nilai, 10)
-        self.tampilkan_nilai(nama)
-        if nama == "Gaya_dorong":
-            self.tampilkan_status(self.status)
+        self.isian[nama].setStyleSheet("background-color: #ffe3b3; color: black" if berubah else "")
 
     def dari_isian(self, nama):
         teks = self.isian[nama].text().strip().replace(",", ".")
@@ -835,10 +757,7 @@ class JendelaKontrol:
         self.atur(nama, nilai)
 
     def atur(self, nama, nilai):
-        # Angka di luar batas slider tetap diterima; batas slider dilebarkan.
-        self.lebarkan(nama, nilai)
         self.nilai[nama] = nilai
-        self.pasang_slider(nama)
         self.tampilkan_nilai(nama)
         if nama == "Gaya_dorong":
             self.tampilkan_status(self.status)
@@ -993,7 +912,7 @@ class Simulasi:
         self.skala_torsi = config.MOTOR_KT_EFEKTIF / config.MOTOR_KT     # torsi nyata / torsi perintah
         self.jeda_substep = int(round(config.SIM_JEDA_TORSI / self.dt_fisika))
         self.antrean_torsi = []        # torsi yang sudah diperintah tetapi belum bekerja (satu per langkah fisika)
-        self.kalman = KalmanIMU()
+        self.kalman = kalman.KalmanAngle()
         self.psi_imu = 0.0             # [rad]   psi hasil Kalman (yang dibaca kontrol)
         self.dpsi_imu = 0.0            # [rad/s] dpsi dari gyro
         self.v_imu_lama = np.zeros(3)  # kecepatan titik IMU siklus lalu (untuk percepatan)
@@ -1158,7 +1077,7 @@ class Simulasi:
     def mulai_imu(self):
         """Kalman baru, sudut awalnya = psi sebenarnya (seperti setelah kalibrasi di robot nyata)."""
         psi_benar, dpsi_benar = self.baca_psi_benar()
-        self.kalman = KalmanIMU()
+        self.kalman = kalman.KalmanAngle()
         self.kalman.setAngle(math.degrees(psi_benar))
         self.psi_imu = psi_benar
         self.dpsi_imu = dpsi_benar
@@ -1505,7 +1424,7 @@ class Simulasi:
             self.giliran_baris = (self.giliran_baris + 1) % config.JUMLAH_BARIS_MAKS
             if isi_baris[i] == " " and ("baris%d" % i) not in self.id_teks:
                 continue                # baris kosong yang belum pernah dipakai
-            if isi_baris[i].startswith(("TUNING", "KOMET", "MODE PENGUJIAN")):
+            if isi_baris[i].startswith(("TUNING", "komet", "MODE PENGUJIAN")):
                 warna = config.WARNA_PERINGATAN
             else:
                 warna = config.WARNA_BIASA

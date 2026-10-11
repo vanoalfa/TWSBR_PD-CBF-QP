@@ -55,7 +55,7 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
 
 JENDELA "ATERA - Kontrol"
   Butuh Qt (sekali saja, di venv):  pip install PyQt5
-  Parameter: geser slider, atau ketik angka lalu Enter. Nilai awal dari config.py.
+  Parameter: ketik angka lalu Enter. Nilai awal dari config.py.
   Setelah mengetik angka tekan Enter, supaya huruf kembali dipakai sebagai tombol.
   Nilai TIDAK ditulis ke config.py: tekan "Cetak nilai ke terminal", lalu salin sendiri.
   Gain diubah saat direkam -> nama file ISE diberi akhiran _TUNING.
@@ -127,7 +127,7 @@ def main():
     sim = Simulasi(gui=True, plot=pilihan.plot, judul=mode)
 
     if pd.Kp_psi == 0.0 and pd.Kd_psi == 0.0:
-        print("PERHATIAN: Kp_psi dan Kd_psi di config.py masih 0, robot akan KOMET. Isi di jendela Kontrol.")
+        print("PERHATIAN: Kp_psi dan Kd_psi di config.py masih 0, robot akan komet. Isi di jendela Kontrol.")
     if pd.Kvel == 0.0:
         print("PERHATIAN: Kvel di config.py masih 0, tombol W / S tidak berpengaruh.")
     if cbf is not None:
@@ -260,7 +260,7 @@ def main():
                         sim.dorong(arah_dorong)
                         print("Didorong ke %s %.1f N" % (teks_arah, sim.gaya_dorong))
                     elif komet:
-                        print("KOMET: tekan R dulu sebelum memulai pengujian.")
+                        print("komet: tekan R dulu sebelum memulai pengujian.")
                     elif pengujian_berjalan:
                         print("Pengujian masih berjalan (%.1f / %.0f s), dorongan diabaikan."
                               % (t_uji, config.DURASI_PENGUJIAN))
@@ -305,10 +305,10 @@ def main():
                 sebab = "s = %.2f m" % s
             if not komet and sebab != "":
                 komet = True
-                print("KOMET (%s): motor dimatikan, perekaman berhenti. "
+                print("komet (%s): motor dimatikan, perekaman berhenti. "
                       "Tekan R (ulang), E (simpan data), atau Q (keluar + simpan)." % sebab)
                 if pengujian_berjalan:
-                    print("KOMET saat pengujian: pengujian disimpan sampai saat KOMET.")
+                    print("komet saat pengujian: pengujian disimpan sampai saat komet.")
                     simpan_ise(perekam_uji)
                     pengujian_berjalan = False
 
@@ -381,7 +381,7 @@ def main():
             if siklus % 10 == 0:
                 baris = []
                 if komet:
-                    baris.append("KOMET, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
+                    baris.append("komet, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
                 elif mode_pengujian:
                     baris.append(teks_uji)
                 elif mode == ise.MODE_PD:

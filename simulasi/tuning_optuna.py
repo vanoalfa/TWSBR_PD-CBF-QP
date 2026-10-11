@@ -13,7 +13,7 @@ Satu trial = satu pengujian tanpa jendela (headless) per isi config.OPTUNA_ARAH_
 di lantai config.OPTUNA_ZETA_DEG, mode Balancing:
     robot diletakkan, dibiarkan OPTUNA_WAKTU_SEBELUM_DORONG s, didorong (gaya dorong profil), direkam OPTUNA_DURASI_UJI s
 Skor = ISE ternormalisasi + penalti (rumus di config.py bagian 13), dari state yang dibaca kontrol (psi Kalman).
-Makin kecil makin baik. Trial dihentikan lebih awal bila KOMET, atau dipangkas (pruning) bila skornya sudah jelek.
+Makin kecil makin baik. Trial dihentikan lebih awal bila komet, atau pruned (pruning) bila skornya sudah jelek.
 
 Jalankan (di folder simulasi):
     python3 tuning_optuna.py --profil TERUKUR --tahap PD            tahap 1, config.OPTUNA_TRIAL_PD trial
@@ -145,7 +145,7 @@ class Penguji:
         """Jalankan satu pengujian per isi config.OPTUNA_ARAH_DORONG, mode Balancing.
 
         Mengembalikan (skor, keterangan, rekaman). rekaman berisi t, psi [deg], s [m] tiap pengujian (rekam=True).
-        Melempar optuna.TrialPruned bila trial dipangkas.
+        Melempar optuna.TrialPruned bila trial pruned.
         """
         self.atur_zeta(zeta_deg)
         self.atur_gain(gain)
@@ -197,10 +197,10 @@ class Penguji:
                     sisa = waktu_total - sudah
                     skor = skor + config.OPTUNA_PENALTI_KOMET * (1.0 + sisa / waktu_total)
                     if abs(psi) > batas_psi:
-                        keterangan = "KOMET |psi| > %.0f deg (dorong %s, t %.1f s)" % (config.SAFE_TILT_DEG,
+                        keterangan = "komet |psi| > %.0f deg (dorong %s, t %.1f s)" % (config.SAFE_TILT_DEG,
                                                                                     TEKS_ARAH[arah], t_uji)
                     else:
-                        keterangan = "KOMET |s| > %.1f m (dorong %s, t %.1f s)" % (config.S_KOMET,
+                        keterangan = "komet |s| > %.1f m (dorong %s, t %.1f s)" % (config.S_KOMET,
                                                                                   TEKS_ARAH[arah], t_uji)
                     rekaman.append(data)
                     return skor, keterangan, rekaman
@@ -223,6 +223,11 @@ class Penguji:
                         raise optuna.TrialPruned()
             rekaman.append(data)
         return skor, "selesai", rekaman
+
+
+# Log per trial: trial | status | skor | waktu | terbaik (skor dan nomor trial) | detail
+FORMAT_HEADER = "%5s | %-7s | %10s | %7s | %-14s | %s"
+FORMAT_BARIS = "%5d | %-7s | %10s | %5.1f s | %-14s | %s"
 
 
 # =============================================================================
@@ -364,7 +369,7 @@ def jalankan_tahap(tahap, profil, jumlah_trial):
         try:
             skor, keterangan, _ = penguji.jalankan(gain, config.OPTUNA_ZETA_DEG, trial)
         except optuna.TrialPruned:
-            trial.set_user_attr("keterangan", "DIPANGKAS")
+            trial.set_user_attr("keterangan", "pruned")
             trial.set_user_attr("lama_s", time.time() - t0)
             raise
         trial.set_user_attr("keterangan", keterangan)
@@ -374,17 +379,17 @@ def jalankan_tahap(tahap, profil, jumlah_trial):
     def cetak_trial(study, trial):
         keterangan = trial.user_attrs.get("keterangan", str(trial.state))
         lama = trial.user_attrs.get("lama_s", 0.0)
-        if trial.value is not None:
-            teks_skor = "skor %10.4f" % trial.value
-        else:
-            teks_skor = "skor %10s" % "-"
+        teks_skor = "%10.4f" % trial.value if trial.value is not None else "%10s" % "-"
         selesai = trial_selesai(study)
         if len(selesai) > 0:
-            teks_terbaik = "terbaik %.4f (trial %d)" % (study.best_value, study.best_trial.number)
+            teks_terbaik = "%.4f (#%d)" % (study.best_value, study.best_trial.number)
         else:
-            teks_terbaik = "terbaik -"
-        print("trial %4d | %s | %-38s | %5.1f s | %s" % (trial.number, teks_skor, keterangan, lama, teks_terbaik))
+            teks_terbaik = "-"
+        status, _, detail = keterangan.partition(" ")
+        print(FORMAT_BARIS % (trial.number, status, teks_skor, lama, teks_terbaik, detail))
 
+    print(FORMAT_HEADER % ("trial", "status", "skor", "waktu", "terbaik", "detail"))
+    print("-" * 78)
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     try:
         study.optimize(objektif, n_trials=jumlah_trial, callbacks=[cetak_trial])
@@ -414,10 +419,10 @@ def laporkan(tahap, profil, penguji):
         gain_pd, _ = gain_pd_terbaik(profil)
     gain = gain_dari_trial(tahap, terbaik.params, gain_pd)
 
-    jumlah_pangkas = 0
+    jumlah_pruned = 0
     for t in study.trials:
         if t.state == optuna.trial.TrialState.PRUNED:
-            jumlah_pangkas = jumlah_pangkas + 1
+            jumlah_pruned = jumlah_pruned + 1
 
     # Gain terbaik diuji lagi (direkam) di lantai optimasi dan lantai uji.
     hasil_uji = []
@@ -427,7 +432,7 @@ def laporkan(tahap, profil, penguji):
 
     print("\n================ HASIL TAHAP %s | %s ================" % (tahap, study.study_name))
     print(teks_label(profil))
-    print("trial: %d total, %d selesai, %d dipangkas" % (len(study.trials), len(selesai), jumlah_pangkas))
+    print("trial: %d total, %d selesai, %d pruned" % (len(study.trials), len(selesai), jumlah_pruned))
     print("trial terbaik: %d, skor %.4f (%s)" % (terbaik.number, terbaik.value,
                                                 terbaik.user_attrs.get("keterangan", "-")))
     for zeta_deg, skor, keterangan, _ in hasil_uji:
@@ -490,7 +495,7 @@ def simpan_png(path, tahap, profil, study, gain, hasil_uji, gaya_dorong):
     nomor_terbaik = []
     skor_terbaik = []
     terbaik = math.inf
-    nomor_pangkas = []
+    nomor_pruned = []
     for t in study.trials:
         if t.state == optuna.trial.TrialState.COMPLETE:
             nomor_selesai.append(t.number)
@@ -500,14 +505,14 @@ def simpan_png(path, tahap, profil, study, gain, hasil_uji, gaya_dorong):
             nomor_terbaik.append(t.number)
             skor_terbaik.append(terbaik)
         elif t.state == optuna.trial.TrialState.PRUNED:
-            nomor_pangkas.append(t.number)
+            nomor_pruned.append(t.number)
     ax[0].plot(nomor_selesai, skor_selesai, "o", ms=3, color="tab:blue", label="trial selesai")
     ax[0].step(nomor_terbaik, skor_terbaik, where="post", color="red", label="terbaik sejauh ini")
-    for i in range(len(nomor_pangkas)):
+    for i in range(len(nomor_pruned)):
         if i == 0:
-            ax[0].axvline(nomor_pangkas[i], color="0.85", lw=0.8, zorder=0, label="dipangkas")
+            ax[0].axvline(nomor_pruned[i], color="0.85", lw=0.8, zorder=0, label="pruned")
         else:
-            ax[0].axvline(nomor_pangkas[i], color="0.85", lw=0.8, zorder=0)
+            ax[0].axvline(nomor_pruned[i], color="0.85", lw=0.8, zorder=0)
     ax[0].set_yscale("log")
     ax[0].set_xlabel("trial")
     ax[0].set_ylabel("skor (log)")

@@ -85,10 +85,10 @@ S_KOMET = 2.0                       # [m]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari D-Pad joystick
-Kp_psi = 15.0           # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 1.5           # [N m s/rad]
-Kp_theta = 0.02         # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
-Kd_theta = 0.04         # [N m s/rad]
+Kp_psi = 580.4900           # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 67.9400           # [N m s/rad]
+Kp_theta = 2.3800         # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
+Kd_theta = 7.0900         # [N m s/rad]
 Kvel = -0.05             # [N m]       hanya aktif di mode Navigate (Tombol A / N)
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
@@ -108,7 +108,7 @@ Alpha_5 = 40.0          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mo
 Alpha_6 = 10.0          # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
-# Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (slider), dan ise.py (kolom CSV).
+# Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
 NAMA_ALPHA = []
 while ("Alpha_%d" % (len(NAMA_ALPHA) + 1)) in globals():
     NAMA_ALPHA.append("Alpha_%d" % (len(NAMA_ALPHA) + 1))
@@ -183,11 +183,6 @@ GYRO_CALIBRATION_DELAY_S = 0.002
 ZERO_CALIBRATION_SAMPLES = 350
 ZERO_CALIBRATION_DELAY_S = 0.004
 
-# Kalman sudut (kalman.py di robot, KalmanIMU di simulasi.py). Harus sama dengan kalman.py di atera_program.
-KALMAN_Q_ANGLE = 0.001
-KALMAN_Q_BIAS = 0.003
-KALMAN_R_MEASURE = 0.03
-
 # =============================================================================
 #                              9. JOYSTICK  (Fantech WGP-13s)
 # =============================================================================
@@ -208,7 +203,7 @@ ISE_PLOT_DIR = "PLOT_EVALUASI"
 # ASUMSI: satu pengujian (tombol T) = DURASI_PENGUJIAN detik waktu simulasi sejak dorongan O / P dimulai.
 DURASI_PENGUJIAN = 30.0             # [s]
 # zeta baru dipakai bila nilainya di jendela Kontrol tidak berubah selama ini (supaya robot tidak diletakkan
-# ulang berkali-kali saat slider sedang digeser).
+# ulang berkali-kali saat angkanya masih diketik).
 ZETA_TUNGGU = 0.5                   # [s]
 
 # Garis batas safety set dan warna kurva di gambar ise.py dan plot realtime
@@ -237,7 +232,7 @@ SIM_ACC_NOISE_DEG = 0.14            # [deg]   simpangan baku sudut akselerometer
 #                              12. PYBULLET (simulasi.py)
 # =============================================================================
 SUBSTEP = 5                 # jumlah langkah fisika dalam satu siklus kontrol (DT)
-GAYA_DORONG_AWAL = 20.0     # [N] besar gaya dorongan (tombol O / P dan tuning_optuna.py), bisa diubah di jendela Kontrol
+GAYA_DORONG_AWAL = 11.0     # [N] besar gaya dorongan (tombol O / P dan tuning_optuna.py), bisa diubah di jendela Kontrol
 LAMA_DORONG = 0.10          # [s] lama gaya dorongan bekerja
 # Titik dorong: bidang DORONG_SISI x DORONG_SISI di sisi luar bagian ATAS badan.
 #   - tepi atas bidang = permukaan teratas badan (dihitung otomatis dari robot.urdf)
@@ -301,18 +296,10 @@ WARNA_QT_TEKAN = "#1d9e5a"       # tombol sedang ditekan
 WARNA_QT_MODE = "#544bb8"        # mode yang sedang aktif
 WARNA_QT_ABAI = "#9a9a9a"        # tulisan tombol yang sedang diabaikan
 WARNA_QT_UJI = "#c26a00"         # mode pengujian aktif
-# Slider tiap parameter: nama -> (batas bawah, batas atas, langkah, jumlah desimal).
-# Kolom angka boleh diisi di luar batas slider; batas slider akan ikut melebar. Semua Alpha_n memakai SLIDER_ALPHA.
-SLIDER = {
-    "Kp_psi": (0.0, 60.0, 0.1, 2),
-    "Kd_psi": (0.0, 10.0, 0.01, 3),
-    "Kp_theta": (0.0, 0.5, 0.001, 4),
-    "Kd_theta": (0.0, 0.5, 0.001, 4),
-    "Kvel": (-0.5, 0.5, 0.001, 4),
-    "Gaya_dorong": (0.0, 40.0, 0.1, 2),
-    "zeta_DEG": (-15.0, 15.0, 0.5, 1),      # kemiringan lantai [deg], + = menanjak ke depan
-}
-SLIDER_ALPHA = (0.0, 100.0, 0.1, 2)
+# Jumlah desimal tampilan tiap parameter di jendela Kontrol: nama -> desimal. Semua Alpha_n memakai DESIMAL_ALPHA.
+# Angka yang diketik boleh lebih teliti; tampilannya menyesuaikan.
+DESIMAL = {"Kp_psi": 2, "Kd_psi": 3, "Kp_theta": 4, "Kd_theta": 4, "Kvel": 4, "Gaya_dorong": 2, "zeta_DEG": 1}
+DESIMAL_ALPHA = 2
 
 # =============================================================================
 #                              13. TUNING OPTUNA  (hanya dipakai tuning_optuna.py)
@@ -325,8 +312,8 @@ SLIDER_ALPHA = (0.0, 100.0, 0.1, 2)
 #        + OPTUNA_PENALTI_JARAK x lama |s| > s_max                 [per detik]
 #        + OPTUNA_PENALTI_GAGAL x lama status CBF bukan AMAN       [per detik, hanya tahap CBFQP]
 #        + OPTUNA_PENALTI_KOMET x (1 + sisa waktu / waktu total)   bila KOMET (trial langsung berhenti)
-OPTUNA_TRIAL_PD = 163221013               # jumlah trial tahap PD (gain PD)
-OPTUNA_TRIAL_CBFQP = 163221013            # jumlah trial tahap CBFQP (Alpha, gain PD dikunci ke hasil tahap PD)
+OPTUNA_TRIAL_PD = 16300               # jumlah trial tahap PD (gain PD)
+OPTUNA_TRIAL_CBFQP = 16300            # jumlah trial tahap CBFQP (Alpha, gain PD dikunci ke hasil tahap PD)
 OPTUNA_BATAS_BAWAH = 0.0            # batas bawah semua gain dan Alpha
 OPTUNA_LANGKAH = 0.01             # 2 angka di belakang koma
 # Alpha = 0 membuat CBF-QP tidak aktif (status ALPHA_NOL), jadi batas bawah Alpha = OPTUNA_LANGKAH.
@@ -334,18 +321,18 @@ OPTUNA_LANGKAH = 0.01             # 2 angka di belakang koma
 # Batas ATAS pencarian tiap variabel. Edit sesuai kebutuhan.
 # Variabel yang tidak ada di tabel (misalnya Alpha_7 nanti) memakai OPTUNA_BATAS_ATAS_LAINNYA.
 OPTUNA_BATAS_ATAS = {
-    "Kp_psi":   500.00,
-    "Kd_psi":   250.00,
-    "Kp_theta": 500.00,
-    "Kd_theta": 50.00,
-    "Alpha_1":  500.00,
-    "Alpha_2":  500.00,
-    "Alpha_3":  500.00,
-    "Alpha_4":  500.00,
-    "Alpha_5":  500.00,
-    "Alpha_6":  500.00,
+    "Kp_psi":   700.00,
+    "Kd_psi":   100.00,
+    "Kp_theta": 5.00,
+    "Kd_theta": 15.00,
+    "Alpha_1":  50.00,
+    "Alpha_2":  50.00,
+    "Alpha_3":  50.00,
+    "Alpha_4":  50.00,
+    "Alpha_5":  50.00,
+    "Alpha_6":  10.00,
 }
-OPTUNA_BATAS_ATAS_LAINNYA = 500.0
+OPTUNA_BATAS_ATAS_LAINNYA = 100.0
 
 # Profil optimasi. Tiap profil punya study Optuna sendiri (hasilnya tidak tercampur):
 #   tahap PD  -> ATERA_PD_<PROFIL>        tahap CBFQP -> ATERA_PD+CBF_<PROFIL>
@@ -369,9 +356,9 @@ OPTUNA_PROFIL = {
 }
 OPTUNA_ZETA_DEG = 0.0               # [deg] lantai saat optimasi
 OPTUNA_ZETA_UJI_DEG = 5.2           # [deg] lantai untuk menguji hasil terbaik (tidak ikut dioptimasi)
-OPTUNA_ARAH_DORONG = [1]            # 1 = dorong depan, -1 = dorong belakang; satu pengujian per isi daftar
-OPTUNA_WAKTU_SEBELUM_DORONG = 3.0   # [s] ASUMSI: robot dibiarkan tenang dulu sebelum didorong (tidak dinilai)
-OPTUNA_DURASI_UJI = 30.0            # [s] lama perekaman tiap pengujian sejak dorongan (terpisah dari DURASI_PENGUJIAN)
+OPTUNA_ARAH_DORONG = [1, -1]        # 1 = dorong depan, -1 = dorong belakang; satu pengujian per isi daftar
+OPTUNA_WAKTU_SEBELUM_DORONG = 4.0   # [s] ASUMSI: robot dibiarkan tenang dulu sebelum didorong (tidak dinilai)
+OPTUNA_DURASI_UJI = 13.0            # [s] lama perekaman tiap pengujian sejak dorongan (terpisah dari DURASI_PENGUJIAN)
 OPTUNA_SEED = 1                     # seed sampler Optuna dan noise IMU (semua trial dinilai dengan noise yang sama)
 OPTUNA_PENALTI_KOMET = 1000.0
 OPTUNA_PENALTI_JARAK = 10.0         # [per detik]
