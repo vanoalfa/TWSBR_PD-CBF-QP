@@ -66,7 +66,7 @@ dtheta_setpoint = 0.0               # [rad/s]
 # Safety set (batas simetris: min = -max)
 psi_max = math.pi / 12.0            # [rad]    |psi|    <= psi_max
 dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
-dtheta_max = 2.0 * math.pi          # [rad/s]  |dtheta| <= dtheta_max
+dtheta_max = 13.0          # [rad/s]  |dtheta| <= dtheta_max
 psi_min = -psi_max
 dpsi_min = -dpsi_max
 dtheta_min = -dtheta_max
@@ -100,12 +100,12 @@ BALANCE_DIRECTION_SIGN = -1.0
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 14.68          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 09.24          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 24.60          # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 41.71          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
-Alpha_5 = 72.04          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
-Alpha_6 = 42.09          # [1/s]  h7, h8 (dtheta, CBF orde 1)
+Alpha_1 = 00.00          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 00.00          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 00.00          # [1/s]  h3, h4 (dpsi, CBF orde 1)
+Alpha_4 = 00.00          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
+Alpha_5 = 00.00          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
+Alpha_6 = 00.00          # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
@@ -345,12 +345,12 @@ OPTUNA_BATAS = {
     "Kd_psi":   (0.0, 100.0),
     "Kp_theta": (0.0, 5.0),
     "Kd_theta": (0.0, 15.0),
-    "Alpha_1":  (20.00, 100.0),
-    "Alpha_2":  (20.00, 100.0),
+    "Alpha_1":  (14.53, 28.28),
+    "Alpha_2":  (14.53, 28.28),
     "Alpha_3":  (20.00, 100.0),
     "Alpha_4":  (10.00, 100.0),
     "Alpha_5":  (10.00, 100.0),
-    "Alpha_6":  (0.01, 100.0),
+    "Alpha_6":  (80.00, 100.0),
 }
 
 # Definisi tahap (urutan = urutan pengerjaan):
@@ -378,7 +378,7 @@ OPTUNA_TAHAP = {
 OPTUNA_PROFIL = {
     "TERUKUR": {
         "kt_efektif": 0.238,        # hasil uji delay 20261009 (G x j_theta)
-        "gaya_dorong": 5.0,         # [N] mulai kecil supaya robot stabil dulu, dinaikkan manual nanti
+        "gaya_dorong": 11.0,         # [N] mulai kecil supaya robot stabil dulu, dinaikkan manual nanti
         "terverifikasi": True,
         "catatan": "K diturunkan dari uji inersia/delay, bergantung pada j_theta = 9.2e-4",
     },
