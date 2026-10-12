@@ -10,6 +10,10 @@ Nomor KE-XX naik otomatis per tanggal, per mode, dan per jenis (PERCOBAAN / PENG
 File lama (langsung di PLOT_EVALUASI, atau tanpa HHmmSS) tetap terbaca sebagai PERCOBAAN.
 Bila gain diubah saat sedang direkam, nama file diberi akhiran _TUNING.
 
+Kolom c_h1, c_h2, ... (hanya mode PD + CBF-QP): nilai tiap constraint CBF-QP (urutan DAFTAR_C di cbf_qp.py) pada
+torsi u yang dipakai siklus itu. c >= 0 = terpenuhi, c ~ 0 = constraint sedang aktif (membatasi u), c < 0 =
+dilanggar (status GAGAL). Kosong = constraint tidak dipakai di mode gerak itu, atau mode PD.
+
 Isi gambar:
     Gambar 1: sumbu X = psi,   sumbu Y = dpsi       kotak batas psi dan dpsi
     Gambar 2: sumbu X = theta, sumbu Y = dtheta     kotak batas jarak (theta = s/R) dan dtheta
@@ -216,6 +220,7 @@ class PerekamISE:
         self.gain_awal = None
         self.gain_akhir = None
         self.gain_berubah = []         # nama gain yang diubah saat percobaan direkam
+        self.jumlah_c = 0              # jumlah kolom constraint CBF-QP (c_h1, c_h2, ...) di CSV
         self.zeta_deg = 0.0            # kemiringan lantai saat percobaan [deg]
         self.file_terakhir = ""
         self.path_terakhir = ""
@@ -234,12 +239,15 @@ class PerekamISE:
         self.gain_awal = None
         self.gain_akhir = None
         self.gain_berubah = []
+        self.jumlah_c = 0
 
-    def tambah(self, t, x, error_theta, error_dtheta, error_psi, error_dpsi, u_PD, u, status_cbf, gain, dorong=0.0):
+    def tambah(self, t, x, error_theta, error_dtheta, error_psi, error_dpsi, u_PD, u, status_cbf, gain, dorong=0.0,
+               nilai_c=None):
         """Dipanggil tiap siklus kontrol.
 
-        gain   : dict berisi Kp_psi, Kd_psi, Kp_theta, Kd_theta, Kvel, Alpha_1, Alpha_2, ... dan zeta_DEG
-        dorong : gaya dorongan yang sedang bekerja [N] (+ ke depan, - ke belakang, 0 tidak ada)
+        gain    : dict berisi Kp_psi, Kd_psi, Kp_theta, Kd_theta, Kvel, Alpha_1, Alpha_2, ... dan zeta_DEG
+        dorong  : gaya dorongan yang sedang bekerja [N] (+ ke depan, - ke belakang, 0 tidak ada)
+        nilai_c : list nilai constraint CBF-QP (None = constraint tidak dipakai), atau None (mode PD / motor mati)
         """
         dt = t - self.t_terakhir
         self.t_terakhir = t
@@ -272,6 +280,10 @@ class PerekamISE:
             baris.append(gain_sekarang[nama])
         self.zeta_deg = float(gain.get("zeta_DEG", getattr(config, "zeta_DEG", 0.0)))
         baris.append(self.zeta_deg)
+        # Kolom constraint CBF-QP di ujung baris (kolom lain tetap di posisinya).
+        if nilai_c is not None:
+            self.jumlah_c = max(self.jumlah_c, len(nilai_c))
+            baris.extend("" if c is None else c for c in nilai_c)
         self.data.append(baris)
 
     def simpan(self):
@@ -290,7 +302,8 @@ class PerekamISE:
         # ----------------------------------------------------------------- CSV
         with open(path_csv, "w", newline="") as f:
             tulis = csv.writer(f)
-            tulis.writerow(KOLOM_CSV)
+            kolom_c = ["c_h%d" % (i + 1) for i in range(self.jumlah_c)]
+            tulis.writerow(KOLOM_CSV + kolom_c)
             for baris in self.data:
                 baris_teks = []
                 for nilai in baris:
@@ -298,6 +311,8 @@ class PerekamISE:
                         baris_teks.append(nilai)
                     else:
                         baris_teks.append("%.8g" % nilai)
+                # Baris tanpa nilai constraint (motor mati / mode PD) diberi kolom kosong.
+                baris_teks.extend([""] * (len(KOLOM_CSV) + len(kolom_c) - len(baris_teks)))
                 tulis.writerow(baris_teks)
 
         # ----------------------------------------------------------------- PNG

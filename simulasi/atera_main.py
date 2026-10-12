@@ -312,6 +312,7 @@ def main():
                     simpan_ise(perekam_uji)
                     pengujian_berjalan = False
 
+            nilai_c = None                  # nilai constraint CBF-QP (dicatat di CSV), hanya mode PD + CBF-QP
             if komet:
                 # Motor mati: tidak ada torsi, badan dibiarkan jatuh ke lantai.
                 u_PD = 0.0
@@ -327,6 +328,8 @@ def main():
                 else:
                     u = cbf.compute(x, u_PD)
                     status_cbf = cbf.status
+                    # c_k pada u terpakai; constraint yang tidak dipakai (mask 0) dicatat kosong.
+                    nilai_c = [float(c) if m > 0.0 else None for c, m in zip(cbf.c, cbf.mask)]
 
             # Gaya dorongan yang bekerja di siklus ini (dicatat di CSV).
             if sim.sisa_dorong > 0.0:
@@ -349,11 +352,11 @@ def main():
                 if not mode_pengujian:
                     t = t + config.DT
                     perekam.tambah(t, x, pd.error_theta, pd.error_dtheta, pd.error_psi, pd.error_dpsi,
-                                   u_PD, u, status_cbf, params, dorong)
+                                   u_PD, u, status_cbf, params, dorong, nilai_c)
                 elif pengujian_berjalan:
                     t_uji = t_uji + config.DT
                     perekam_uji.tambah(t_uji, x, pd.error_theta, pd.error_dtheta, pd.error_psi, pd.error_dpsi,
-                                       u_PD, u, status_cbf, params, dorong)
+                                       u_PD, u, status_cbf, params, dorong, nilai_c)
                     if t_uji >= config.DURASI_PENGUJIAN - 0.5 * config.DT:
                         print("PENGUJIAN selesai (%.0f s)." % config.DURASI_PENGUJIAN)
                         simpan_ise(perekam_uji)

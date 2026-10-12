@@ -66,7 +66,9 @@ dtheta_setpoint = 0.0               # [rad/s]
 # Safety set (batas simetris: min = -max)
 psi_max = math.pi / 12.0            # [rad]    |psi|    <= psi_max
 dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
-dtheta_max = 13.0          # [rad/s]  |dtheta| <= dtheta_max
+dtheta_max = 13.0                   # [rad/s]  |dtheta| <= dtheta_max
+# ASUMSI: di bawah batas kecepatan motor DDSM115 (no-load 200 rpm = 20.9 rad/s, wiki Waveshare) dan di atas
+# kecepatan roda yang dibutuhkan PD untuk pulih dari dorongan 5 N di simulasi (12.3 rad/s, pengujian 20261012).
 psi_min = -psi_max
 dpsi_min = -dpsi_max
 dtheta_min = -dtheta_max
@@ -85,10 +87,10 @@ S_KOMET = 2.0                       # [m]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari D-Pad joystick
-Kp_psi = 538.80           # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 93.87           # [N m s/rad]
-Kp_theta = 3.23         # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
-Kd_theta = 11.74         # [N m s/rad]
+Kp_psi = 30.64           # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 5.00           # [N m s/rad]
+Kp_theta = 0.16         # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
+Kd_theta = 0.45         # [N m s/rad]
 Kvel = -0.05             # [N m]       hanya aktif di mode Navigate (Tombol A / N)
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
@@ -100,8 +102,8 @@ BALANCE_DIRECTION_SIGN = -1.0
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 00.00          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 00.00          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_1 = 25.67          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 24.66          # [1/s]  h1, h2 (psi, HOCBF orde 2)
 Alpha_3 = 00.00          # [1/s]  h3, h4 (dpsi, CBF orde 1)
 Alpha_4 = 00.00          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
 Alpha_5 = 00.00          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
@@ -308,7 +310,7 @@ DESIMAL_ALPHA = 2
 #                              13. TUNING OPTUNA  (hanya dipakai tuning_optuna.py)
 # =============================================================================
 # Tuning BERTAHAP: satu study Optuna per tahap, dijalankan satu per satu (python3 tuning_optuna.py --tahap <NAMA>).
-#   PD            Kp_psi, Kd_psi, Kp_theta, Kd_theta   semua gain PD sekaligus, tanpa penalti jarak
+#   PD            Kp_psi, Kd_psi, Kp_theta, Kd_theta   semua gain PD sekaligus, cari gaya dorong tertinggi
 #   CBFQP_PSI     Alpha_1, Alpha_2           barrier h1, h2
 #   CBFQP_DPSI    Alpha_3                    barrier h1 .. h4  (Alpha_1, Alpha_2 dari config.py)
 #   CBFQP_S       Alpha_4, Alpha_5           barrier h1 .. h6
@@ -317,40 +319,64 @@ DESIMAL_ALPHA = 2
 # sebelum menjalankan tahap berikutnya. Study sebuah tahap tidak boleh dilanjutkan bila nilai-nilai yang dikunci
 # (atau skenario di bawah) berubah; tuning_optuna.py menghentikan program dan menjelaskan bedanya.
 #
-# Satu trial = SATU simulasi berkelanjutan (tanpa reset di tengah) di lantai OPTUNA_ZETA_DEG, mode Balancing:
+# SATU PENGUJIAN = OPTUNA_ULANGAN kali skenario berikut, robot di-reset di awal tiap ulangan (lantai
+# OPTUNA_ZETA_DEG, mode Balancing). Di dalam satu ulangan tidak ada reset:
 #   1. Tenang awal  : robot diletakkan, ditunggu sampai STABIL (maks OPTUNA_DURASI_STABIL detik, tidak dinilai ISE).
 #   2. Dorongan     : didorong sesuai urutan OPTUNA_ARAH_DORONG. Dorongan berikutnya LANGSUNG diberikan
 #                     OPTUNA_DURASI_DORONGAN detik setelah dorongan sebelumnya, stabil atau belum (kondisi terburuk).
-#   3. Setelah dorongan terakhir: ditunggu sampai STABIL (maks OPTUNA_DURASI_STABIL detik sejak dorongan itu),
-#                     lalu trial selesai.
-#   Titik nol s tetap posisi awal. Gaya dorong dan torsi roda mengikuti profil (OPTUNA_PROFIL di bawah).
+#   3. Setelah dorongan terakhir: ditunggu sampai STABIL (maks OPTUNA_DURASI_STABIL detik sejak dorongan itu).
+#   Titik nol s = posisi awal tiap ulangan. Torsi roda mengikuti profil (OPTUNA_PROFIL di bawah).
+# Ulangan ke-k (k = 0, 1, ...) dibuat berbeda supaya hasil tidak bergantung pada keberuntungan:
+#   noise IMU memakai seed OPTUNA_SEED + k, dan dorongan pertama ditunda k x OPTUNA_GESER_DORONG detik setelah
+#   tenang awal, jarak antar dorongan menjadi OPTUNA_DURASI_DORONGAN + k x OPTUNA_GESER_DORONG.
+#   Skor pengujian = JUMLAH skor semua ulangan. Komet di satu ulangan menghentikan pengujian (ulangan sisanya tidak
+#   dijalankan).
 # STABIL = |psi| < OPTUNA_STABIL_PSI, |dpsi| < OPTUNA_STABIL_DPSI, |dtheta| < OPTUNA_STABIL_DTHETA, ketiganya
 #   terus-menerus selama OPTUNA_STABIL_LAMA detik (psi hasil Kalman, sama dengan yang dibaca kontrol).
-# Skor (makin kecil makin baik), dihitung dari state yang dibaca kontrol (psi hasil Kalman):
-#   skor = integral[(psi/psi_max)^2 + (s/s_max)^2] dt                       [sejak dorongan pertama]
+# Skor satu pengujian (makin kecil makin baik), dari state yang dibaca kontrol (psi hasil Kalman):
+#   skor = integral[(psi/psi_max)^2 + (s/s_max)^2] dt                       [sejak dorongan pertama tiap ulangan]
 #        + OPTUNA_PENALTI_JARAK x lama |s| > s_max                         [per detik, tahap dengan "penalti_jarak"]
 #        + OPTUNA_PENALTI_GAGAL x lama status CBF bukan AMAN               [per detik, hanya tahap CBFQP_*]
-#        + OPTUNA_PENALTI_KOMET x (1 + sisa waktu / waktu total)   bila KOMET (trial langsung berhenti; sisa dihitung dari seluruh urutan dorongan)
-# Tidak stabil TIDAK diberi penalti: hanya dicatat di detail (status tetap selesai). ISE sudah lebih besar bila robot lambat pulih,
-# dan robot yang cepat stabil setelah dorongan terakhir mengakhiri trial (dan ISE-nya) lebih awal.
+#        + OPTUNA_PENALTI_KOMET x (1 + sisa waktu / waktu total)   bila KOMET (pengujian langsung berhenti; sisa dihitung dari seluruh ulangan)
+# Tidak stabil TIDAK diberi penalti: hanya dicatat di detail. ISE sudah lebih besar bila robot lambat pulih,
+# dan robot yang cepat stabil setelah dorongan terakhir mengakhiri ulangan (dan ISE-nya) lebih awal.
+#
+# Gaya dorong:
+#   Tahap dengan "cari_gaya" (PD): satu trial mencari gaya TERTINGGI yang masih lolos satu pengujian (tanpa komet),
+#     dengan bisection pada kisi gaya_dorong .. OPTUNA_GAYA_MAKS berjarak OPTUNA_GAYA_LANGKAH (gaya_dorong dari profil).
+#     ASUMSI bisection: robot yang lolos pada gaya F juga lolos pada gaya yang lebih kecil.
+#       skor trial = -OPTUNA_BOBOT_GAYA x gaya_lolos + skor pengujian pada gaya_lolos
+#     Bobot dibuat besar supaya gaya lebih tinggi SELALU lebih baik; ISE hanya membedakan trial dengan gaya sama.
+#     Bila gaya terendah pun komet: skor trial = skor pengujian pada gaya terendah (dengan penalti komet).
+#   Tahap CBFQP_*: gaya tetap = gaya_pd_terbaik (profil, diisi dari hasil tahap PD) + OPTUNA_GAYA_TAMBAH_CBF.
+# Diagnostik tanda_u_per_s (CSV dan terminal) = jumlah pergantian tanda torsi u per detik bagian yang dinilai;
+#   angka besar (puluhan per detik) menandakan kontrol bang-bang. Tidak masuk skor.
 # Tahap dengan "skor_s": False menghapus suku s, penalti jarak, dan komet |s|: yang dinilai hanya psi.
-OPTUNA_TRIAL_PD = 210                 # jumlah trial tahap PD (bisa diubah per tahap di OPTUNA_TAHAP)
-OPTUNA_TRIAL_CBFQP = 210              # jumlah trial tahap CBFQP_* (bisa diubah per tahap di OPTUNA_TAHAP)
+OPTUNA_TRIAL_PD = 16300                 # jumlah trial tahap PD (bisa diubah per tahap di OPTUNA_TAHAP)
+OPTUNA_TRIAL_CBFQP = 16300              # jumlah trial tahap CBFQP_* (bisa diubah per tahap di OPTUNA_TAHAP)
 OPTUNA_LANGKAH = 0.01                 # 2 angka di belakang koma
 
 # Batas pencarian tiap variabel: nama -> (batas bawah, batas atas). Edit sesuai kebutuhan sebelum tuning.
 # Alpha = 0 membuat CBF-QP tidak aktif (status ALPHA_NOL), jadi batas bawah Alpha harus > 0.
+# Dasar pemilihan (model linear model.py, rasio torsi 0.317, sampling 200 Hz, jeda torsi 5 ms; analisis 20261012):
+#   Kp_psi   : > 1.7 agar badan bisa ditegakkan; <= 60 agar daerah linear >= 1.4 deg dan jauh dari batas jeda
+#   Kd_psi   : stabil kira-kira 0.5 .. 5.5 (di atas itu loop tidak stabil karena jeda 5 ms -> bang-bang)
+#   Kp_theta : harus > 0, batas atas stabil kira-kira Kp_psi / 6
+#   Kd_theta : harus > 0, batas atas stabil kira-kira 0.35 x Kd_psi
+#   Alpha_1, Alpha_2 : hasil kali 211 .. 800 (>= 211 supaya torsi +-1.5 N m tidak dipotong saat tegak;
+#                      Alpha_1 <= ~28 supaya badan masih bisa direm sebelum psi_max)
+#   Alpha_6  : >= 10.8 supaya barrier dtheta tidak memotong torsi saat robot diam (dtheta_max = 13 rad/s)
 OPTUNA_BATAS = {
-    "Kp_psi":   (100.0, 700.0),
-    "Kd_psi":   (0.0, 100.0),
-    "Kp_theta": (0.0, 5.0),
-    "Kd_theta": (0.0, 15.0),
-    "Alpha_1":  (14.53, 28.28),
-    "Alpha_2":  (14.53, 28.28),
+    "Kp_psi":   (5.0, 60.0),
+    "Kd_psi":   (0.5, 5.0),
+    "Kp_theta": (0.0, 4.0),
+    "Kd_theta": (0.0, 1.5),
+    "Alpha_1":  (10.00, 30.00),
+    "Alpha_2":  (10.00, 30.00),
     "Alpha_3":  (20.00, 100.0),
     "Alpha_4":  (10.00, 100.0),
     "Alpha_5":  (10.00, 100.0),
-    "Alpha_6":  (80.00, 100.0),
+    "Alpha_6":  (11.00, 100.0),
 }
 
 # Definisi tahap (urutan = urutan pengerjaan):
@@ -361,9 +387,10 @@ OPTUNA_BATAS = {
 #   paksa    : (opsional) nilai yang dipaksa selama tahap ini, menggantikan config.py
 #   skor_s   : (opsional, default True) False = skor hanya dari psi
 #   penalti_jarak : (opsional, default True) False = OPTUNA_PENALTI_JARAK tidak dihitung (suku s di ISE tetap)
+#   cari_gaya     : (opsional, default False) True = tiap trial mencari gaya dorong tertinggi yang lolos (lihat atas)
 OPTUNA_TAHAP = {
     "PD":           {"variabel": ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta"], "trial": OPTUNA_TRIAL_PD,
-                     "barrier": None, "penalti_jarak": False},
+                     "barrier": None, "penalti_jarak": False, "cari_gaya": True},
     "CBFQP_PSI":    {"variabel": ["Alpha_1", "Alpha_2"], "trial": OPTUNA_TRIAL_CBFQP, "barrier": [1, 2]},
     "CBFQP_DPSI":   {"variabel": ["Alpha_3"], "trial": OPTUNA_TRIAL_CBFQP, "barrier": [1, 2, 3, 4]},
     "CBFQP_S":      {"variabel": ["Alpha_4", "Alpha_5"], "trial": OPTUNA_TRIAL_CBFQP, "barrier": [1, 2, 3, 4, 5, 6]},
@@ -373,18 +400,22 @@ OPTUNA_TAHAP = {
 # Profil optimasi. Tiap profil punya study Optuna sendiri (hasilnya tidak tercampur):
 #   study tiap tahap: ATERA_<TAHAP>_<PROFIL>, contoh ATERA_PD_TERUKUR
 # kt_efektif  : torsi roda nyata per A arus perintah [N m/A], menggantikan MOTOR_KT_EFEKTIF saat tuning
-# gaya_dorong : gaya dorong saat tuning, menggantikan GAYA_DORONG_AWAL saat tuning
+# gaya_dorong : [N] gaya dorong TERENDAH yang dicoba tahap PD (awal pencarian gaya)
+# gaya_pd_terbaik : [N] gaya lolos tertinggi dari hasil tahap PD (dicetak tuning_optuna.py, salin ke sini).
+#                   Tahap CBFQP_* memakai gaya_pd_terbaik + OPTUNA_GAYA_TAMBAH_CBF. None = belum ada.
 # Jalankan:  python3 tuning_optuna.py --profil TERUKUR --tahap PD
 OPTUNA_PROFIL = {
     "TERUKUR": {
         "kt_efektif": 0.238,        # hasil uji delay 20261009 (G x j_theta)
-        "gaya_dorong": 11.0,         # [N] mulai kecil supaya robot stabil dulu, dinaikkan manual nanti
+        "gaya_dorong": 5.0,         # [N] gaya terendah yang dicoba tahap PD
+        "gaya_pd_terbaik": 11.5,    # [N] isi dari hasil tahap PD (dicetak tuning_optuna.py)
         "terverifikasi": True,
         "catatan": "K diturunkan dari uji inersia/delay, bergantung pada j_theta = 9.2e-4",
     },
     "DATASHEET": {
         "kt_efektif": 0.75,         # datasheet Waveshare DDSM115 (= MOTOR_KT)
-        "gaya_dorong": 20.0,        # [N]
+        "gaya_dorong": 20.0,        # [N] gaya terendah yang dicoba tahap PD
+        "gaya_pd_terbaik": None,    # [N] isi dari hasil tahap PD (dicetak tuning_optuna.py)
         "terverifikasi": False,
         "catatan": "BELUM TERVERIFIKASI: nilai 0.75 belum cocok dengan uji delay (0.24). "
                    "BUTUH PENGUJIAN TORSI RODA (ddsm115_torsi_statis_testing.py)",
@@ -394,20 +425,28 @@ OPTUNA_ZETA_DEG = 0.0               # [deg] lantai saat optimasi
 OPTUNA_ZETA_UJI_DEG = 5.2           # [deg] lantai untuk menguji hasil terbaik (tidak ikut dioptimasi)
 OPTUNA_ARAH_DORONG = [1, -1, 1, -1]  # urutan dorongan: 1 = dorong depan, -1 = dorong belakang (tanpa reset di antaranya)
 OPTUNA_DURASI_DORONGAN = 30.0       # [s] jarak antar dorongan (terpisah dari DURASI_PENGUJIAN)
-# Syarat STABIL (lihat penjelasan di atas). Hanya menentukan kapan dorongan pertama diberikan dan kapan trial
+# Syarat STABIL (lihat penjelasan di atas). Hanya menentukan kapan dorongan pertama diberikan dan kapan ulangan
 # selesai, TIDAK diberi penalti.
-OPTUNA_STABIL_PSI = 0.10471976      # [rad]   |psi|    < nilai ini (6 deg)
-OPTUNA_STABIL_DPSI = 0.10471976     # [rad/s] |dpsi|   < nilai ini (6 deg/s)
+OPTUNA_STABIL_PSI = 0.15707963     # [rad]   |psi|    < nilai ini (10 deg)
+OPTUNA_STABIL_DPSI = 0.17453293     # [rad/s] |dpsi|   < nilai ini (10 deg/s)
 OPTUNA_STABIL_DTHETA = 0.17453293   # [rad/s] |dtheta| < nilai ini (10 deg/s)
 OPTUNA_STABIL_LAMA = 10.0           # [s] ketiga syarat di atas harus terpenuhi TERUS-MENERUS selama ini
-OPTUNA_DURASI_STABIL = 50.0        # [s] batas waktu MAKSIMUM menunggu stabil (tenang awal dan setelah dorongan
-                                    #     terakhir, dihitung dari awal fase itu); lewat dari ini trial lanjut
-OPTUNA_SEED = 1                     # seed sampler Optuna dan noise IMU (semua trial dinilai dengan noise yang sama)
+OPTUNA_DURASI_STABIL = 50.0         # [s] batas waktu MAKSIMUM menunggu stabil (tenang awal dan setelah dorongan
+                                    #     terakhir, dihitung dari awal fase itu); lewat dari ini ulangan lanjut
+OPTUNA_SEED = 1                     # seed sampler Optuna dan noise IMU ulangan pertama (ulangan ke-k: OPTUNA_SEED + k)
+OPTUNA_ULANGAN = 2                  # jumlah ulangan skenario (dengan reset) dalam satu pengujian
+OPTUNA_GESER_DORONG = 0.13          # [s] ASUMSI: pergeseran waktu dorong per ulangan (~setengah periode osilasi
+                                    #     3.8 Hz yang teramati di simulasi 20261012)
+OPTUNA_GAYA_MAKS = 25.0             # [N] gaya tertinggi yang dicoba tahap PD
+OPTUNA_GAYA_LANGKAH = 0.5           # [N] ketelitian pencarian gaya tahap PD
+OPTUNA_BOBOT_GAYA = 1000.0          # [per N] bobot gaya lolos di skor tahap PD (jauh lebih besar dari ISE)
+OPTUNA_GAYA_TAMBAH_CBF = 0.5        # [N] tahap CBFQP_* memakai gaya_pd_terbaik + nilai ini
 OPTUNA_PENALTI_KOMET = 1000.0
 OPTUNA_PENALTI_JARAK = 10.0         # [per detik]
 OPTUNA_PENALTI_GAGAL = 10.0         # [per detik]
 # Pruning (auto-stop trial yang jelek): skor dilaporkan tiap 1 detik; trial dihentikan bila skornya lebih buruk
 # dari median trial sebelumnya pada detik yang sama. Baru aktif setelah OPTUNA_PRUNER_STARTUP trial selesai dan
-# setelah OPTUNA_PRUNER_WARMUP_S detik pertama.
+# setelah OPTUNA_PRUNER_WARMUP_S detik pertama. Tahap dengan "cari_gaya" (PD) tidak di-prune: skornya baru
+# diketahui setelah pencarian gaya selesai.
 OPTUNA_PRUNER_STARTUP = 10
 OPTUNA_PRUNER_WARMUP_S = 5
