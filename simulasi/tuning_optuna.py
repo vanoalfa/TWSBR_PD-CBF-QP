@@ -1,13 +1,12 @@
 """tuning_optuna.py - mencari gain PD dan Alpha CBF-QP terbaik secara bertahap dengan Optuna (simulasi PyBullet).
 
 Dua profil (config.OPTUNA_PROFIL), masing-masing dengan study sendiri supaya hasilnya tidak tercampur:
-    TERUKUR   : torsi roda 0.238 N m/A (hasil uji delay),  dorong 11 N
-    DATASHEET : torsi roda 0.75 N m/A (datasheet Waveshare), dorong 26 N   -> BELUM TERVERIFIKASI
+    TERUKUR   : torsi roda 0.238 N m/A (hasil uji delay),  dorong 5 N
+    DATASHEET : torsi roda 0.75 N m/A (datasheet Waveshare), dorong 20 N   -> BELUM TERVERIFIKASI
 
-Enam tahap (config.OPTUNA_TAHAP), dijalankan satu per satu. Satu tahap = satu study ATERA_<TAHAP>_<PROFIL>
+Lima tahap (config.OPTUNA_TAHAP), dijalankan satu per satu. Satu tahap = satu study ATERA_<TAHAP>_<PROFIL>
 di database OPTUNA/atera_optuna.db:
-    PD_BADAN      Kp_psi, Kd_psi, Kd_theta   mode PD saja, Kp_theta dipaksa 0, skor hanya dari psi
-    PD_RODA       Kp_theta                   mode PD saja
+    PD            Kp_psi, Kd_psi, Kp_theta, Kd_theta   mode PD saja, tanpa penalti jarak
     CBFQP_PSI     Alpha_1, Alpha_2           PD + CBF-QP, barrier h1 h2
     CBFQP_DPSI    Alpha_3                    PD + CBF-QP, barrier h1 .. h4
     CBFQP_S       Alpha_4, Alpha_5           PD + CBF-QP, barrier h1 .. h6
@@ -19,29 +18,36 @@ program berhenti dan menjelaskan bedanya, supaya skor lama dan baru tidak tercam
 
 Satu trial = satu simulasi berkelanjutan tanpa jendela (headless) di lantai config.OPTUNA_ZETA_DEG, mode Balancing,
 TANPA reset di tengah:
-    robot diletakkan, dibiarkan OPTUNA_WAKTU_SEBELUM_DORONG s (tidak dinilai), lalu didorong sesuai urutan
-    OPTUNA_ARAH_DORONG, tiap dorongan dinilai OPTUNA_DURASI_UJI s. Bawaan: 5 s -> depan_1 30 s -> belakang_1 30 s
-    -> depan_2 30 s -> belakang_2 30 s (125 s). Titik nol s = posisi awal robot.
+    robot diletakkan dan ditunggu sampai stabil (maks OPTUNA_DURASI_STABIL s, tidak dinilai ISE), lalu didorong
+    sesuai urutan OPTUNA_ARAH_DORONG dengan jarak OPTUNA_DURASI_DORONGAN s (stabil atau belum), dan setelah dorongan
+    terakhir ditunggu sampai stabil (maks OPTUNA_DURASI_STABIL s). Titik nol s = posisi awal robot.
+    Syarat stabil: config.py bagian 13 (hanya menentukan waktu, tanpa penalti; tidak stabil hanya dicatat di detail).
 Skor = ISE ternormalisasi + penalti (rumus di config.py bagian 13), dari state yang dibaca kontrol (psi Kalman).
 Makin kecil makin baik. Trial dihentikan lebih awal bila komet, atau pruned (pruning) bila skornya sudah jelek.
 
 Log terminal tiap trial: trial | status | skor | waktu nyata | terbaik | psimaks | gagal | detail
     psimaks = puncak |psi| [deg] selama pengujian,  gagal = lama status CBF bukan AMAN [s] (tahap CBFQP_*)
-CSV memuat lebih banyak: puncak |psi|, |dpsi|, |s|, lama GAGAL, dan skor yang dipecah menjadi ISE dan tiap penalti.
+    status  = selesai (tanpa komet) | komet | pruned
+    detail  = penyebab komet; untuk selesai: kosong bila semua fase stabil, atau daftar fase yang tidak mencapai
+              stabil: awal (sebelum dorongan pertama) dan/atau akhir (setelah dorongan terakhir), tanpa penalti
+CSV memuat lebih banyak: puncak |psi|, |dpsi|, |s|, lama GAGAL, jumlah fase tidak stabil, puncak |psi|, |dpsi|,
+|dtheta| pada OPTUNA_STABIL_LAMA detik terakhir fase awal dan fase terakhir (untuk dibandingkan dengan syarat
+stabil), dan skor yang dipecah menjadi ISE dan tiap penalti.
 
 Jalankan (di folder simulasi):
-    python3 tuning_optuna.py --profil TERUKUR --tahap PD_BADAN      jumlah trial dari config.OPTUNA_TAHAP
+    python3 tuning_optuna.py --profil TERUKUR --tahap PD            jumlah trial dari config.OPTUNA_TAHAP
     python3 tuning_optuna.py --profil TERUKUR --tahap CBFQP_PSI --trial 50   MENAMBAH 50 trial ke study yang ada
     python3 tuning_optuna.py --hasil                                cetak hasil terbaik semua profil dan tahap, buat ulang CSV + PNG
     python3 tuning_optuna.py --hasil --profil TERUKUR               hanya satu profil
-    python3 tuning_optuna.py --profil TERUKUR --hapus PD_BADAN      hapus study satu tahap (mulai dari nol)
+    python3 tuning_optuna.py --profil TERUKUR --hapus PD            hapus study satu tahap (mulai dari nol)
 
 Hasil (folder OPTUNA):
     atera_optuna.db                                      database semua trial (bisa dilanjutkan kapan saja)
-    YYYYMMDD_HHmmSS_OPTUNA_PD_BADAN_TERUKUR.csv / .png   riwayat trial + respon gain terbaik di zeta 0 dan 5.2 deg
+    YYYYMMDD_HHmmSS_OPTUNA_PD_TERUKUR.csv / .png         riwayat trial + respon gain terbaik di zeta 0 dan 5.2 deg
     (untuk profil DATASHEET: ..._DATASHEET, diberi label BELUM TERVERIFIKASI)
 Nilai terbaik dicetak di terminal dalam format config.py. Salin sendiri ke config.py.
-Study lama dengan nama ATERA_PD_<PROFIL> dan ATERA_PD+CBF_<PROFIL> (sebelum tuning bertahap) tidak dipakai lagi.
+Study lama ATERA_PD_<PROFIL> (sebelum tuning bertahap, belum punya catatan skenario) harus dihapus dulu dengan
+--hapus PD sebelum tahap PD dijalankan. Study ATERA_PD_BADAN_*, ATERA_PD_RODA_*, ATERA_PD+CBF_* tidak dipakai lagi.
 
 Butuh: pip install optuna
 Nama file sengaja BUKAN optuna.py: file bernama optuna.py akan menutupi library optuna saat "import optuna".
@@ -53,6 +59,7 @@ import math
 import os
 import sys
 import time
+from collections import deque
 from datetime import datetime
 
 import numpy as np
@@ -74,8 +81,15 @@ DATABASE = "sqlite:///" + os.path.join(FOLDER_HASIL, "atera_optuna.db")
 NAMA_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta"]
 TEKS_ARAH = {1: "depan", -1: "belakang"}
 
-# Diagnostik tiap trial (disimpan sebagai atribut trial dan kolom CSV). skor = ise + pen_jarak + pen_gagal + pen_komet
-KOLOM_DIAG = ["psi_maks_deg", "dpsi_maks_rad_s", "s_maks_m", "lama_gagal_s", "ise", "pen_jarak", "pen_gagal", "pen_komet"]
+# Diagnostik tiap trial (disimpan sebagai atribut trial dan kolom CSV).
+# skor = ise + pen_jarak + pen_gagal + pen_komet
+# jumlah_tidak_stabil = jumlah fase (tenang awal, setelah dorongan terakhir) yang tidak mencapai stabil (0, 1, 2)
+# awal_* / akhir_* = puncak |psi|, |dpsi|, |dtheta| pada OPTUNA_STABIL_LAMA detik terakhir fase awal / fase terakhir
+#                    (satuan sama dengan OPTUNA_STABIL_*; 0 bila fase itu tidak tercapai karena komet)
+KOLOM_STABIL = ["psi_rad", "dpsi_rad_s", "dtheta_rad_s"]
+KOLOM_DIAG = (["psi_maks_deg", "dpsi_maks_rad_s", "s_maks_m", "lama_gagal_s", "jumlah_tidak_stabil"]
+              + ["awal_" + nama for nama in KOLOM_STABIL] + ["akhir_" + nama for nama in KOLOM_STABIL]
+              + ["ise", "pen_jarak", "pen_gagal", "pen_komet"])
 
 # Baris log terminal (lihat docstring): header dan isi memakai lebar kolom yang sama.
 FORMAT_HEADER = "%5s | %-7s | %10s | %7s | %-16s | %7s | %6s | %s"
@@ -92,8 +106,13 @@ def nama_dorongan():
     return hasil
 
 
+def waktu_dinilai_maks():
+    """Lama maksimum bagian yang dinilai [s]: dari dorongan pertama sampai batas tunggu setelah dorongan terakhir."""
+    return (len(config.OPTUNA_ARAH_DORONG) - 1) * config.OPTUNA_DURASI_DORONGAN + config.OPTUNA_DURASI_STABIL
+
+
 def nama_study(tahap, profil):
-    return "ATERA_%s_%s" % (tahap, profil)                # ATERA_PD_BADAN_TERUKUR, ATERA_CBFQP_S_DATASHEET, ...
+    return "ATERA_%s_%s" % (tahap, profil)                # ATERA_PD_TERUKUR, ATERA_CBFQP_S_DATASHEET, ...
 
 
 def nama_file(tahap, profil):
@@ -150,6 +169,7 @@ class Penguji:
         self.pakai_cbf = False              # tahap sekarang memakai CBF-QP
         self.paksa = {}                     # nilai yang dipaksa selama tahap sekarang (menggantikan config.py)
         self.skor_s = True                  # False: skor hanya dari psi
+        self.penalti_jarak = True           # False: OPTUNA_PENALTI_JARAK tidak dihitung
         self.diag = dict.fromkeys(KOLOM_DIAG, 0.0)       # diagnostik pengujian terakhir (lihat KOLOM_DIAG)
         self.zeta_deg = None
         self.profil = None
@@ -177,6 +197,7 @@ class Penguji:
             self.cbf.pilih_barrier(definisi["barrier"])
         self.paksa = dict(definisi.get("paksa", {}))
         self.skor_s = bool(definisi.get("skor_s", True))
+        self.penalti_jarak = self.skor_s and bool(definisi.get("penalti_jarak", True))
 
     def atur_zeta(self, zeta_deg):
         if self.zeta_deg == zeta_deg:
@@ -217,10 +238,13 @@ class Penguji:
         data = config.OPTUNA_PROFIL[self.profil]
         hasil = {"kt_efektif": float(data["kt_efektif"]), "gaya_dorong": float(data["gaya_dorong"]),
                  "arah_dorong": list(config.OPTUNA_ARAH_DORONG),
-                 "waktu_sebelum_dorong": float(config.OPTUNA_WAKTU_SEBELUM_DORONG),
-                 "durasi_uji": float(config.OPTUNA_DURASI_UJI), "zeta_deg": float(config.OPTUNA_ZETA_DEG),
+                 "durasi_dorongan": float(config.OPTUNA_DURASI_DORONGAN),
+                 "durasi_stabil": float(config.OPTUNA_DURASI_STABIL),
+                 "stabil_psi": float(config.OPTUNA_STABIL_PSI), "stabil_dpsi": float(config.OPTUNA_STABIL_DPSI),
+                 "stabil_dtheta": float(config.OPTUNA_STABIL_DTHETA),
+                 "stabil_lama": float(config.OPTUNA_STABIL_LAMA), "zeta_deg": float(config.OPTUNA_ZETA_DEG),
                  "seed": int(config.OPTUNA_SEED), "penalti_komet": float(config.OPTUNA_PENALTI_KOMET),
-                 "penalti_jarak": float(config.OPTUNA_PENALTI_JARAK),
+                 "penalti_jarak": float(config.OPTUNA_PENALTI_JARAK) if self.penalti_jarak else 0.0,
                  "penalti_gagal": float(config.OPTUNA_PENALTI_GAGAL),
                  "barrier": config.OPTUNA_TAHAP[self.tahap]["barrier"], "skor_s": self.skor_s}
         kunci = self.terkunci()
@@ -229,7 +253,8 @@ class Penguji:
         return hasil
 
     def jalankan(self, gain, zeta_deg, trial=None, rekam=False):
-        """Jalankan satu simulasi berkelanjutan: tenang, lalu dorongan berurutan config.OPTUNA_ARAH_DORONG, mode Balancing.
+        """Jalankan satu simulasi berkelanjutan, mode Balancing: tenang sampai stabil, dorongan berurutan
+        config.OPTUNA_ARAH_DORONG berjarak OPTUNA_DURASI_DORONGAN, lalu tunggu stabil setelah dorongan terakhir.
 
         Mengembalikan (skor, keterangan, rekaman). rekaman = [dict] berisi t [s sejak dorongan pertama], psi [deg],
         s [m], waktu_dorong (awal tiap dorongan), nama_dorong (rekam=True).
@@ -242,11 +267,13 @@ class Penguji:
         self.diag = d
 
         dt = config.DT
-        langkah_sebelum = int(round(config.OPTUNA_WAKTU_SEBELUM_DORONG / dt))
-        langkah_uji = int(round(config.OPTUNA_DURASI_UJI / dt))
+        langkah_dorongan = int(round(config.OPTUNA_DURASI_DORONGAN / dt))
+        langkah_stabil_maks = int(round(config.OPTUNA_DURASI_STABIL / dt))
+        langkah_stabil_lama = int(round(config.OPTUNA_STABIL_LAMA / dt))
         langkah_per_detik = int(round(1.0 / dt))
-        jumlah_dorongan = len(config.OPTUNA_ARAH_DORONG)
-        waktu_total = jumlah_dorongan * config.OPTUNA_DURASI_UJI
+        arah = config.OPTUNA_ARAH_DORONG
+        jumlah_dorongan = len(arah)
+        waktu_total = waktu_dinilai_maks()
         batas_psi = math.radians(config.SAFE_TILT_DEG)
         nama = nama_dorongan()
 
@@ -262,12 +289,54 @@ class Penguji:
         rekaman = [data]
         laporan_ke = 0
 
-        for k in range(langkah_sebelum + jumlah_dorongan * langkah_uji):
-            k_uji = k - langkah_sebelum                       # langkah sejak dorongan pertama (negatif = masa tenang)
-            nomor = k_uji // langkah_uji if k_uji >= 0 else -1   # dorongan yang sedang berlangsung
-            if k_uji >= 0 and k_uji % langkah_uji == 0:
-                self.sim.dorong(config.OPTUNA_ARAH_DORONG[nomor])
-                data["waktu_dorong"].append(k_uji * dt)
+        def geser_waktu(k_awal):
+            """Waktu rekaman dihitung dari langkah 0; ubah menjadi detik sejak dorongan pertama."""
+            t0 = k_awal * dt if k_awal is not None else 0.0
+            data["t"] = [t - t0 for t in data["t"]]
+            data["waktu_dorong"] = [t - t0 for t in data["waktu_dorong"]]
+
+        fase = -1                    # -1 = tenang awal, 0 .. jumlah_dorongan-1 = dorongan ke-(fase+1)
+        k = 0                        # langkah sejak simulasi mulai
+        k_fase = 0                   # langkah sejak awal fase (sejak diletakkan / sejak dorongan)
+        k_dorong_pertama = None
+        hitung_stabil = 0            # langkah berturut-turut yang memenuhi syarat stabil
+        sudah_stabil = False         # syarat stabil (OPTUNA_STABIL_LAMA berturut-turut) tercapai di fase ini
+        tidak_stabil = []            # "awal" / "akhir" bila fase itu tidak mencapai stabil
+        terakhir = deque(maxlen=langkah_stabil_lama)     # (|psi|, |dpsi|, |dtheta|) OPTUNA_STABIL_LAMA detik terakhir
+
+        def catat_puncak(awalan):
+            """Puncak |psi|, |dpsi|, |dtheta| pada OPTUNA_STABIL_LAMA detik terakhir fase -> d[awalan + KOLOM_STABIL]."""
+            for i, nama_kolom in enumerate(KOLOM_STABIL):
+                d[awalan + nama_kolom] = max((nilai[i] for nilai in terakhir), default=0.0)
+
+        while True:
+            # Akhir fase: tenang awal dan dorongan terakhir selesai saat stabil (atau batas OPTUNA_DURASI_STABIL),
+            # dorongan di tengah selesai tepat OPTUNA_DURASI_DORONGAN setelah dorongan itu.
+            fase_tunggu = fase == -1 or fase == jumlah_dorongan - 1
+            if fase_tunggu:
+                akhir_fase = sudah_stabil or k_fase >= langkah_stabil_maks
+            else:
+                akhir_fase = k_fase >= langkah_dorongan
+            if akhir_fase:
+                if fase == -1:
+                    catat_puncak("awal_")
+                if fase == jumlah_dorongan - 1:
+                    catat_puncak("akhir_")
+                # Stabil hanya dicek di tenang awal dan setelah dorongan terakhir (hanya dicatat, tanpa penalti).
+                if fase_tunggu and not sudah_stabil:
+                    tidak_stabil.append("awal" if fase < 0 else "akhir")
+                if fase == jumlah_dorongan - 1:
+                    break
+                fase = fase + 1
+                k_fase = 0
+                hitung_stabil = 0
+                sudah_stabil = False
+                terakhir.clear()
+                if k_dorong_pertama is None:
+                    k_dorong_pertama = k
+                self.sim.dorong(arah[fase])
+                data["waktu_dorong"].append(k * dt)
+
             x = self.sim.baca_state()
             u_PD = self.pd.compute_PD(x)
             if not self.pakai_cbf:
@@ -281,9 +350,9 @@ class Penguji:
             # Dinilai dari state yang dibaca kontrol (psi hasil Kalman).
             psi = float(x[2])
             s = model.hitung_s(x)
-            t_uji = k_uji * dt                                # detik sejak dorongan pertama
+            t_uji = (k - k_dorong_pertama) * dt if k_dorong_pertama is not None else 0.0   # sejak dorongan pertama
             if rekam:
-                data["t"].append(t_uji)
+                data["t"].append(k * dt)
                 data["psi"].append(math.degrees(psi))
                 data["s"].append(s)
             d["psi_maks_deg"] = max(d["psi_maks_deg"], math.degrees(abs(psi)))
@@ -292,34 +361,53 @@ class Penguji:
 
             # KOMET: |psi| > SAFE_TILT_DEG, atau |s| > S_KOMET (hanya bila s ikut dinilai)
             if abs(psi) > batas_psi or (self.skor_s and abs(s) > config.S_KOMET):
-                sisa = waktu_total - max(t_uji, 0.0)
+                sisa = max(waktu_total - t_uji, 0.0)
                 d["pen_komet"] = config.OPTUNA_PENALTI_KOMET * (1.0 + sisa / waktu_total)
-                posisi = "sebelum dorongan" if nomor < 0 else "dorong %s, t %.1f s" % (
-                    nama[nomor], t_uji - nomor * config.OPTUNA_DURASI_UJI)
+                d["jumlah_tidak_stabil"] = float(len(tidak_stabil))
+                posisi = "sebelum dorongan" if fase < 0 else "dorong %s, t %.1f s" % (nama[fase], k_fase * dt)
                 if abs(psi) > batas_psi:
                     keterangan = "komet |psi| > %.0f deg (%s)" % (config.SAFE_TILT_DEG, posisi)
                 else:
                     keterangan = "komet |s| > %.1f m (%s)" % (config.S_KOMET, posisi)
+                geser_waktu(k_dorong_pertama)
                 return skor(), keterangan, rekaman
 
-            if k_uji < 0:
+            # Syarat stabil: ketiganya terpenuhi terus-menerus selama OPTUNA_STABIL_LAMA.
+            terakhir.append((abs(psi), abs(float(x[3])), abs(float(x[1]))))
+            if (abs(psi) < config.OPTUNA_STABIL_PSI and abs(float(x[3])) < config.OPTUNA_STABIL_DPSI
+                    and abs(float(x[1])) < config.OPTUNA_STABIL_DTHETA):
+                hitung_stabil = hitung_stabil + 1
+            else:
+                hitung_stabil = 0
+            if hitung_stabil >= langkah_stabil_lama:
+                sudah_stabil = True
+
+            k = k + 1
+            k_fase = k_fase + 1
+            if fase < 0:
                 continue
             suku = ((psi - config.psi_setpoint) / config.psi_max) ** 2
             if self.skor_s:
                 suku = suku + ((s - config.R * config.theta_setpoint) / config.s_max) ** 2
-                if s > config.s_max or s < config.s_min:
+                if self.penalti_jarak and (s > config.s_max or s < config.s_min):
                     d["pen_jarak"] = d["pen_jarak"] + config.OPTUNA_PENALTI_JARAK * dt
             d["ise"] = d["ise"] + suku * dt
             if gagal:
                 d["pen_gagal"] = d["pen_gagal"] + config.OPTUNA_PENALTI_GAGAL * dt
                 d["lama_gagal_s"] = d["lama_gagal_s"] + dt
 
-            # Laporan tiap 1 detik untuk pruning.
-            if trial is not None and (k_uji + 1) % langkah_per_detik == 0:
+            # Laporan tiap 1 detik (sejak dorongan pertama) untuk pruning.
+            if trial is not None and (k - k_dorong_pertama) % langkah_per_detik == 0:
+                d["jumlah_tidak_stabil"] = float(len(tidak_stabil))
                 trial.report(skor(), laporan_ke)
                 laporan_ke = laporan_ke + 1
                 if trial.should_prune():
                     raise optuna.TrialPruned()
+
+        d["jumlah_tidak_stabil"] = float(len(tidak_stabil))
+        geser_waktu(k_dorong_pertama)
+        if len(tidak_stabil) > 0:
+            return skor(), "selesai tidak stabil: %s" % ", ".join(tidak_stabil), rekaman
         return skor(), "selesai", rekaman
 
 
@@ -365,6 +453,13 @@ def periksa_study(study, penguji):
             print("Trial lama dan baru tidak boleh dicampur. Kembalikan nilai di config.py, atau hapus study:")
             print("    python3 tuning_optuna.py --profil %s --hapus %s" % (profil, penguji.tahap))
             sys.exit(1)
+    elif len(study.trials) > 0:
+        # Study lama tanpa catatan skenario (sebelum tuning bertahap): skenarionya tidak diketahui.
+        print("Study %s sudah berisi %d trial tanpa catatan skenario (dibuat program lama)."
+              % (study.study_name, len(study.trials)))
+        print("Trial lama dan baru tidak boleh dicampur. Hapus study dulu:")
+        print("    python3 tuning_optuna.py --profil %s --hapus %s" % (profil, penguji.tahap))
+        sys.exit(1)
     data = config.OPTUNA_PROFIL[profil]
     study.set_user_attr("skenario", baru)
     study.set_user_attr("profil", profil)
@@ -436,7 +531,8 @@ def jalankan_tahap(tahap, profil, jumlah_trial):
         print("!! " + config.OPTUNA_PROFIL[profil]["catatan"])
     print("Mode: %s | skor: %s" % ("PD saja" if not penguji.pakai_cbf else
                                     "PD + CBF-QP, barrier " + " ".join("h%d" % n for n in definisi["barrier"]),
-                                    "psi dan s" if penguji.skor_s else "hanya psi"))
+                                    ("psi dan s" if penguji.penalti_jarak else "psi dan s, tanpa penalti jarak")
+                                    if penguji.skor_s else "hanya psi"))
     print("Dicari (langkah %.4f):" % config.OPTUNA_LANGKAH)
     for nama in variabel:
         print("    %-9s %10.4f .. %10.4f" % (nama, bawah[nama], atas[nama]))
@@ -445,9 +541,16 @@ def jalankan_tahap(tahap, profil, jumlah_trial):
         print("    %-9s %10.4f%s" % (nama, kunci[nama], "   (dipaksa tahap ini)" if nama in penguji.paksa else ""))
     print("Lantai %.1f deg | dorong %.1f N | %d trial (sudah ada %d)"
           % (config.OPTUNA_ZETA_DEG, penguji.gaya_dorong, jumlah_trial, len(study.trials)))
-    print("Skenario: tenang %.0f s -> %s (masing-masing %.0f s, tanpa reset) = %.0f s per trial"
-          % (config.OPTUNA_WAKTU_SEBELUM_DORONG, " -> ".join(nama_dorongan()), config.OPTUNA_DURASI_UJI,
-             config.OPTUNA_WAKTU_SEBELUM_DORONG + len(config.OPTUNA_ARAH_DORONG) * config.OPTUNA_DURASI_UJI))
+    print("Skenario: tenang sampai stabil -> %s (jarak %.0f s, tanpa reset) -> sampai stabil"
+          % (" -> ".join(nama_dorongan()), config.OPTUNA_DURASI_DORONGAN))
+    print("          tunggu stabil maks %.0f s | maks %.0f s per trial"
+          % (config.OPTUNA_DURASI_STABIL, config.OPTUNA_DURASI_STABIL + waktu_dinilai_maks()))
+    print("Stabil: |psi| < %.4f rad, |dpsi| < %.4f rad/s, |dtheta| < %.4f rad/s selama %.1f s (tanpa penalti)"
+          % (config.OPTUNA_STABIL_PSI, config.OPTUNA_STABIL_DPSI, config.OPTUNA_STABIL_DTHETA,
+             config.OPTUNA_STABIL_LAMA))
+    if config.OPTUNA_STABIL_LAMA >= config.OPTUNA_DURASI_STABIL:
+        print("PERHATIAN: OPTUNA_STABIL_LAMA (%.1f s) >= OPTUNA_DURASI_STABIL (%.1f s): robot tidak pernah "
+              "sempat dianggap stabil." % (config.OPTUNA_STABIL_LAMA, config.OPTUNA_DURASI_STABIL))
     print("psimaks = puncak |psi| [deg] | gagal = lama status CBF bukan AMAN [s]")
     print("Ctrl+C untuk berhenti: trial yang sudah selesai tetap tersimpan dan bisa dilanjutkan.")
     print(garis)
