@@ -328,8 +328,9 @@ def main():
                 else:
                     u = cbf.compute(x, u_PD)
                     status_cbf = cbf.status
-                    # c_k pada u terpakai; constraint yang tidak dipakai (mask 0) dicatat kosong.
-                    nilai_c = [float(c) if m > 0.0 else None for c, m in zip(cbf.c, cbf.mask)]
+                    # c_k pada u terpakai. Dicatat kosong bila constraint tidak dipakai (mask 0) atau CBF-QP tidak
+                    # dijalankan (status ALPHA_NOL, nilai c = NaN).
+                    nilai_c = [float(c) if m > 0.0 and math.isfinite(c) else None for c, m in zip(cbf.c, cbf.mask)]
 
             # Gaya dorongan yang bekerja di siklus ini (dicatat di CSV).
             if sim.sisa_dorong > 0.0:

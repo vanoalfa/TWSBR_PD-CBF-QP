@@ -87,10 +87,10 @@ S_KOMET = 2.0                       # [m]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari D-Pad joystick
-Kp_psi = 30.64           # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 5.00           # [N m s/rad]
-Kp_theta = 0.16         # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
-Kd_theta = 0.45         # [N m s/rad]
+Kp_psi = 33.15           # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 5.2           # [N m s/rad]
+Kp_theta = 0.24         # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
+Kd_theta = 0.41         # [N m s/rad]
 Kvel = -0.05             # [N m]       hanya aktif di mode Navigate (Tombol A / N)
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
@@ -368,7 +368,7 @@ OPTUNA_LANGKAH = 0.01                 # 2 angka di belakang koma
 #   Alpha_6  : >= 10.8 supaya barrier dtheta tidak memotong torsi saat robot diam (dtheta_max = 13 rad/s)
 OPTUNA_BATAS = {
     "Kp_psi":   (5.0, 60.0),
-    "Kd_psi":   (0.5, 5.0),
+    "Kd_psi":   (0.5, 8.0),
     "Kp_theta": (0.0, 4.0),
     "Kd_theta": (0.0, 1.5),
     "Alpha_1":  (10.00, 30.00),
@@ -440,7 +440,7 @@ OPTUNA_GESER_DORONG = 0.13          # [s] ASUMSI: pergeseran waktu dorong per ul
 OPTUNA_GAYA_MAKS = 25.0             # [N] gaya tertinggi yang dicoba tahap PD
 OPTUNA_GAYA_LANGKAH = 0.5           # [N] ketelitian pencarian gaya tahap PD
 OPTUNA_BOBOT_GAYA = 1000.0          # [per N] bobot gaya lolos di skor tahap PD (jauh lebih besar dari ISE)
-OPTUNA_GAYA_TAMBAH_CBF = 0.5        # [N] tahap CBFQP_* memakai gaya_pd_terbaik + nilai ini
+OPTUNA_GAYA_TAMBAH_CBF = 0.0        # [N] tahap CBFQP_* memakai gaya_pd_terbaik + nilai ini
 OPTUNA_PENALTI_KOMET = 1000.0
 OPTUNA_PENALTI_JARAK = 10.0         # [per detik]
 OPTUNA_PENALTI_GAGAL = 10.0         # [per detik]
@@ -450,3 +450,4 @@ OPTUNA_PENALTI_GAGAL = 10.0         # [per detik]
 # diketahui setelah pencarian gaya selesai.
 OPTUNA_PRUNER_STARTUP = 10
 OPTUNA_PRUNER_WARMUP_S = 5
+OPTUNA_AMBANG_BANGBANG = 0.5      # fraksi u_max; |u| di atas ini dihitung torsi besar (bb/s)

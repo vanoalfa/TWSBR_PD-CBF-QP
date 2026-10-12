@@ -59,6 +59,7 @@ def folder_jenis(jenis):
 
 MODE_PD = "PD"
 MODE_PD_CBF = "PD+CBF"
+STATUS_ALPHA_NOL = "ALPHA_NOL"      # sama dengan cbf_qp.STATUS_ALPHA (tidak di-import: mode PD tidak butuh acados)
 
 KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
 KOLOM_GAIN_CBF = config.NAMA_ALPHA
@@ -325,8 +326,15 @@ class PerekamISE:
         judul = "%s  |  mode %s  |  durasi %.1f s  |  zeta %.1f deg" % (nama, self.mode, durasi, self.zeta_deg)
         judul = judul + "\n" + teks_gain(self.mode, self.gain_awal, self.gain_akhir)
         if self.mode == MODE_PD_CBF:
-            cbf_ok = persen_cbf_ok([baris[11] for baris in self.data])
+            status = [baris[11] for baris in self.data]
+            cbf_ok = persen_cbf_ok(status)
             judul = judul + "  |  CBF-QP berstatus OK %.1f %% waktu" % cbf_ok
+            alpha_nol = persen_status(status, STATUS_ALPHA_NOL)
+            if alpha_nol > 0.0:
+                peringatan = ("CBF-QP TIDAK AKTIF %.1f %% waktu (ALPHA_NOL: ada Alpha = 0 di config.py), "
+                              "selama itu u = u_PD seperti mode PD" % alpha_nol)
+                judul = judul + "\n" + peringatan
+                print("PERHATIAN: " + peringatan)
         if tuning:
             judul = judul + "\nTUNING: gain diubah saat direkam (%s), ISE tidak untuk dibandingkan" \
                 % ", ".join(self.gain_berubah)
@@ -473,6 +481,14 @@ def hitung_dorongan(dorong):
     return depan, belakang
 
 
+def persen_status(status, nama):
+    """Persentase waktu berstatus `nama` dari siklus mode PD + CBF-QP (status "-" = mode PD tidak dihitung)."""
+    dipakai = [teks for teks in status if teks != "-"]
+    if len(dipakai) == 0:
+        return 0.0
+    return 100.0 * sum(1 for teks in dipakai if teks == nama) / len(dipakai)
+
+
 def persen_cbf_ok(status):
     """Persentase waktu CBF-QP berstatus AMAN. Selain AMAN (GAGAL, ALPHA_NOL), keluaran
     cbf_qp.py adalah u_PD yang dibatasi arus saja. Mengembalikan None untuk mode PD (status "-")."""
@@ -508,6 +524,7 @@ def ringkasan(data):
         "dorong_belakang": belakang,
         "dorong_maks": nilai_maks(data["dorong_N"]),
         "cbf_ok": persen_cbf_ok(data["status_cbf"]),
+        "alpha_nol": persen_status(data["status_cbf"], STATUS_ALPHA_NOL),
     }
     return hasil
 
@@ -646,6 +663,9 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
         catatan.append("kemiringan lantai (zeta) kedua percobaan berbeda")
     if dorongan_pd != dorongan_cbf:
         catatan.append("dorongan kedua percobaan berbeda")
+    if hasil_cbf["alpha_nol"] > 0.0:
+        catatan.append("CBF-QP TIDAK AKTIF %.1f %% waktu (ALPHA_NOL: ada Alpha = 0), selama itu PD+CBF = PD"
+                       % hasil_cbf["alpha_nol"])
     if hasil_cbf["cbf_ok"] is not None and hasil_cbf["cbf_ok"] < 99.95:
         catatan.append("CBF-QP tidak selalu OK (saat tidak OK, u = u_PD yang dibatasi arus)")
 

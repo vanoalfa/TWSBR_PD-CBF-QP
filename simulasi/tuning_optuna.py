@@ -28,9 +28,10 @@ Satu TRIAL:
     tahap CBFQP_*: satu pengujian pada gaya gaya_pd_terbaik + OPTUNA_GAYA_TAMBAH_CBF.
 Rumus skor pengujian: config.py bagian 13. Makin kecil makin baik.
 
-Log terminal tiap trial: trial | status | skor | waktu nyata | terbaik | gaya | tanda/s | psimaks | gagal | detail
+Log terminal tiap trial: trial | status | skor | waktu nyata | terbaik | gaya | bb/s | psimaks | gagal | detail
     gaya    = gaya lolos tertinggi [N] (tahap PD) atau gaya yang dipakai [N] (tahap CBFQP_*)
-    tanda/s = pergantian tanda torsi u per detik (puluhan per detik = bang-bang), tidak masuk skor
+    bb/s    = bang-bang per detik: berapa kali u berbalik dari >= +a ke <= -a (atau sebaliknya),
+              a = OPTUNA_AMBANG_BANGBANG x u_max. Getaran kecil di sekitar 0 (noise) tidak dihitung. Tidak masuk skor.
     psimaks = puncak |psi| [deg],  gagal = lama status CBF bukan AMAN [s] (tahap CBFQP_*)
     status  = selesai (tanpa komet) | komet | pruned
     detail  = penyebab komet / gaya yang gagal (tahap PD), dan fase yang tidak mencapai stabil (tanpa penalti):
@@ -91,19 +92,20 @@ STATUS_KOMET = "komet"
 # Diagnostik tiap trial (disimpan sebagai atribut trial dan kolom CSV).
 # skor pengujian = ise + pen_jarak + pen_gagal + pen_komet
 # gaya_N              = gaya lolos tertinggi (tahap PD, 0 bila tidak ada) atau gaya yang dipakai (tahap CBFQP_*)
-# tanda_u_per_s       = pergantian tanda torsi u per detik bagian yang dinilai (bang-bang bila puluhan per detik)
+# bangbang_per_s      = u berbalik dari >= +a ke <= -a (atau sebaliknya) per detik bagian yang dinilai,
+#                       a = OPTUNA_AMBANG_BANGBANG x u_max (getaran kecil akibat noise tidak dihitung)
 # jumlah_tidak_stabil = jumlah fase (tenang awal, setelah dorongan terakhir, semua ulangan) yang tidak mencapai stabil
 # awal_* / akhir_*    = puncak |psi|, |dpsi|, |dtheta| pada OPTUNA_STABIL_LAMA detik terakhir fase awal / fase
 #                       terakhir, terbesar dari semua ulangan (satuan sama dengan OPTUNA_STABIL_*; 0 bila tidak
 #                       tercapai karena komet)
 KOLOM_STABIL = ["psi_rad", "dpsi_rad_s", "dtheta_rad_s"]
-KOLOM_DIAG = (["gaya_N", "tanda_u_per_s", "psi_maks_deg", "dpsi_maks_rad_s", "s_maks_m", "lama_gagal_s",
+KOLOM_DIAG = (["gaya_N", "bangbang_per_s", "psi_maks_deg", "dpsi_maks_rad_s", "s_maks_m", "lama_gagal_s",
                "jumlah_tidak_stabil"]
               + ["awal_" + nama for nama in KOLOM_STABIL] + ["akhir_" + nama for nama in KOLOM_STABIL]
               + ["ise", "pen_jarak", "pen_gagal", "pen_komet"])
 
 # Baris log terminal (lihat docstring): header dan isi memakai lebar kolom yang sama.
-JUDUL_KOLOM = ("trial", "status", "skor", "waktu", "terbaik", "gaya", "tanda/s", "psimaks", "gagal", "detail")
+JUDUL_KOLOM = ("trial", "status", "skor", "waktu", "terbaik", "gaya", "bb/s", "psimaks", "gagal", "detail")
 FORMAT_HEADER = "%5s | %-7s | %11s | %7s | %-18s | %6s | %7s | %7s | %6s | %s"
 FORMAT_BARIS = "%5d | %-7s | %11s | %5.1f s | %-18s | %6s | %7.1f | %7.1f | %6s | %s"
 
@@ -335,7 +337,7 @@ class Penguji:
         self.atur_gain(gain)
         d = dict.fromkeys(KOLOM_DIAG, 0.0)
         d["gaya_N"] = float(gaya)
-        hitungan = {"langkah_dinilai": 0, "tanda": 0, "laporan_ke": 0}
+        hitungan = {"langkah_dinilai": 0, "balik": 0, "laporan_ke": 0}
         rekaman = []
         tidak_stabil = []
         status = STATUS_SELESAI
@@ -347,7 +349,7 @@ class Penguji:
                 detail_komet = komet
                 break
         lama_dinilai = hitungan["langkah_dinilai"] * config.DT
-        d["tanda_u_per_s"] = hitungan["tanda"] / lama_dinilai if lama_dinilai > 0.0 else 0.0
+        d["bangbang_per_s"] = hitungan["balik"] / lama_dinilai if lama_dinilai > 0.0 else 0.0
         d["jumlah_tidak_stabil"] = float(len(tidak_stabil))
         bagian = []
         if detail_komet:
@@ -403,7 +405,8 @@ class Penguji:
         k_mulai_dorong = 0           # k_fase saat dorongan pertama diberikan (setelah tunda ulangan ini)
         hitung_stabil = 0            # langkah berturut-turut yang memenuhi syarat stabil
         sudah_stabil = False         # syarat stabil (OPTUNA_STABIL_LAMA berturut-turut) tercapai di fase ini
-        tanda_lama = 0.0             # tanda u terakhir yang bukan nol (pergantian tanda)
+        ambang_u = config.OPTUNA_AMBANG_BANGBANG * config.u_max     # |u| di atas ini = torsi "besar" (bang-bang)
+        tanda_besar = 0.0            # tanda u besar terakhir (+1 / -1, 0 = belum ada)
         terakhir = deque(maxlen=langkah_stabil_lama)     # (|psi|, |dpsi|, |dtheta|) OPTUNA_STABIL_LAMA detik terakhir
 
         while True:
@@ -495,11 +498,11 @@ class Penguji:
             if gagal:
                 d["pen_gagal"] = d["pen_gagal"] + config.OPTUNA_PENALTI_GAGAL * dt
                 d["lama_gagal_s"] = d["lama_gagal_s"] + dt
-            if u != 0.0:
+            if abs(u) >= ambang_u:
                 tanda = math.copysign(1.0, u)
-                if tanda_lama != 0.0 and tanda != tanda_lama:
-                    hitungan["tanda"] = hitungan["tanda"] + 1
-                tanda_lama = tanda
+                if tanda_besar != 0.0 and tanda != tanda_besar:
+                    hitungan["balik"] = hitungan["balik"] + 1
+                tanda_besar = tanda
             hitungan["langkah_dinilai"] = hitungan["langkah_dinilai"] + 1
 
             # Laporan tiap 1 detik bagian yang dinilai (berlanjut antar ulangan) untuk pruning.
@@ -692,8 +695,9 @@ def cetak_kepala(study, tahap, profil, penguji, definisi, variabel, bawah, atas,
     if config.OPTUNA_STABIL_LAMA >= config.OPTUNA_DURASI_STABIL:
         print("PERHATIAN: OPTUNA_STABIL_LAMA (%.1f s) >= OPTUNA_DURASI_STABIL (%.1f s): robot tidak pernah "
               "sempat dianggap stabil." % (config.OPTUNA_STABIL_LAMA, config.OPTUNA_DURASI_STABIL))
-    print("gaya = gaya lolos [N] | tanda/s = pergantian tanda u per detik (bang-bang bila puluhan) | "
-          "psimaks = puncak |psi| [deg] | gagal = lama status CBF bukan AMAN [s]")
+    print("gaya = gaya lolos [N] | bb/s = u berbalik antara >= +%.2f dan <= -%.2f N m per detik (bang-bang) | "
+          "psimaks = puncak |psi| [deg] | gagal = lama status CBF bukan AMAN [s]"
+          % (config.OPTUNA_AMBANG_BANGBANG * config.u_max, config.OPTUNA_AMBANG_BANGBANG * config.u_max))
     print("Ctrl+C untuk berhenti: trial yang sudah selesai tetap tersimpan dan bisa dilanjutkan.")
     print(garis)
     print(FORMAT_HEADER % JUDUL_KOLOM)
@@ -749,7 +753,7 @@ def jalankan_tahap(tahap, profil, jumlah_trial):
         teks_terbaik = "%.3f (#%d)" % (terbaik.value, terbaik.number) if terbaik is not None else "-"
         teks_gagal = "%6.1f" % atribut.get("lama_gagal_s", 0.0) if penguji.pakai_cbf else "%6s" % "-"
         print(FORMAT_BARIS % (trial.number, status, teks_skor, atribut.get("lama_s", 0.0), teks_terbaik,
-                              teks_gaya(atribut.get("gaya_N", 0.0)), atribut.get("tanda_u_per_s", 0.0),
+                              teks_gaya(atribut.get("gaya_N", 0.0)), atribut.get("bangbang_per_s", 0.0),
                               atribut.get("psi_maks_deg", 0.0), teks_gagal, detail))
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -811,14 +815,17 @@ def laporkan(tahap, profil, penguji):
                                                 terbaik.user_attrs.get("keterangan", "-")))
     print("uji ulang pada gaya %.1f N:" % gaya_uji)
     for zeta_deg, skor, keterangan, _, diag in hasil_uji:
-        print("  lantai %4.1f deg: skor %10.4f | psimaks %5.1f deg | tanda/s %5.1f | gagal %4.1f s | %s"
-              % (zeta_deg, skor, diag["psi_maks_deg"], diag["tanda_u_per_s"], diag["lama_gagal_s"], keterangan))
+        print("  lantai %4.1f deg: skor %10.4f | psimaks %5.1f deg | bb/s %5.1f | gagal %4.1f s | %s"
+              % (zeta_deg, skor, diag["psi_maks_deg"], diag["bangbang_per_s"], diag["lama_gagal_s"], keterangan))
     print("\nSalin ke config.py:")
     for nama in terbaik.params:
         print("%s = %.4f" % (nama, terbaik.params[nama]))
-    if penguji.cari_gaya:
+    if penguji.cari_gaya and gaya_lolos > 0.0:
         print("OPTUNA_PROFIL['%s']['gaya_pd_terbaik'] = %.1f      # tahap CBFQP_* memakai %.1f N"
               % (profil, gaya_lolos, gaya_lolos + config.OPTUNA_GAYA_TAMBAH_CBF))
+    elif penguji.cari_gaya:
+        print("# gaya_pd_terbaik belum bisa diisi: trial terbaik pun komet pada gaya terendah %.1f N"
+              % daftar_gaya(profil)[0])
     for nama in penguji.paksa:
         print("# selama tahap ini %s dipaksa %.4f (bukan nilai config.py)" % (nama, penguji.paksa[nama]))
     print("=================================================\n")
@@ -948,6 +955,22 @@ def hapus_tahap(tahap, profil):
         print("Batal.")
 
 
+# Nilai config.py yang dibutuhkan program ini dan baru ditambahkan belakangan: nama -> baris contoh.
+CONFIG_WAJIB = {
+    "OPTUNA_AMBANG_BANGBANG": "OPTUNA_AMBANG_BANGBANG = 0.5      # fraksi u_max; |u| di atas ini dihitung torsi besar (bb/s)",
+}
+
+
+def periksa_config():
+    """Berhenti dengan pesan jelas bila config.py belum memuat nilai yang dibutuhkan (config.py versi lama)."""
+    kurang = [nama for nama in CONFIG_WAJIB if not hasattr(config, nama)]
+    if kurang:
+        print("config.py belum memuat nilai berikut. Tambahkan di bagian 13 (TUNING OPTUNA):")
+        for nama in kurang:
+            print("    " + CONFIG_WAJIB[nama])
+        sys.exit(1)
+
+
 def main():
     daftar_profil = list(config.OPTUNA_PROFIL.keys())
     daftar_tahap = list(config.OPTUNA_TAHAP.keys())
@@ -961,6 +984,7 @@ def main():
                         help="cetak hasil terbaik, buat ulang CSV + PNG (tanpa --profil: semua profil)")
     parser.add_argument("--hapus", choices=daftar_tahap, help="hapus study satu tahap dari satu profil")
     args = parser.parse_args()
+    periksa_config()
 
     if args.hapus:
         if args.profil is None:
