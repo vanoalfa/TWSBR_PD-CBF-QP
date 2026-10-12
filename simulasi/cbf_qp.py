@@ -14,6 +14,16 @@ Mode gerak (mode_cbf): Balancing dan Navigate memakai SATU solver acados yang sa
 parameter mask m_k (1 = aktif, 0 = dilewati): c_k dipakai sebagai  m_k*c_k + (1 - m_k),  jadi constraint dengan
 m_k = 0 selalu terpenuhi dan tidak ikut membatasi u. Yang berganti saat mode berganti hanya mask, bukan solver.
 
+Model torsi: u adalah torsi PERINTAH (arus perintah x K_t datasheet). Torsi yang benar-benar bekerja di roda adalah
+rasio_torsi * u, dengan rasio_torsi = K_t efektif / K_t datasheet (config.RASIO_TORSI, simulasi: 0.238 / 0.75).
+g(x) di model CBF-QP dikalikan rasio_torsi, jadi CBF-QP menghitung dengan tenaga roda yang sungguh ada. Tanpa ini
+CBF-QP menganggap roda 1 / rasio_torsi kali (sekitar 3x) lebih kuat dari kenyataan: koreksi torsinya terlalu kecil,
+dan constraint yang dikira terpenuhi ternyata dilanggar. rasio_torsi adalah parameter solver, jadi bisa diganti
+saat berjalan (cbf.rasio_torsi = nilai) tanpa membangun ulang solver. Batas arus lbu/ubu tetap dalam torsi perintah.
+
+Tuning bertahap (tuning_optuna.py): pilih_barrier(nomor) mengaktifkan hanya constraint bernomor itu (1 = h1, dst),
+tanpa membangun ulang solver, dengan cara yang sama seperti mask mode gerak.
+
 Susunan di acados (OCP dengan N = 1):
     stage 0 : state x dikunci ke state terukur (lbx_0 = ubx_0 = x), variabel keputusan u,
               cost LINEAR_LS (u - u_PD)^2, semua constraint DAFTAR_C di con_h_expr_0, batas arus di lbu/ubu.
@@ -110,7 +120,8 @@ def workplace(x, u, f, g, zeta):
     Yang bisa dipakai di dalam WORKPLACE:
         theta, dtheta, psi, dpsi  : state (simbol)
         u                         : torsi satu roda (simbol)
-        f, g                      : model dx/dt = f(x) + g(x)*u   (dari model.py, sudah memakai zeta)
+        f, g                      : model dx/dt = f(x) + g(x)*u   (dari model.py, sudah memakai zeta dan rasio_torsi,
+                                    u = torsi perintah satu roda)
         zeta                      : kemiringan bidang [rad] (simbol, nilainya dari config.zeta)
         lie(h, v)                 : turunan Lie, L_v h = (dh/dx) * v
         Alpha_1, Alpha_2, ...     : semua Alpha_<nomor> di config.py (otomatis, nilainya bisa diubah di jendela Kontrol)
@@ -190,19 +201,21 @@ def workplace(x, u, f, g, zeta):
 
 
 def _cbf_expressions():
-    """Simbol x, u, p = [Alpha_1, Alpha_2, ..., zeta], f, g, DAFTAR_C, C_MODE dan nama Alpha dari WORKPLACE.
-    Constraint: c >= 0."""
+    """Simbol x, u, p = [Alpha_1, Alpha_2, ..., zeta, rasio_torsi], f, g, DAFTAR_C, C_MODE dan nama Alpha dari
+    WORKPLACE. Constraint: c >= 0."""
     nama_alpha = config.NAMA_ALPHA
     x = ca.SX.sym("x", config.NX)
     u = ca.SX.sym("u", config.NU)
-    p = ca.SX.sym("p", len(nama_alpha) + 1)        # elemen terakhir = zeta
+    p = ca.SX.sym("p", len(nama_alpha) + 2)        # dua elemen terakhir: zeta, rasio_torsi
     zeta = p[len(nama_alpha)]
+    rasio_torsi = p[len(nama_alpha) + 1]
 
     # Alpha_1, Alpha_2, ... dibuat sebagai nama global supaya bisa langsung ditulis di WORKPLACE.
     for i in range(len(nama_alpha)):
         globals()[nama_alpha[i]] = p[i]
 
     f, g = model.fg_casadi(x, zeta)
+    g = rasio_torsi * g                            # u = torsi perintah, torsi nyata = rasio_torsi * u (lihat docstring modul)
     try:
         daftar_c, c_mode = workplace(x, u, f, g, zeta)
     except NameError as kesalahan:
@@ -252,18 +265,13 @@ class CBFQP:
         # Mask tiap mode sebagai parameter solver: c_efektif = m*c + (1 - m)  (m = 0 -> selalu terpenuhi, a = 0)
         m = ca.SX.sym("m", self.NH)
         c = ca.vertcat(*[m[k] * daftar_c[k] + (1.0 - m[k]) for k in range(self.NH)])
-        p_semua = ca.vertcat(p, m)                      # p_semua = [Alpha..., zeta, mask...]
+        p_semua = ca.vertcat(p, m)                      # p_semua = [Alpha..., zeta, rasio_torsi, mask...]
 
         # Alpha yang dipakai constraint aktif tiap mode (hanya ini yang wajib > 0 di mode itu)
+        self._daftar_c = daftar_c
+        self._p = p
         self.mask_mode = _mask_tiap_mode(daftar_c, c_mode)
-        self.alpha_mode = {}
-        for mode in self.mask_mode:
-            self.alpha_mode[mode] = []
-            for i in range(len(self.nama_alpha)):
-                for k in range(self.NH):
-                    if self.mask_mode[mode][k] > 0.0 and ca.depends_on(daftar_c[k], p[i]):
-                        if i not in self.alpha_mode[mode]:
-                            self.alpha_mode[mode].append(i)
+        self.alpha_mode = {mode: self._alpha_dipakai(self.mask_mode[mode]) for mode in self.mask_mode}
 
         # c(x, u, p) = a(x, p)*u + b(x, p): dipakai untuk memeriksa hasil solver dan untuk diagnosa
         a = ca.jacobian(c, u)
@@ -285,7 +293,7 @@ class CBFQP:
         else:                                          # acados < 0.4
             ocp.dims.N = self.N
         ocp.solver_options.tf = float(self.N)          # langkah waktu 1 -> cost tidak diskalakan
-        ocp.parameter_values = np.ones(len(self.nama_alpha) + 1 + self.NH)
+        ocp.parameter_values = np.ones(len(self.nama_alpha) + 2 + self.NH)
 
         # cost stage 0: 1/2*(u - yref)' W (u - yref), W = 2  ->  (u - u_PD)^2 ; yref = u_PD diisi tiap siklus
         ocp.cost.cost_type_0 = "LINEAR_LS"
@@ -332,6 +340,9 @@ class CBFQP:
         self.u_lb = float(ocp.constraints.lbu[0])
         self.u_ub = float(ocp.constraints.ubu[0])
 
+        # torsi nyata / torsi perintah yang dipakai g(x) (lihat docstring modul); boleh diganti saat berjalan
+        self.rasio_torsi = float(config.RASIO_TORSI)
+
         # mode gerak awal = Balancing
         self.mode = MODE_BALANCING
         self.mask = self.mask_mode[MODE_BALANCING]
@@ -364,6 +375,31 @@ class CBFQP:
         self.mask = self.mask_mode[mode]
         self.alpha_dipakai = self.alpha_mode[mode]
 
+    def pilih_barrier(self, nomor) -> None:
+        """Aktifkan HANYA constraint bernomor `nomor` (1 = constraint pertama di DAFTAR_C, yaitu h1, dst).
+
+        Dipakai tuning bertahap (tuning_optuna.py), mode gerak diabaikan sampai mode_cbf() dipanggil lagi.
+        Solver acados tidak dibangun ulang: hanya mask-nya yang berganti.
+        """
+        mask = np.zeros(self.NH)
+        for n in nomor:
+            if not 1 <= n <= self.NH:
+                raise ValueError("nomor constraint %s di luar 1 .. %d" % (n, self.NH))
+            mask[n - 1] = 1.0
+        self.mode = None
+        self.mask = mask
+        self.alpha_dipakai = self._alpha_dipakai(mask)
+
+    def _alpha_dipakai(self, mask) -> list:
+        """Indeks Alpha yang muncul di constraint dengan mask 1 (hanya Alpha ini yang wajib > 0)."""
+        hasil = []
+        for i in range(len(self.nama_alpha)):
+            for k in range(self.NH):
+                if mask[k] > 0.0 and ca.depends_on(self._daftar_c[k], self._p[i]):
+                    hasil.append(i)
+                    break
+        return hasil
+
     def zeta(self) -> float:
         """Kemiringan bidang yang dipakai sekarang [rad]."""
         if self.zeta_tetap is not None:
@@ -378,10 +414,10 @@ class CBFQP:
         return np.array(nilai)
 
     def _parameter(self, alphas=None) -> np.ndarray:
-        """p = [Alpha_1, Alpha_2, ..., zeta, mask_1, ..., mask_NH]."""
+        """p = [Alpha_1, Alpha_2, ..., zeta, rasio_torsi, mask_1, ..., mask_NH]."""
         if alphas is None:
             alphas = self._alphas()
-        return np.concatenate([np.asarray(alphas, dtype=float), [self.zeta()], self.mask])
+        return np.concatenate([np.asarray(alphas, dtype=float), [self.zeta(), self.rasio_torsi], self.mask])
 
     def constraint_coefficients(self, x, alphas=None):
         """a, b (masing-masing ndarray(NH)) pada constraint a*u + b >= 0. Constraint yang dimask: a = 0, b = 1."""

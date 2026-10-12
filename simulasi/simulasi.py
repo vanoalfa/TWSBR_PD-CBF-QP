@@ -909,7 +909,7 @@ class Simulasi:
         self.plot_kiriman = []         # data yang belum dikirim
 
         # Realisme dari uji hardware (config.py bagian 11)
-        self.skala_torsi = config.MOTOR_KT_EFEKTIF / config.MOTOR_KT     # torsi nyata / torsi perintah
+        self.skala_torsi = config.RASIO_TORSI                           # torsi nyata / torsi perintah
         self.jeda_substep = int(round(config.SIM_JEDA_TORSI / self.dt_fisika))
         self.antrean_torsi = []        # torsi yang sudah diperintah tetapi belum bekerja (satu per langkah fisika)
         self.kalman = kalman.KalmanAngle()
