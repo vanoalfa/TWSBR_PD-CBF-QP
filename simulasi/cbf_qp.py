@@ -465,6 +465,7 @@ class CBFQP:
             self.acados_status = -1
             self.u_interval = (self.u_lb, self.u_ub)
             self.solve_ms = 0.0
+            self.c = np.full(self.NH, np.nan)          # CBF-QP tidak dijalankan: nilai constraint tidak diketahui
             return self._fallback(STATUS_ALPHA)
 
         a, b = self.constraint_coefficients(x, p[:len(self.nama_alpha)])
