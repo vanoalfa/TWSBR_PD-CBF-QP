@@ -1,29 +1,21 @@
 """atera_main.py - program utama ATERA (robot fisik) + GUI terminal.
 
-Menjalankan: python3 atera_main.py     (dari folder atera_program, di Raspberry Pi 5)
+Jalankan di Raspberry Pi 5, dari folder atera_program:   python3 atera_main.py
 
-Alur tiap siklus kontrol (config.CONTROL_HZ):
-    joystick -> IMU (psi, dpsi) -> state x = [theta, dtheta, psi, dpsi]
-    -> u_PD = pd.compute(x - x_ref)
-    -> mode PD     : u = u_PD (dijenuhkan ke batas aktuator)
-       mode PD+CBF : u, feasible = cbf_qp.filter(x, u_PD)
-    -> DDSM115 (u/2 per roda) -> umpan balik encoder (theta, dtheta) untuk siklus berikutnya
-    -> ise.py mencatat error
+Kontrolnya sama dengan simulasi (simulasi/atera_main.py), hanya sumber state dan tujuan torsinya yang berbeda:
+    IMU (psi, dpsi) + encoder DDSM115 -> x = [theta, dtheta, psi, dpsi]
+    -> u_PD = pd.compute(x)                      (pd_control.py, torsi SATU roda)
+    -> mode PD     : u = u_PD dibatasi arus
+       mode PD+CBF : u = cbf.compute(x, u_PD)    (cbf_qp.py, acados HPIPM N = 1)
+    -> roda kiri u + u_belok, roda kanan u - u_belok, arus = torsi / MOTOR_KT  (ddsm115.py)
+    -> ise.py merekam (format CSV / PNG sama dengan simulasi)
 
-State program:  IDLE -> (Tombol Y) CALIBRATING -> READY -> (MULAI) BALANCING -> (Tombol X) READY
-                FAULT bila |psi| > SAFE_TILT_DEG atau hardware gagal saat balancing (motor dimatikan).
-
-Diagnosa:
-- Kegagalan hardware (IMU, motor, joystick) TIDAK menghentikan program. GUI tetap jalan,
-  masalahnya ditampilkan beserta saran perbaikan, dan hardware dicoba ulang otomatis.
-- Baris "Roda" di kepala GUI selalu menjelaskan kenapa roda bergerak atau diam.
-- Halaman DIAGNOSA: status tiap komponen, rantai sinyal dari sensor sampai motor, dan
-  hasil uji roda langsung (L3 = kiri, R3 = kanan; robot diangkat, roda mati).
-
-GUI: 7 halaman, pindah dengan LT / RT. Log ditulis ke config.LOG_FILE (bukan ke layar).
+State: DIAM -(Y)-> SIAP -(MULAI)-> BALANCING -(X)-> SIAP
+       BALANCING -> KOMET    : |psi| > SAFE_TILT_DEG, |s| > S_KOMET (mode Balancing), atau torsi jenuh terlalu lama
+       BALANCING -> GANGGUAN : IMU / motor gagal dibaca saat balancing
+       Di KOMET / GANGGUAN roda mati dan data tersimpan; tegakkan robot lalu tekan MULAI lagi.
+Tombol: lihat joystick_mapping.py (halaman BANTUAN di GUI). Log: config.LOG_FILE.
 """
-
-from __future__ import annotations
 
 import logging
 import math
@@ -40,774 +32,531 @@ import config
 import ise
 import joystick_mapping as jm
 import model
-from cbf_qp import CBFQP, H_NAMES, barrier_values
-from ddsm115 import MODE_NAMES, DualDDSM115, decode_error
+from ddsm115 import MODE_CURRENT, MODE_NAMES, DDSM115Error, DualDDSM115, decode_error
 from mpu6050 import MPU6050
-from pd_control import PDController
+from pd_control import MODE_BALANCING, MODE_NAVIGATE, PDControl
 
 LOGGER = logging.getLogger("atera")
-DEG = math.degrees(1.0)
-
-IDLE, CALIBRATING, READY, BALANCING, FAULT = "IDLE", "CALIBRATING", "READY", "BALANCING", "FAULT"
-PAGES = ("STATUS", "DIAGNOSA", "PD", "CBF-QP", "SENSOR & MOTOR", "ISE", "BANTUAN")
-STATE_NAMES = ("theta", "dtheta", "psi", "dpsi")
-STATE_UNITS = ("rad", "rad/s", "rad", "rad/s")
-ERROR, WARN, INFO = "ERROR", "AWAS", "INFO"
+DEG = 180.0 / math.pi
+DIAM, KALIBRASI, SIAP, BALANCING, KOMET, GANGGUAN = "DIAM", "KALIBRASI", "SIAP", "BALANCING", "KOMET", "GANGGUAN"
+HALAMAN = ("STATUS", "KONTROL", "HARDWARE", "BANTUAN")
+ERROR, AWAS, INFO = "ERROR", "AWAS", "INFO"
+NAMA_GAIN = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"] + config.NAMA_ALPHA
 
 
-def gauge(value: float, limit: float, width: int = 41) -> str:
-    """Batang teks: posisi value di antara -limit..+limit (batas ditandai '|')."""
-    span = 1.25 * limit
-    cells = [" "] * width
-    mid = width // 2
-    edge = int(round(mid * limit / span))
-    cells[mid] = ":"
-    cells[mid - edge] = cells[mid + edge] = "|"
-    pos = mid + int(round(mid * max(-span, min(span, value)) / span))
-    cells[max(0, min(width - 1, pos))] = "#"
-    return "[" + "".join(cells) + "]"
+def batang(nilai, batas, lebar=31):
+    """Batang teks posisi nilai di antara -batas..+batas, batas ditandai '|'."""
+    rentang = 1.25 * batas
+    sel = [" "] * lebar
+    tengah = lebar // 2
+    tepi = int(round(tengah * batas / rentang))
+    sel[tengah] = ":"
+    sel[tengah - tepi] = sel[tengah + tepi] = "|"
+    sel[tengah + int(round(tengah * max(-rentang, min(rentang, nilai)) / rentang))] = "#"
+    return "[" + "".join(sel) + "]"
+
+
+def jepit(u):
+    return max(config.u_min, min(config.u_max, u))
 
 
 class Atera:
-    def __init__(self) -> None:
+    def __init__(self):
         self.motors = DualDDSM115()
         self.imu = MPU6050()
-        self.pd = PDController()
-        self.cbf = CBFQP()
         self.joystick = jm.Joystick()
-        self.recorder = ise.ISERecorder()
+        self.pd = PDControl()
+        self.cbf = None
+        self.cbf_alasan = "belum disiapkan"
+        self.perekam = ise.PerekamISE()            # PERCOBAAN: MULAI sampai X / R3 / KOMET
+        self.perekam_uji = ise.PerekamISE()        # PENGUJIAN: L3, DURASI_PENGUJIAN detik
+        self.gain = {nama: float(getattr(config, nama)) for nama in NAMA_GAIN}
+        self.gain["zeta_DEG"] = float(config.zeta_DEG)
 
-        self.state = IDLE
-        self.control_mode = ise.MODE_PD
-        self.drive_enabled = False          # Tombol A = True, Tombol B = False
-        self.calibrated = False
-        self.calibration = {}
-        self.exit_requested = False
-        self.page = 0
-        self.message = "Menyiapkan hardware ..."
-        self.fault_reason = ""
+        self.state = DIAM
+        self.mode_kontrol = ise.MODE_PD
+        self.mode_gerak = MODE_BALANCING
+        self.kalibrasi_hasil = {}
+        self.halaman = 0
+        self.pesan = "Menyiapkan hardware ..."
+        self.keluar = False
 
+        self.sample = None
         self.x = np.zeros(4)
-        self.x_ref = np.zeros(4)
-        self.theta_offset = 0.0
-        self.sample = None                  # ImuSample terakhir
-        self.u_pd = 0.0
-        self.u = 0.0
-        self.pd_terms = (0.0,) * 5
-        self.drive = 0.0
-        self.turn = 0.0
-        self.balance_t0 = 0.0
-        self.cbf_active_count = 0
-        self.cbf_infeasible_count = 0
-        self.cbf_step_count = 0
-        self.saturated_s = 0.0
-        self.infeasible_s = 0.0
+        self.theta_nol = 0.0
+        self.arah = self.belok = 0
+        self.u_PD = self.u = self.u_belok = 0.0
+        self.status_cbf = "-"
+        self.t0 = self.t_uji0 = 0.0
+        self.uji_berjalan = False
+        self.lama_jenuh = 0.0
+        self.jumlah_cbf = {}
 
-        # diagnosa
-        self.next_imu_retry = 0.0
-        self.next_motor_retry = 0.0
-        self.stall_s = [0.0, 0.0]           # roda diperintah tetapi diam [kiri, kanan]
-        self.no_current_s = [0.0, 0.0]      # diperintah tetapi arus umpan balik ~0
-        self.test = None                    # uji roda yang sedang berjalan
-        self.test_result = ["belum diuji (tekan L3)", "belum diuji (tekan R3)"]
-        self.render_errors = 0
-
-        self.loop_dt = 1.0 / config.CONTROL_HZ
         self.loop_hz = float(config.CONTROL_HZ)
-        self.work_ms = 0.0
-        self.overruns = 0
+        self.kerja_ms = 0.0
+        self.overrun = 0
+        self.coba_imu = self.coba_motor = 0.0
 
-    # ------------------------------------------------------------- setup --
-    def setup(self) -> None:
-        """Siapkan semua komponen. Kegagalan dicatat untuk GUI, tidak menghentikan program."""
+    # ------------------------------------------------------------------ setup
+    def setup(self):
         self.render()
         self.imu.open()
         self.motors.initialize()
         self.joystick.open()
-        self.set_message("Menyiapkan CBF-QP ...")
-        self.render()
-        self.cbf.setup()
-        errors = [d for d in self.diagnose() if d[0] == ERROR]
-        if errors:
-            self.set_message(f"Ada {len(errors)} masalah yang harus dibereskan - lihat baris Masalah / halaman DIAGNOSA.")
-        else:
-            self.set_message("Hardware siap. Tekan Tombol Y untuk kalibrasi.")
-        for level, source, text in self.diagnose():
-            LOGGER.info("diagnosa awal [%s] %s: %s", level, source, text)
-
-    def cleanup(self) -> None:
-        self.motors.stop_all()
-        self.recorder.stop("program keluar")
-        self.motors.close()
-        self.joystick.close()
-        self.imu.close()
-        self.recorder.close()
-
-    def set_message(self, text: str) -> None:
-        self.message = text
-        LOGGER.info(text)
-
-    def maintain_hardware(self) -> None:
-        """Coba ulang hardware yang bermasalah (hanya saat tidak balancing)."""
-        now = time.monotonic()
-        if not self.imu.ready and now >= self.next_imu_retry:
-            self.next_imu_retry = now + float(config.IMU_RETRY_S)
-            if self.imu.open():
-                self.set_message("IMU terhubung kembali.")
-        if not self.motors.ready and now >= self.next_motor_retry:
-            self.next_motor_retry = now + float(config.MOTOR_RETRY_S)
-            if self.motors.initialize():
-                self.set_message("Kedua motor siap.")
-
-    # ------------------------------------------------------ state machine --
-    def calibrate(self) -> None:
-        if self.state == BALANCING:
-            self.set_message("Kalibrasi ditolak: matikan roda dulu (Tombol X).")
-            return
-        imu_errors = [text for level, text in self.imu.problems() if level == ERROR]
-        if imu_errors:
-            self.set_message("Kalibrasi ditolak, IMU bermasalah: " + imu_errors[0])
-            return
-        self.test = None
-        self.motors.stop_all()
-        self.state = CALIBRATING
-        self.fault_reason = ""
-        self.set_message("Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.")
+        self.atur_pesan("Menyiapkan CBF-QP (acados) ...")
         self.render()
         try:
-            self.calibration = self.imu.calibrate()
+            from cbf_qp import CBFQP
+            self.cbf = CBFQP()
+            self.cbf_alasan = "siap (%d constraint, Alpha: %s)" % (
+                self.cbf.NH, ", ".join(self.cbf.nama_alpha[i] for i in self.cbf.alpha_dipakai))
         except Exception as exc:
-            self.calibrated = False
-            self.state = IDLE
-            self.set_message(f"Kalibrasi GAGAL: {exc}")
-            return
-        self.calibrated = True
-        self.state = READY
-        text = f"Kalibrasi selesai (zero offset {self.calibration['zero_offset_deg']:+.2f} deg). Tekan MULAI."
-        if self.calibration["gyro_std"] > float(config.IMU_CAL_MAX_GYRO_STD):
-            text = (f"Kalibrasi selesai TETAPI robot bergerak saat kalibrasi (simpangan gyro "
-                    f"{self.calibration['gyro_std']:.1f} deg/s). Ulangi Tombol Y dengan robot diam.")
-        self.set_message(text)
+            LOGGER.exception("CBF-QP")
+            self.cbf_alasan = "%s: %s" % (type(exc).__name__, exc)
+        error = [m for m in self.masalah() if m[0] == ERROR]
+        self.atur_pesan("Ada %d masalah, lihat baris Masalah." % len(error) if error
+                        else "Hardware siap. Tekan Tombol Y untuk kalibrasi.")
 
-    def start_balancing(self) -> None:
+    def tutup(self):
+        self.motors.stop_all()
         if self.state == BALANCING:
-            return
-        reason = ""
-        if not self.imu.ready:
-            reason = "IMU bermasalah: " + self.imu.problem
-        elif any(level == ERROR for level, _ in self.imu.problems()):
-            reason = "IMU bermasalah: " + self.imu.problems()[0][1]
-        elif not self.motors.ready:
-            reason = "; ".join(self.motors.problems())
-        elif not self.calibrated:
-            reason = "belum dikalibrasi, tekan Tombol Y dulu"
-        elif self.sample is None or abs(self.sample.psi_deg) > config.START_TILT_DEG:
-            psi = self.sample.psi_deg if self.sample else float("nan")
-            reason = (f"psi = {psi:+.1f} deg, tegakkan robot dulu "
-                      f"(|psi| harus < {config.START_TILT_DEG:g} deg)")
-        if reason:
-            self.set_message("MULAI ditolak: " + reason)
-            return
-        self.test = None
-        self.pd.reload()
-        self.motors.reset_wheel_angles()
-        self.theta_offset = self.sample.psi if config.ENCODER_RELATIVE_TO_BODY else 0.0
-        self.x_ref = np.zeros(4)
-        self.fault_reason = ""
-        self.cbf_active_count = self.cbf_infeasible_count = self.cbf_step_count = 0
-        self.saturated_s = self.infeasible_s = 0.0
-        self.stall_s = [0.0, 0.0]
-        self.no_current_s = [0.0, 0.0]
-        self.balance_t0 = time.monotonic()
-        self.state = BALANCING
-        self.recorder.start(self.control_mode)
-        text = f"Balancing aktif, mode {self.control_mode}. Percobaan: {self.recorder.name}"
-        if not any(self.gains()):
-            text = "Balancing aktif TETAPI semua gain 0 -> u = 0, roda tidak akan bergerak. Isi gain di config.py."
-        self.set_message(text)
+            self.simpan_semua("program keluar")
+        ise.tunggu_simpan()
+        for alat in (self.motors, self.joystick, self.imu):
+            alat.close()
 
-    def stop_balancing(self, reason: str) -> None:
-        self.test = None
-        self.motors.stop_all()
-        self.u = self.u_pd = 0.0
-        saved = self.recorder.stop(reason)
-        self.state = READY if self.calibrated else IDLE
-        self.fault_reason = ""
-        self.set_message(reason + (f" Tersimpan: {saved}" if saved else ""))
+    def atur_pesan(self, teks):
+        self.pesan = teks
+        LOGGER.info(teks)
 
-    def set_fault(self, reason: str) -> None:
-        self.motors.stop_all()
-        self.u = self.u_pd = 0.0
-        saved = self.recorder.stop("FAULT: " + reason)
-        self.state = FAULT
-        self.fault_reason = reason
-        self.set_message("FAULT: " + reason + (f" | tersimpan: {saved}" if saved else ""))
+    # ----------------------------------------------------------------- tombol
+    def proses_aksi(self, aksi):
+        if aksi == "KELUAR":
+            self.keluar = True
+        elif aksi == "KALIBRASI":
+            self.kalibrasi()
+        elif aksi == "MULAI":
+            self.mulai()
+        elif aksi == "RODA_MATI":
+            if self.state == BALANCING:
+                self.berhenti(SIAP, "Roda dimatikan.")
+            else:
+                self.atur_pesan("Roda sudah mati.")
+        elif aksi in ("MODE_PD", "MODE_PD_CBF"):
+            self.ganti_mode_kontrol(ise.MODE_PD if aksi == "MODE_PD" else ise.MODE_PD_CBF)
+        elif aksi in ("BALANCING", "NAVIGATE"):
+            self.ganti_mode_gerak(MODE_BALANCING if aksi == "BALANCING" else MODE_NAVIGATE)
+        elif aksi == "PENGUJIAN":
+            self.mulai_pengujian()
+        elif aksi == "SIMPAN":
+            if self.state != BALANCING:
+                self.atur_pesan("R3 hanya saat balancing (data sudah tersimpan saat roda dimatikan).")
+            else:
+                self.atur_pesan("PERCOBAAN disimpan: %s. Rekaman baru dimulai." % self.simpan(self.perekam))
+                self.perekam.mulai(self.mode_kontrol, ise.JENIS_PERCOBAAN)
+                self.t0 = time.monotonic()
+        elif aksi in ("HALAMAN_KIRI", "HALAMAN_KANAN"):
+            self.halaman = (self.halaman + (1 if aksi == "HALAMAN_KANAN" else -1)) % len(HALAMAN)
 
-    def set_control_mode(self, mode: str) -> None:
-        if mode == ise.MODE_PD_CBF and not self.cbf.available:
-            self.set_message("Mode PD+CBF ditolak: " + self.cbf.reason)
-            return
-        if mode == self.control_mode:
-            return
-        self.control_mode = mode
+    def kalibrasi(self):
         if self.state == BALANCING:
-            # satu percobaan = satu mode: tutup rekaman lama, mulai yang baru
-            saved = self.recorder.stop("ganti mode")
-            self.recorder.start(mode)
-            self.set_message(f"Mode {mode}. Percobaan baru: {self.recorder.name}"
-                             + (f" (tersimpan: {saved})" if saved else ""))
-        else:
-            self.set_message(f"Mode kontrol: {mode}")
-
-    def handle_action(self, action: str) -> None:
-        if action == jm.ACTION_QUIT:
-            self.exit_requested = True
-        elif action == jm.ACTION_CALIBRATE:
-            self.calibrate()
-        elif action == jm.ACTION_START:
-            self.start_balancing()
-        elif action == jm.ACTION_MOTOR_OFF:
-            self.stop_balancing("Roda dimatikan.")
-        elif action == jm.ACTION_MODE_PD:
-            self.set_control_mode(ise.MODE_PD)
-        elif action == jm.ACTION_MODE_PD_CBF:
-            self.set_control_mode(ise.MODE_PD_CBF)
-        elif action == jm.ACTION_DRIVE_ON:
-            self.drive_enabled = True
-            self.set_message("Perintah gerak AKTIF (analog + D-Pad).")
-        elif action == jm.ACTION_BALANCE_ONLY:
-            self.drive_enabled = False
-            self.set_message("Mode balancing saja (perintah gerak diabaikan).")
-        elif action == jm.ACTION_PAGE_PREV:
-            self.page = (self.page - 1) % len(PAGES)
-        elif action == jm.ACTION_PAGE_NEXT:
-            self.page = (self.page + 1) % len(PAGES)
-        elif action == jm.ACTION_TEST_LEFT:
-            self.start_wheel_test(0)
-        elif action == jm.ACTION_TEST_RIGHT:
-            self.start_wheel_test(1)
-
-    # ----------------------------------------------------------- uji roda --
-    def start_wheel_test(self, index: int) -> None:
-        """Putar satu roda dengan arus kecil, tanpa lewat kontrol, lalu nilai hasilnya."""
-        motor = self.motors.motors[index]
-        if self.state in (BALANCING, CALIBRATING):
-            self.set_message("Uji roda ditolak: hanya bisa saat roda mati (Tombol X).")
+            self.atur_pesan("Kalibrasi ditolak: matikan roda dulu (Tombol X).")
             return
-        if not motor.ready:
-            self.test_result[index] = "GAGAL - " + motor.problem
-            self.set_message(f"Uji {motor.name} ditolak: {motor.problem}")
+        error = [teks for tingkat, teks in self.imu.problems() if tingkat == ERROR]
+        if error:
+            self.atur_pesan("Kalibrasi ditolak, IMU bermasalah: " + error[0])
             return
-        self.test = {"index": index, "t_end": time.monotonic() + float(config.MOTOR_TEST_DURATION_S),
-                     "theta0": motor.theta, "ok0": motor.count_ok, "fb_sum": 0.0, "n": 0, "rpm_max": 0.0}
-        self.set_message(f"Uji {motor.name}: {config.MOTOR_TEST_CURRENT_A:g} A selama "
-                         f"{config.MOTOR_TEST_DURATION_S:g} s. Robot harus DIANGKAT.")
-
-    def run_wheel_test(self) -> None:
-        test = self.test
-        index = test["index"]
-        motor = self.motors.motors[index]
-        current = float(config.MOTOR_TEST_CURRENT_A)
-        self.motors.command_currents(current if index == 0 else 0.0, current if index == 1 else 0.0)
-        if motor.feedback is not None:
-            test["fb_sum"] += motor.feedback.current_a
-            test["n"] += 1
-            test["rpm_max"] = max(test["rpm_max"], abs(motor.feedback.speed_rpm))
-        if time.monotonic() < test["t_end"] and motor.ready:
-            return
-        self.motors.stop_all()
-        self.test = None
-        moved = motor.theta - test["theta0"]
-        replies = motor.count_ok - test["ok0"]
-        fb_mean = test["fb_sum"] / max(1, test["n"])
-        detail = (f"theta berubah {moved:+.2f} rad, arus umpan balik rata-rata {fb_mean:+.3f} A, "
-                  f"rpm maks {test['rpm_max']:.0f}, {replies} balasan")
-        min_angle = float(config.MOTOR_TEST_MIN_ANGLE)
-        if not motor.ready or replies == 0:
-            verdict = "GAGAL - motor tidak membalas: " + (motor.problem or motor.last_error)
-        elif moved > min_angle:
-            verdict = "OK - roda berputar dan theta naik"
-        elif moved < -min_angle:
-            verdict = ("TERBALIK - theta turun. Bila roda fisik berputar ke DEPAN: balik ENCODER_DIRECTION. "
-                       "Bila roda fisik berputar ke BELAKANG: balik tanda MOTOR_SIGN roda ini")
-        elif abs(fb_mean) < 0.1 * current:
-            verdict = ("GAGAL - roda diam dan arus umpan balik ~0: motor menerima perintah tetapi tidak "
-                       "mengalirkan arus (catu daya motor lemah/mati, atau bukan mode current loop)")
-        else:
-            verdict = ("GAGAL - arus mengalir tetapi roda diam: roda tertahan/terkunci, "
-                       "atau MOTOR_TEST_CURRENT_A terlalu kecil")
-        self.test_result[index] = f"{verdict} ({detail})"
-        self.set_message(f"Uji {motor.name}: {verdict}")
-
-    # ------------------------------------------------------- loop kontrol --
-    def read_imu(self) -> bool:
-        if not self.imu.ready:
-            return False
+        self.state = KALIBRASI
+        self.atur_pesan("Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.")
+        self.render()
         try:
-            self.sample = self.imu.read()
+            self.kalibrasi_hasil = self.imu.calibrate()
         except OSError as exc:
-            LOGGER.error("%s", exc)
-            return False
-        return True
+            self.state = DIAM
+            self.atur_pesan("Kalibrasi GAGAL: %s" % exc)
+            return
+        self.state = SIAP
+        hasil = self.kalibrasi_hasil
+        if hasil["gyro_std"] > config.IMU_CAL_MAX_GYRO_STD:
+            self.atur_pesan("Robot bergerak saat kalibrasi (simpangan gyro %.1f deg/s). Ulangi Tombol Y."
+                            % hasil["gyro_std"])
+        else:
+            self.atur_pesan("Kalibrasi selesai (sudut nol %+.2f deg). Tekan MULAI." % hasil["zero_offset_deg"])
 
-    def update_state_vector(self) -> None:
+    def mulai(self):
+        if self.state == BALANCING:
+            return
+        alasan = ""
+        error_imu = [teks for tingkat, teks in self.imu.problems() if tingkat == ERROR]
+        if error_imu:
+            alasan = "IMU bermasalah: " + error_imu[0]
+        elif not self.motors.ready:
+            alasan = "; ".join(self.motors.problems())
+        elif self.state == DIAM or not self.kalibrasi_hasil:
+            alasan = "belum dikalibrasi, tekan Tombol Y dulu"
+        elif self.sample is None or abs(self.sample.psi_deg) > config.START_TILT_DEG:
+            alasan = "tegakkan robot dulu (|psi| harus < %g deg)" % config.START_TILT_DEG
+        elif self.mode_kontrol == ise.MODE_PD_CBF and self.cbf is None:
+            alasan = "CBF-QP tidak tersedia (%s), pilih mode PD (LB)" % self.cbf_alasan
+        if alasan:
+            self.atur_pesan("MULAI ditolak: " + alasan)
+            return
+        self.motors.reset_wheel_angles()
+        self.mode_gerak = MODE_BALANCING
+        self.theta_nol = 0.0
+        self.theta_nol = self.baca_state()[0]          # titik nol s = posisi robot saat MULAI
+        self.lama_jenuh = 0.0
+        self.jumlah_cbf = {}
+        self.uji_berjalan = False
+        self.perekam.mulai(self.mode_kontrol, ise.JENIS_PERCOBAAN)
+        self.t0 = time.monotonic()
+        self.state = BALANCING
+        self.atur_pesan("Balancing, mode %s. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati." % self.mode_kontrol)
+
+    def simpan(self, perekam):
+        nama = perekam.simpan(latar=True)
+        return nama if nama else "(tidak ada data)"
+
+    def simpan_semua(self, sebab):
+        teks = "PERCOBAAN " + self.simpan(self.perekam)
+        if self.uji_berjalan:
+            teks += ", PENGUJIAN (belum %.0f s) %s" % (config.DURASI_PENGUJIAN, self.simpan(self.perekam_uji))
+            self.uji_berjalan = False
+        LOGGER.info("%s -> tersimpan %s", sebab, teks)
+        return teks
+
+    def berhenti(self, state, sebab):
+        """Roda dimatikan, data disimpan (di latar)."""
+        self.motors.stop_all()
+        self.u_PD = self.u = self.u_belok = 0.0
+        self.state = state
+        self.atur_pesan("%s%s | tersimpan: %s" % ("" if state == SIAP else state + ": ", sebab,
+                                                   self.simpan_semua(sebab)))
+
+    def ganti_mode_kontrol(self, mode):
+        if mode == ise.MODE_PD_CBF and self.cbf is None:
+            self.atur_pesan("Mode PD+CBF ditolak, CBF-QP tidak tersedia: " + self.cbf_alasan)
+            return
+        if mode == self.mode_kontrol:
+            return
+        self.mode_kontrol = mode
+        if self.state == BALANCING:            # satu rekaman = satu mode kontrol
+            teks = self.simpan_semua("ganti mode")
+            self.perekam.mulai(mode, ise.JENIS_PERCOBAAN)
+            self.t0 = time.monotonic()
+            self.atur_pesan("Mode %s. Rekaman lama tersimpan: %s" % (mode, teks))
+        else:
+            self.atur_pesan("Mode kontrol: %s" % mode)
+
+    def ganti_mode_gerak(self, mode):
+        if self.state != BALANCING:
+            self.atur_pesan("Tombol A / B berlaku saat balancing (MULAI selalu dimulai di mode Balancing).")
+            return
+        self.mode_gerak = mode
+        if mode == MODE_BALANCING:
+            self.theta_nol = self.theta_nol + self.x[0]          # titik nol s dipindah ke posisi sekarang
+            self.atur_pesan("Mode Balancing: robot ditahan di sini (titik nol s dipindah).")
+        else:
+            self.atur_pesan("Mode Navigate: D-Pad / analog kiri untuk maju-mundur dan belok.")
+
+    def mulai_pengujian(self):
+        if self.state != BALANCING:
+            self.atur_pesan("PENGUJIAN hanya bisa saat balancing.")
+        elif self.uji_berjalan:
+            self.atur_pesan("PENGUJIAN masih berjalan (%.1f / %.0f s)."
+                            % (time.monotonic() - self.t_uji0, config.DURASI_PENGUJIAN))
+        else:
+            self.perekam_uji.mulai(self.mode_kontrol, ise.JENIS_PENGUJIAN)
+            self.t_uji0 = time.monotonic()
+            self.uji_berjalan = True
+            self.atur_pesan("PENGUJIAN dimulai (%.0f s): dorong robot sekarang." % config.DURASI_PENGUJIAN)
+
+    # --------------------------------------------------------- loop kontrol
+    def baca_state(self):
+        """x = [theta, dtheta, psi, dpsi]; theta = encoder + psi (model.hitung_theta) - titik nol s."""
         psi = self.sample.psi if self.sample else 0.0
         dpsi = self.sample.dpsi if self.sample else 0.0
-        theta, dtheta = self.motors.theta, self.motors.dtheta
-        if config.ENCODER_RELATIVE_TO_BODY:
-            # encoder mengukur roda relatif terhadap badan; model memakai sudut roda absolut
-            theta += psi
-            dtheta += dpsi
-        self.x = np.array([theta - self.theta_offset, dtheta, psi, dpsi])
+        theta = model.hitung_theta(self.motors.theta, psi) - self.theta_nol
+        dtheta = model.hitung_theta(self.motors.dtheta, dpsi)
+        self.x = np.array([theta, dtheta, psi, dpsi])
+        return self.x
 
-    def update_reference(self, dt: float) -> None:
-        drive, turn = self.joystick.command() if self.drive_enabled else (0.0, 0.0)
-        self.drive, self.turn = drive, turn
-        dtheta_ref = drive * float(config.JOY_DTHETA_REF)
-        theta_ref = self.x_ref[0] + dtheta_ref * dt
-        lead = float(config.JOY_THETA_LEAD_MAX)
-        theta_ref = max(self.x[0] - lead, min(self.x[0] + lead, theta_ref))
-        self.x_ref = np.array([theta_ref, dtheta_ref, drive * math.radians(config.JOY_PSI_REF_DEG), 0.0])
+    def rawat_hardware(self):
+        """Saat roda mati: arus nol (encoder tetap terbaca), coba ulang hardware yang bermasalah."""
+        sekarang = time.monotonic()
+        if not self.imu.ready and sekarang >= self.coba_imu:
+            self.coba_imu = sekarang + config.IMU_RETRY_S
+            if self.imu.open():
+                self.atur_pesan("IMU terhubung kembali.")
+        if not self.motors.ready and sekarang >= self.coba_motor:
+            self.coba_motor = sekarang + config.MOTOR_RETRY_S
+            if self.motors.initialize():
+                self.atur_pesan("Kedua motor siap.")
+        self.motors.command_currents(0.0, 0.0)
 
-    def watch_motors(self, dt: float) -> None:
-        """Deteksi roda yang diperintah tetapi tidak berputar / tidak mengalirkan arus."""
-        for i, motor in enumerate(self.motors.motors):
-            commanded = abs(motor.command_a) >= float(config.STALL_CURRENT_A)
-            still = abs(motor.dtheta) < float(config.STALL_MIN_SPEED)
-            self.stall_s[i] = self.stall_s[i] + dt if commanded and still else 0.0
-            fb = motor.feedback
-            dead = fb is not None and abs(fb.current_a) < 0.1 * abs(motor.command_a)
-            self.no_current_s[i] = self.no_current_s[i] + dt if commanded and dead else 0.0
-
-    def control_step(self, dt: float) -> None:
-        imu_ok = self.read_imu()
-        if self.state != BALANCING:
-            self.drive = self.turn = 0.0
-            if self.state != CALIBRATING:
-                self.maintain_hardware()
-                if self.test is not None:
-                    self.run_wheel_test()
-                else:
-                    self.motors.command_currents(0.0, 0.0)   # arus nol, tetap membaca encoder
-            self.update_state_vector()
-            return
-
-        if not imu_ok:
-            self.set_fault("IMU gagal dibaca saat balancing: " + self.imu.problem)
-            return
-        self.update_state_vector()
-        if abs(self.x[2]) > math.radians(config.SAFE_TILT_DEG):
-            self.set_fault(f"|psi| = {abs(self.x[2]) * DEG:.1f} deg melebihi SAFE_TILT_DEG "
-                           f"({config.SAFE_TILT_DEG:g} deg): robot jatuh")
-            return
-
-        self.update_reference(dt)
-        x_err = self.x - self.x_ref
-        self.pd_terms = self.pd.terms(x_err)
-        self.u_pd = self.pd.compute(x_err)
-
-        if self.control_mode == ise.MODE_PD_CBF:
-            u, feasible = self.cbf.filter(self.x, self.u_pd)
-            active = self.cbf.active
-            self.cbf_step_count += 1
-            self.cbf_active_count += int(active)
-            self.cbf_infeasible_count += int(not feasible)
-        else:
-            u = max(-config.u_max, min(config.u_max, self.u_pd))
-            feasible, active = True, False
-            self.cbf.h = barrier_values(self.x)
-
-        turn = self.turn * float(config.TURN_TORQUE) * float(config.TURN_SIGN)
-        self.u = self.motors.command_torque(u, turn, strict=True)
-        self.recorder.add(self.x, self.x_ref, self.u_pd, self.u, active, feasible, self.cbf.h)
-        self.watch_motors(dt)
-
-        # Pengaman robot fisik: torsi jenuh atau QP infeasible terlalu lama = robot tidak
-        # tertolong / melaju tak terkendali -> matikan roda.
-        self.saturated_s = self.saturated_s + dt if abs(u) >= 0.999 * config.u_max else 0.0
-        self.infeasible_s = self.infeasible_s + dt if not feasible else 0.0
-        if self.saturated_s > float(config.SATURATION_FAULT_S):
-            self.set_fault(f"torsi jenuh (|u| = u_max) lebih dari {config.SATURATION_FAULT_S:g} s: "
-                           "robot tidak tertolong, atau gain terlalu besar")
-        elif self.infeasible_s > float(config.CBF_INFEASIBLE_FAULT_S):
-            self.set_fault(f"CBF-QP infeasible lebih dari {config.CBF_INFEASIBLE_FAULT_S:g} s "
-                           "(batas psi dan dtheta tidak bisa dipenuhi bersamaan)")
-
-    def run(self) -> None:
-        period = 1.0 / float(config.CONTROL_HZ)
-        ui_period = 1.0 / float(config.UI_HZ)
-        next_tick = time.monotonic()
-        last_start = next_tick - period
-        last_ui = 0.0
-        while not self.exit_requested:
-            start = time.monotonic()
-            self.loop_dt = max(1e-4, start - last_start)
-            last_start = start
-            self.loop_hz += 0.05 * (1.0 / self.loop_dt - self.loop_hz)
-
-            for action in self.joystick.poll():
-                self.handle_action(action)
+    def langkah_kontrol(self, dt):
+        imu_ok = False
+        if self.imu.ready:
             try:
-                self.control_step(self.loop_dt)
+                self.sample = self.imu.read()
+                imu_ok = True
+            except OSError as exc:
+                LOGGER.error("%s", exc)
+        if self.state != BALANCING:
+            if self.state != KALIBRASI:
+                self.rawat_hardware()
+            self.baca_state()
+            return
+        if not imu_ok:
+            self.berhenti(GANGGUAN, "IMU gagal dibaca saat balancing: " + self.imu.problem)
+            return
+
+        x = self.baca_state()
+        s = model.hitung_s(x)
+        if abs(x[2]) > math.radians(config.SAFE_TILT_DEG):
+            self.berhenti(KOMET, "psi = %.1f deg (> %g deg)" % (x[2] * DEG, config.SAFE_TILT_DEG))
+            return
+        if self.mode_gerak == MODE_BALANCING and abs(s) > config.S_KOMET:
+            self.berhenti(KOMET, "s = %.2f m (> %g m, mode Balancing)" % (s, config.S_KOMET))
+            return
+
+        self.arah, self.belok = self.joystick.perintah() if self.mode_gerak == MODE_NAVIGATE else (0, 0)
+        self.pd.set_command(self.arah, self.mode_gerak)
+        self.u_PD = self.pd.compute(x)
+        nilai_c = None
+        if self.mode_kontrol == ise.MODE_PD:
+            self.u = jepit(self.u_PD)
+            self.status_cbf = "-"
+        else:
+            self.cbf.mode_cbf(self.mode_gerak)
+            self.u = self.cbf.compute(x, self.u_PD)
+            self.status_cbf = self.cbf.status
+            self.jumlah_cbf[self.status_cbf] = self.jumlah_cbf.get(self.status_cbf, 0) + 1
+            nilai_c = [float(c) if m > 0.0 and math.isfinite(c) else None for c, m in zip(self.cbf.c, self.cbf.mask)]
+        self.u_belok = config.TORSI_BELOK * self.belok
+        self.motors.command_currents(jepit(self.u + self.u_belok) / config.MOTOR_KT,
+                                     jepit(self.u - self.u_belok) / config.MOTOR_KT, strict=True)
+
+        sekarang = time.monotonic()
+        pd = self.pd
+        error = (pd.error_theta, pd.error_dtheta, pd.error_psi, pd.error_dpsi)
+        self.perekam.tambah(sekarang - self.t0, x, *error, self.u_PD, self.u, self.status_cbf, self.gain, 0.0, nilai_c)
+        if self.uji_berjalan:
+            t_uji = sekarang - self.t_uji0
+            self.perekam_uji.tambah(t_uji, x, *error, self.u_PD, self.u, self.status_cbf, self.gain, 0.0, nilai_c)
+            if t_uji >= config.DURASI_PENGUJIAN:
+                self.uji_berjalan = False
+                self.atur_pesan("PENGUJIAN selesai, tersimpan: " + self.simpan(self.perekam_uji))
+
+        self.lama_jenuh = self.lama_jenuh + dt if abs(self.u) >= 0.999 * config.u_max else 0.0
+        if 0.0 < config.SATURASI_MAKS_S < self.lama_jenuh:
+            self.berhenti(KOMET, "torsi jenuh lebih dari %g s (robot diangkat / tertahan?)" % config.SATURASI_MAKS_S)
+
+    def run(self):
+        periode = 1.0 / config.CONTROL_HZ
+        berikut = time.monotonic()
+        mulai_lalu = berikut - periode
+        ui_lalu = 0.0
+        while not self.keluar:
+            mulai = time.monotonic()
+            dt = max(1e-4, mulai - mulai_lalu)
+            mulai_lalu = mulai
+            self.loop_hz += 0.05 * (1.0 / dt - self.loop_hz)
+
+            try:
+                for aksi in self.joystick.poll():
+                    self.proses_aksi(aksi)
+                self.langkah_kontrol(dt)
+            except DDSM115Error as exc:
+                self.berhenti(GANGGUAN, "motor: %s" % exc)
             except Exception as exc:
-                LOGGER.exception("control_step")
+                LOGGER.exception("loop kontrol")
                 if self.state == BALANCING:
-                    self.set_fault(f"{exc}")
-                elif self.state != FAULT:
-                    self.set_message(f"Error: {type(exc).__name__}: {exc}")
+                    self.berhenti(GANGGUAN, "%s: %s" % (type(exc).__name__, exc))
+                else:
+                    self.atur_pesan("Error: %s: %s" % (type(exc).__name__, exc))
 
-            now = time.monotonic()
-            self.work_ms += 0.05 * ((now - start) * 1000.0 - self.work_ms)
-            if now - last_ui >= ui_period:
+            sekarang = time.monotonic()
+            self.kerja_ms += 0.05 * ((sekarang - mulai) * 1000.0 - self.kerja_ms)
+            if sekarang - ui_lalu >= 1.0 / config.UI_HZ:
                 self.render()
-                last_ui = now
-
-            next_tick += period
-            sleep_time = next_tick - time.monotonic()
-            if sleep_time > 0:
-                time.sleep(sleep_time)
+                ui_lalu = sekarang
+            berikut += periode
+            jeda = berikut - time.monotonic()
+            if jeda > 0.0:
+                time.sleep(jeda)
             else:
                 if self.state == BALANCING:
-                    self.overruns += 1
-                next_tick = time.monotonic()
+                    self.overrun += 1
+                berikut = time.monotonic()
 
-    # ----------------------------------------------------------- diagnosa --
-    def gains(self) -> tuple:
-        return (self.pd.Kp_theta, self.pd.Kd_dtheta, self.pd.Kp_psi, self.pd.Kd_dpsi)
-
-    def current_at_5deg(self) -> float:
-        """Arus per roda [A] yang dihasilkan Kp_psi pada psi = 5 deg."""
-        return abs(self.pd.Kp_psi) * math.radians(5.0) / 2.0 / config.MOTOR_KT
-
-    def diagnose(self) -> list:
-        """Daftar (tingkat, sumber, pesan) dari semua masalah yang terdeteksi saat ini."""
-        found = []
-        for level, text in self.imu.problems():
-            found.append((level, "IMU", text))
-        for i, motor in enumerate(self.motors.motors):
-            name = motor.name.capitalize()
-            if not motor.ready:
-                found.append((ERROR, name, motor.problem))
-                continue
+    # --------------------------------------------------------------- diagnosa
+    def masalah(self):
+        """Daftar (tingkat, sumber, pesan), urut dari yang paling parah."""
+        hasil = [(tingkat, "IMU", teks) for tingkat, teks in self.imu.problems()]
+        for motor in self.motors.motors:
+            nama = motor.name.capitalize()
             fb = motor.feedback
-            if fb is not None and fb.error_code:
-                found.append((WARN, name, f"motor melaporkan error: {decode_error(fb.error_code)} "
-                                          f"(kode 0x{fb.error_code:02X}) -> matikan-nyalakan catu daya motor"))
-            if fb is not None and fb.mode != 1:
-                found.append((ERROR, name, f"mode motor {fb.mode} ({MODE_NAMES.get(fb.mode, '?')}), bukan current loop"))
-            if motor.comm_errors > 0:
-                found.append((WARN, name, f"{motor.comm_errors} balasan terakhir gagal: {motor.last_error}"))
-            if self.no_current_s[i] > float(config.STALL_TIME_S):
-                found.append((WARN, name, f"diperintah {motor.command_a:+.2f} A tetapi arus umpan balik "
-                                          f"{fb.current_a:+.2f} A -> catu daya motor lemah/mati"))
-            elif self.stall_s[i] > float(config.STALL_TIME_S):
-                found.append((WARN, name, f"diperintah {motor.command_a:+.2f} A tetapi roda tidak berputar "
-                                          f"-> roda tertahan, atau robot sedang dipegang"))
+            if not motor.ready:
+                hasil.append((ERROR, nama, motor.problem))
+            elif fb is not None and fb.mode != MODE_CURRENT:
+                hasil.append((ERROR, nama, "mode %s, bukan current loop" % MODE_NAMES.get(fb.mode, fb.mode)))
+            elif fb is not None and fb.error_code:
+                hasil.append((AWAS, nama, "motor melaporkan error: %s -> matikan-nyalakan catu daya motor"
+                              % decode_error(fb.error_code)))
+            elif motor.comm_errors > 0:
+                hasil.append((AWAS, nama, "%d balasan terakhir gagal: %s" % (motor.comm_errors, motor.last_error)))
         if not self.joystick.connected:
-            found.append((WARN, "Joystick", self.joystick.problem))
-        if not any(self.gains()) and self.pd.Kvel == 0.0:
-            found.append((ERROR, "Kontrol", "semua gain PD = 0 di config.py -> u_PD selalu 0, RODA TIDAK AKAN "
-                                            "BERGERAK. Isi Kp_psi dan Kd_dpsi (titik awal: 30.9 dan 2.17)"))
-        elif self.current_at_5deg() < float(config.DIAG_MIN_CURRENT_AT_5DEG_A):
-            found.append((WARN, "Kontrol", f"Kp_psi = {self.pd.Kp_psi:g} terlalu kecil: pada psi = 5 deg arus hanya "
-                                           f"{self.current_at_5deg():.3f} A per roda. Satuannya N m/rad (bukan per "
-                                           f"derajat); gain lama 0.200 setara dengan sekitar 30.9"))
-        if self.imu.ready and not self.calibrated:
-            found.append((INFO, "Kalibrasi", "IMU belum dikalibrasi -> tekan Tombol Y (wajib sebelum MULAI)"))
-        if not self.cbf.available:
-            found.append((INFO, "CBF-QP", "mode PD+CBF belum bisa dipakai: " + self.cbf.reason))
-        elif self.cbf.fail_count:
-            found.append((WARN, "CBF-QP", f"solver acados gagal {self.cbf.fail_count} kali (memakai solusi analitik)"))
-        slow = self.loop_hz < float(config.DIAG_MIN_LOOP_RATIO) * float(config.CONTROL_HZ)
-        if slow and self.state != CALIBRATING and self.imu.ready and self.motors.ready:
-            found.append((WARN, "Loop", f"loop hanya {self.loop_hz:.0f} Hz dari target {config.CONTROL_HZ:g} Hz "
-                                        f"(kerja {self.work_ms:.1f} ms) -> turunkan CONTROL_HZ atau cek "
-                                        f"timeout motor/I2C"))
-        if self.render_errors:
-            found.append((WARN, "GUI", f"{self.render_errors} error saat menggambar GUI (lihat {config.LOG_FILE})"))
-        order = {ERROR: 0, WARN: 1, INFO: 2}
-        return sorted(found, key=lambda item: order[item[0]])
+            hasil.append((AWAS, "Joystick", self.joystick.problem))
+        if self.imu.ready and not self.kalibrasi_hasil:
+            hasil.append((INFO, "Kalibrasi", "belum dikalibrasi -> Tombol Y (wajib sebelum MULAI)"))
+        if self.cbf is None:
+            hasil.append((INFO, "CBF-QP", "mode PD+CBF tidak bisa dipakai: " + self.cbf_alasan))
+        else:
+            nol = [self.cbf.nama_alpha[i] for i in self.cbf.alpha_dipakai if getattr(config, self.cbf.nama_alpha[i]) <= 0]
+            if nol:
+                hasil.append((AWAS, "CBF-QP", "%s = 0 -> CBF-QP tidak aktif (ALPHA_NOL)" % ", ".join(nol)))
+        if self.state == BALANCING and self.loop_hz < config.LOOP_MIN_RASIO * config.CONTROL_HZ:
+            hasil.append((AWAS, "Loop", "loop %.0f Hz dari target %g Hz (kerja %.1f ms)"
+                          % (self.loop_hz, config.CONTROL_HZ, self.kerja_ms)))
+        urutan = {ERROR: 0, AWAS: 1, INFO: 2}
+        return sorted(hasil, key=lambda m: urutan[m[0]])
 
-    def wheel_line(self) -> str:
-        """Satu kalimat: kenapa roda bergerak atau diam sekarang."""
-        left, right = self.motors.motors
-        if self.test is not None:
-            return f"UJI {self.motors.motors[self.test['index']].name} sedang berjalan"
-        if not self.motors.ready:
-            return "DIAM - motor bermasalah: " + "; ".join(self.motors.problems())
-        if self.state == FAULT:
-            return "DIAM - FAULT: " + self.fault_reason + " (tekan Tombol X lalu MULAI)"
-        if self.state != BALANCING:
-            return f"DIAM - state {self.state}, roda baru diperintah setelah MULAI"
-        if not any(self.gains()) and self.pd.Kvel == 0.0:
-            return "DIAM - semua gain 0 di config.py sehingga u_PD = 0"
-        currents = f"kiri {left.command_a:+.3f} A, kanan {right.command_a:+.3f} A"
-        if max(self.stall_s) > float(config.STALL_TIME_S):
-            return f"DIPERINTAH ({currents}) TETAPI TIDAK BERPUTAR - lihat Masalah"
-        if max(abs(left.command_a), abs(right.command_a)) < 0.02:
-            return (f"hampir diam - perintah arus sangat kecil ({currents}); "
-                    f"u = {self.u:+.3f} N m dari psi = {self.x[2] * DEG:+.2f} deg")
-        return f"diperintah: {currents} | berputar {self.motors.dtheta:+.2f} rad/s"
-
-    # ---------------------------------------------------------------- GUI --
-    def render(self) -> None:
+    # -------------------------------------------------------------------- GUI
+    def render(self):
         try:
             self._render()
         except Exception:
-            self.render_errors += 1
-            if self.render_errors <= 3:
-                LOGGER.exception("render")
+            LOGGER.exception("render")
 
-    def _render(self) -> None:
-        width = max(70, min(120, shutil.get_terminal_size((100, 40)).columns - 1))
-        self.width = width
-        lines = []
-        tabs = " ".join(f"[{i + 1}:{name}]" if i == self.page else f" {i + 1}:{name} "
-                        for i, name in enumerate(PAGES))
-        joy = self.joystick.name if self.joystick.connected else "TIDAK TERHUBUNG"
-        lines.append("ATERA - TWSBR PD + CBF-QP")
-        lines.append("=" * width)
-        lines.append(f"State: {self.state:<11} | Mode kontrol: {self.control_mode:<6} | "
-                     f"Gerak: {'AKTIF (A)' if self.drive_enabled else 'balancing saja (B)'}")
-        lines.append(f"Loop : {self.loop_hz:6.1f} Hz (target {config.CONTROL_HZ:g}) | kerja {self.work_ms:4.1f} ms | "
-                     f"overrun {self.overruns} | Joystick: {joy}")
-        lines.extend(self.wrap("Pesan: ", self.message)[:3])
-        lines.extend(self.wrap("Roda : ", self.wheel_line())[:3])
-        problems = [d for d in self.diagnose() if d[0] != INFO]
-        if problems:
-            lines.append(f"Masalah ({len(problems)}) - penjelasan lengkap di halaman DIAGNOSA:")
-            for level, source, text in problems[:3]:
-                lines.extend(self.wrap(f"  [{level}] {source}: ", text)[:3])
+    def bungkus(self, awalan, teks, maks=3):
+        return (textwrap.wrap(teks, width=self.lebar, initial_indent=awalan,
+                              subsequent_indent=" " * len(awalan)) or [awalan])[:maks]
+
+    def _render(self):
+        self.lebar = max(70, min(120, shutil.get_terminal_size((100, 40)).columns - 1))
+        tab = " ".join("[%d:%s]" % (i + 1, n) if i == self.halaman else " %d:%s " % (i + 1, n)
+                       for i, n in enumerate(HALAMAN))
+        baris = ["ATERA robot fisik | state %s | kontrol %s | gerak %s" % (self.state, self.mode_kontrol, self.mode_gerak),
+                 "=" * self.lebar,
+                 "Loop %.1f Hz (target %g) | kerja %.1f ms | overrun %d | simpan latar %d | joystick %s"
+                 % (self.loop_hz, config.CONTROL_HZ, self.kerja_ms, self.overrun, ise.simpan_berjalan(),
+                    self.joystick.name if self.joystick.connected else "TIDAK ADA")]
+        baris += self.bungkus("Pesan: ", self.pesan)
+        masalah = [m for m in self.masalah() if m[0] != INFO]
+        if masalah:
+            for tingkat, sumber, teks in masalah[:3]:
+                baris += self.bungkus("[%s] %s: " % (tingkat, sumber), teks, 2)
         else:
-            lines.append("Masalah: tidak ada (IMU, motor, joystick, dan gain terbaca baik)")
-        lines.append("-" * width)
-        lines.append(tabs)
-        lines.append("-" * width)
-        lines.extend((self.page_status, self.page_diagnosis, self.page_pd, self.page_cbf,
-                      self.page_hardware, self.page_ise, self.page_help)[self.page]())
-        lines.append("-" * width)
-        lines.append("Y kalibrasi | MULAI | X mati | LB PD | RB PD+CBF | A gerak | B diam | LT/RT hal. | L3/R3 uji roda")
-        out = "\x1b[H" + "".join(line[:width] + "\x1b[K\n" for line in lines) + "\x1b[J"
-        sys.stdout.write(out)
+            baris.append("Masalah: tidak ada")
+        baris += ["-" * self.lebar, tab, "-" * self.lebar]
+        baris += (self.hal_status, self.hal_kontrol, self.hal_hardware, self.hal_bantuan)[self.halaman]()
+        baris += ["-" * self.lebar,
+                  "Y kalibrasi | MULAI | X mati | LB PD | RB PD+CBF | B diam | A gerak | L3 uji | R3 simpan"]
+        sys.stdout.write("\x1b[H" + "".join(b[:self.lebar] + "\x1b[K\n" for b in baris) + "\x1b[J")
         sys.stdout.flush()
 
-    def wrap(self, prefix: str, text: str) -> list:
-        return textwrap.wrap(text, width=getattr(self, "width", 100), initial_indent=prefix,
-                             subsequent_indent=" " * len(prefix)) or [prefix]
-
-    def page_status(self) -> list:
-        x, r = self.x, self.x_ref
-        lines = ["state x           terukur                    referensi          error (ref - x)"]
-        for i in range(4):
-            is_angle = STATE_UNITS[i] == "rad"
-            deg_txt = f"({x[i] * DEG:+8.2f} deg{'  ' if is_angle else '/s'})"
-            lines.append(f"  {STATE_NAMES[i]:<7} {x[i]:+9.4f} {STATE_UNITS[i]:<5} {deg_txt}   "
-                         f"{r[i]:+9.4f}          {r[i] - x[i]:+9.4f}")
-        lines.append("")
-        lines.append(f"  psi    {gauge(x[2], config.psi_max)}  batas +-{config.psi_max_DEG:g} deg")
-        lines.append(f"  dtheta {gauge(x[1], config.dtheta_max)}  batas +-{config.dtheta_max:g} rad/s")
-        lines.append(f"  u      {gauge(self.u, config.u_max)}  batas +-{config.u_max:.2f} N m")
-        lines.append("")
-        lines.append(f"  u_PD = {self.u_pd:+8.4f} N m    u terkirim = {self.u:+8.4f} N m    "
-                     f"selisih = {self.u - self.u_pd:+8.4f} N m")
-        lines.append(f"  perintah gerak: maju/mundur {self.drive:+.2f} | belok {self.turn:+.2f}")
+    def hal_status(self):
+        x = self.x
+        s = model.hitung_s(x)
+        kiri, kanan = self.motors.motors
+        baris = ["  psi    %+8.2f deg   %s  +-%.0f deg" % (x[2] * DEG, batang(x[2], config.psi_max), config.psi_max * DEG),
+                 "  dpsi   %+8.3f rad/s %s  +-%.2f rad/s" % (x[3], batang(x[3], config.dpsi_max), config.dpsi_max),
+                 "  dtheta %+8.3f rad/s %s  +-%.1f rad/s" % (x[1], batang(x[1], config.dtheta_max), config.dtheta_max),
+                 "  s      %+8.3f m     %s  +-%.1f m (theta %+.2f rad)" % (s, batang(s, config.s_max), config.s_max, x[0]),
+                 "  u      %+8.3f N m   %s  +-%.2f N m" % (self.u, batang(self.u, config.u_max), config.u_max),
+                 "",
+                 "  u_PD %+.3f N m -> u %+.3f N m | belok %+.3f | arus kiri %+.2f A, kanan %+.2f A (batas %.1f A)"
+                 % (self.u_PD, self.u, self.u_belok, kiri.command_a, kanan.command_a, config.MAX_CURRENT_A),
+                 "  perintah joystick: arah %+d, belok %+d (hanya mode Navigate) | status CBF: %s"
+                 % (self.arah, self.belok, self.status_cbf)]
         if self.state == BALANCING:
-            lines.append(f"  lama balancing: {time.monotonic() - self.balance_t0:7.1f} s | "
-                         f"ISE psi berjalan: {self.recorder.ise_psi_deg2s:.4f} deg^2 s")
-        return lines
+            baris.append("  PERCOBAAN %.1f s | ISE psi %.6f rad^2 s" % (time.monotonic() - self.t0, self.perekam.ise_psi))
+            if self.uji_berjalan:
+                baris.append("  PENGUJIAN %.1f / %.0f s | ISE psi %.6f rad^2 s" % (
+                    time.monotonic() - self.t_uji0, config.DURASI_PENGUJIAN, self.perekam_uji.ise_psi))
+        baris.append("  terakhir disimpan: %s" % (self.perekam.file_terakhir or "-"))
+        return baris
 
-    def page_diagnosis(self) -> list:
-        def tag(ok: bool, warn: bool = False) -> str:
-            return "[ OK  ]" if ok else ("[AWAS ]" if warn else "[ERROR]")
-
-        imu, joy = self.imu, self.joystick
-        lines = ["KOMPONEN"]
-        imu_errors = [t for level, t in imu.problems() if level == ERROR]
-        if imu.ready and not imu_errors:
-            lines.append(f"  {tag(True)} IMU MPU6050   : {imu.chip_name} (WHO_AM_I 0x{imu.who_am_i & 0xFF:02X}) | "
-                         f"{imu.read_count} sampel, {imu.error_count} gagal baca | |a| = {imu.acc_norm:.2f} g")
-        else:
-            lines.extend(self.wrap(f"  {tag(False)} IMU MPU6050   : ", imu_errors[0] if imu_errors else imu.problem))
-        for motor in self.motors.motors:
-            head = f"  {tag(motor.ready)} {motor.name.capitalize():<13} : "
-            if motor.ready:
-                mode = MODE_NAMES.get(motor.feedback.mode, "?") if motor.feedback else "?"
-                lines.append(f"{head}{motor.port} | {mode} | balasan baik {motor.count_ok}, tanpa balasan "
-                             f"{motor.count_timeout}, rusak {motor.count_bad_frame}")
-            else:
-                lines.extend(self.wrap(head, motor.problem))
-        if joy.connected:
-            lines.extend(self.wrap(f"  {tag(True)} Joystick      : ",
-                                   f"{joy.name} | {joy.event_count} event | terakhir: {joy.last_event}"))
-        else:
-            lines.extend(self.wrap(f"  {tag(False, True)} Joystick      : ", joy.problem))
-        lines.append(f"  {tag(self.calibrated, True)} Kalibrasi IMU : "
-                     + ("sudah" if self.calibrated else "BELUM -> tekan Tombol Y"))
-        lines.append(f"  {tag(any(self.gains()))} Gain PD       : Kp_theta={self.pd.Kp_theta:g} Kd_dtheta={self.pd.Kd_dtheta:g} "
-                     f"Kp_psi={self.pd.Kp_psi:g} Kd_dpsi={self.pd.Kd_dpsi:g} Kvel={self.pd.Kvel:g}")
-        lines.extend(self.wrap(f"  {tag(self.cbf.available, True)} CBF-QP        : ", self.cbf.reason))
-
-        left, right = self.motors.motors
-        fb_l, fb_r = left.feedback, right.feedback
-        lines.append("")
-        lines.append("RANTAI SINYAL (dari sensor sampai roda)")
-        lines.append(f"  1 state program        : {self.state}" + ("" if self.state == BALANCING else "  <- roda hanya diperintah saat BALANCING"))
-        lines.append(f"  2 psi, dpsi (IMU)      : {self.x[2] * DEG:+8.2f} deg, {self.x[3] * DEG:+8.2f} deg/s")
-        lines.append(f"  3 u_PD (pd_control)    : {self.u_pd:+8.4f} N m")
-        lines.append(f"  4 u terkirim           : {self.u:+8.4f} N m   (batas +-{config.u_max:.2f})")
-        lines.append(f"  5 arus perintah  L / R : {left.command_a:+8.3f} / {right.command_a:+8.3f} A   "
-                     f"(mentah {left.command_raw:+d} / {right.command_raw:+d})")
-        if fb_l and fb_r:
-            lines.append(f"  6 arus umpan balik L/R : {fb_l.current_a:+8.3f} / {fb_r.current_a:+8.3f} A")
-            lines.append(f"  7 kecepatan roda  L/R  : {left.dtheta:+8.2f} / {right.dtheta:+8.2f} rad/s   "
-                         f"(rpm motor {fb_l.speed_rpm:+.0f} / {fb_r.speed_rpm:+.0f})")
-        else:
-            lines.append("  6-7 umpan balik motor  : belum ada")
-        lines.extend(self.wrap("  => Roda: ", self.wheel_line()))
-
-        lines.append("")
-        lines.append("UJI RODA LANGSUNG (robot diangkat, roda mati; L3 = kiri, R3 = kanan)")
-        lines.extend(self.wrap("  kiri  : ", self.test_result[0]))
-        lines.extend(self.wrap("  kanan : ", self.test_result[1]))
-
-        found = self.diagnose()
-        lines.append("")
-        lines.append(f"MASALAH TERDETEKSI ({len(found)})" if found else "MASALAH TERDETEKSI: tidak ada")
-        for level, source, text in found:
-            lines.extend(self.wrap(f"  [{level}] {source}: ", text))
-        return lines
-
-    def page_pd(self) -> list:
+    def hal_kontrol(self):
         pd = self.pd
-        e = self.x - self.x_ref
-        names = ("Kp_theta  * theta ", "Kd_dtheta * dtheta", "Kp_psi    * psi   ", "Kd_dpsi   * dpsi  ")
-        gains = self.gains()
-        lines = ["u_PD = Kp_theta*theta + Kd_dtheta*dtheta + Kp_psi*psi + Kd_dpsi*dpsi + Kvel",
-                 "(state diukur relatif terhadap referensi; gain dibaca dari config.py saat MULAI)", ""]
-        for i in range(4):
-            lines.append(f"  {names[i]} = {gains[i]:9.4f} x {e[i]:+9.4f} = {self.pd_terms[i]:+9.4f} N m")
-        lines.append(f"  Kvel                                          = {self.pd_terms[4]:+9.4f} N m")
-        lines.append(f"  {'-' * 58}")
-        lines.append(f"  u_PD                                          = {self.u_pd:+9.4f} N m")
-        sat = "YA" if abs(self.u_pd) > config.u_max else "tidak"
-        lines.append(f"  batas aktuator u_max = {config.u_max:.3f} N m ({config.MAX_CURRENT_A:g} A per roda) | jenuh: {sat}")
-        lines.append(f"  arti Kp_psi: pada psi = 5 deg -> {self.current_at_5deg():.3f} A per roda "
-                     f"(satuan gain: N m/rad, torsi total dua roda)")
-        lines.append("")
-        if not any(gains):
-            lines.append("  SEMUA GAIN MASIH 0: robot tidak akan menahan diri. Isi gain di config.py.")
-        A, B = model.linearize()
-        poles = np.linalg.eigvals(A + np.outer(B, np.array(gains)))
-        stable = "stabil" if max(poles.real) < -1e-6 else "TIDAK stabil / marginal"
-        lines.append("  pole closed-loop model linear: " + "  ".join(
-            f"{p.real:+.1f}{p.imag:+.1f}j" if abs(p.imag) > 1e-6 else f"{p.real:+.1f}" for p in poles))
-        lines.append(f"  -> menurut model: {stable}")
-        return lines
-
-    def page_cbf(self) -> list:
+        balancing = self.mode_gerak == MODE_BALANCING
+        x = self.x
+        suku = (("Kp_psi*psi", pd.Kp_psi, x[2]), ("Kd_psi*dpsi", pd.Kd_psi, x[3]),
+                ("Kp_theta*theta", pd.Kp_theta if balancing else 0.0, x[0]), ("Kd_theta*dtheta", pd.Kd_theta, x[1]),
+                ("Kvel*arah", pd.Kvel, 0 if balancing else pd.arah))
+        baris = ["PD (torsi satu roda): u_PD = %+.4f N m" % self.u_PD]
+        baris += ["  %-16s %8.3f x %+8.4f = %+8.4f N m" % (n, k, v, k * v) for n, k, v in suku]
+        baris.append("")
+        if self.cbf is None:
+            return baris + self.bungkus("CBF-QP: tidak tersedia, ", self.cbf_alasan)
         cbf = self.cbf
-        on = self.control_mode == ise.MODE_PD_CBF
-        lines = [f"Filter: {'AKTIF (mode PD+CBF)' if on else 'tidak dipakai (mode PD)'} | "
-                 f"solver: {cbf.backend or '-'} | N = {config.CBF_N_HORIZON} | {cbf.reason}",
-                 f"Alpha_1 = {config.Alpha_1:g}   Alpha_2 = {config.Alpha_2:g}   "
-                 f"psi_max = {config.psi_max_DEG:g} deg   dtheta_max = {config.dtheta_max:g} rad/s", ""]
-        units = ("rad", "rad", "rad/s", "rad/s")
-        for i in range(4):
-            flag = "aman" if cbf.h[i] >= 0.0 else "MELANGGAR"
-            lines.append(f"  {H_NAMES[i]:<26} = {cbf.h[i]:+9.4f} {units[i]:<5}  {flag}")
-        lines.append("")
-        if on:
-            lo, hi = cbf.u_bound
-            lines.append(f"  selang u yang diizinkan CBF : [{lo:+8.3f}, {hi:+8.3f}] N m")
-            lines.append(f"  u_PD = {self.u_pd:+8.4f}  ->  u_QP = {self.u:+8.4f} N m   "
-                         f"(koreksi {self.u - max(-config.u_max, min(config.u_max, self.u_pd)):+.4f})")
-            lines.append(f"  filter mengoreksi: {'YA' if cbf.active else 'tidak'} | "
-                         f"feasible: {'ya' if cbf.feasible else 'TIDAK'} | waktu QP: {cbf.solve_ms:.3f} ms")
-            n = max(1, self.cbf_step_count)
-            lines.append(f"  sejak MULAI: koreksi {self.cbf_active_count} siklus ({100.0 * self.cbf_active_count / n:.1f}%) | "
-                         f"infeasible {self.cbf_infeasible_count} | solver gagal {cbf.fail_count}")
-        else:
-            lines.append("  Tekan RB untuk mengaktifkan filter CBF-QP.")
-        return lines
+        lo, hi = cbf.u_interval
+        baris.append("CBF-QP (%s) | status %s | acados %d | solve %.3f ms | u diizinkan [%+.3f, %+.3f] N m"
+                     % ("dipakai" if self.mode_kontrol == ise.MODE_PD_CBF else "tidak dipakai, mode PD",
+                        cbf.status, cbf.acados_status, cbf.solve_ms, lo, hi))
+        baris.append("  Alpha: " + "  ".join("%s=%g" % (n, getattr(config, n)) for n in cbf.nama_alpha))
+        baris.append("  sejak MULAI: " + (", ".join("%s %d" % kv for kv in self.jumlah_cbf.items()) or "-"))
+        if self.mode_kontrol == ise.MODE_PD:
+            return baris + ["  nilai constraint c_h hanya dihitung di mode PD+CBF (RB)"]
+        for k in range(cbf.NH):
+            aktif = cbf.mask[k] > 0.0
+            c = cbf.c[k]
+            keadaan = "tidak dipakai di mode ini" if not aktif else (
+                "-" if not math.isfinite(c) else ("MELANGGAR" if c < 0 else ("membatasi u" if c < 1e-6 else "aman")))
+            baris.append("  c_h%d = %s  %s" % (k + 1, "%+12.4f" % c if math.isfinite(c) else "%12s" % "-", keadaan))
+        return baris
 
-    def page_hardware(self) -> list:
-        lines = ["IMU MPU6050"]
+    def hal_hardware(self):
         s = self.sample
-        if not self.imu.ready:
-            lines.extend(self.wrap("  TIDAK TERBACA: ", self.imu.problem))
-        elif s is None:
-            lines.append("  belum ada data")
-        else:
-            lines.append(f"  psi = {s.psi_deg:+8.3f} deg | dpsi = {s.dpsi_deg:+8.2f} deg/s | "
-                         f"sudut accel = {s.acc_angle_deg:+8.3f} deg | dt = {s.dt * 1000.0:5.2f} ms")
-            lines.append(f"  kalman X/Y = {s.kalman_x_deg:+8.3f} / {s.kalman_y_deg:+8.3f} deg | "
-                         f"gyro X/Y = {s.gyro_x_deg_s:+7.2f} / {s.gyro_y_deg_s:+7.2f} deg/s | |a| = {self.imu.acc_norm:.2f} g")
-        c = self.calibration
-        if c:
-            lines.append(f"  kalibrasi: zero offset {c['zero_offset_deg']:+.3f} deg | bias gyro X/Y "
-                         f"{c['gyro_bias_x']:+.3f} / {c['gyro_bias_y']:+.3f} deg/s | simpangan {c['gyro_std']:.2f} deg/s")
-        else:
-            lines.append("  kalibrasi: BELUM")
-        lines.append("")
-        lines.append("MOTOR DDSM115      perintah    arus fb    rpm fb    posisi    theta      dtheta    error")
-        for motor in self.motors.motors:
-            fb = motor.feedback
-            if not motor.ready or fb is None:
-                lines.extend(self.wrap(f"  {motor.name:<12} TIDAK TERBACA: ", motor.problem or "belum ada umpan balik"))
+        baris = ["IMU %s (WHO_AM_I 0x%02X) | %d sampel, %d gagal | |a| %.2f g"
+                 % (self.imu.chip_name, self.imu.who_am_i & 0xFF, self.imu.read_count, self.imu.error_count,
+                    self.imu.acc_norm)]
+        if s is not None:
+            baris.append("  psi %+8.3f deg | dpsi %+8.2f deg/s | sudut accel %+8.3f deg | dt %.2f ms"
+                         % (s.psi_deg, s.dpsi_deg, s.acc_angle_deg, s.dt * 1000.0))
+        hasil = self.kalibrasi_hasil
+        baris.append("  kalibrasi: " + ("sudut nol %+.3f deg, bias gyro %+.3f / %+.3f deg/s, simpangan %.2f deg/s"
+                                        % (hasil["zero_offset_deg"], hasil["gyro_bias_x"], hasil["gyro_bias_y"],
+                                           hasil["gyro_std"]) if hasil else "BELUM"))
+        baris += ["", "MOTOR        perintah   arus fb   rpm fb  posisi    theta   dtheta  balasan ok/timeout/rusak"]
+        for m in self.motors.motors:
+            fb = m.feedback
+            if not m.ready or fb is None:
+                baris += self.bungkus("  %-10s " % m.name, m.problem or "belum ada umpan balik", 2)
                 continue
-            lines.append(f"  {motor.name:<12} {motor.command_a:+7.3f} A  {fb.current_a:+7.3f} A  {fb.speed_rpm:+6.0f}   "
-                         f"{fb.position_raw:6d}  {motor.theta:+8.3f}  {motor.dtheta:+8.3f}   {decode_error(fb.error_code)}")
-        lines.append("")
-        lines.append("Cek arah sebelum tuning (roda mati, robot dipegang):")
-        lines.append("  miringkan badan ke DEPAN  -> psi harus POSITIF        (salah: balik IMU_SIGN)")
-        lines.append("  putar roda ke arah DEPAN  -> theta harus NAIK         (salah: balik ENCODER_DIRECTION)")
-        return lines
+            baris.append("  %-10s %+7.3f A %+7.3f A %+6.0f %7d %+8.3f %+8.3f  %d/%d/%d %s"
+                         % (m.name, m.command_a, fb.current_a, fb.speed_rpm, fb.position_raw, m.theta, m.dtheta,
+                            m.count_ok, m.count_timeout, m.count_bad_frame, decode_error(fb.error_code)))
+        baris += ["", "Joystick: " + (self.joystick.name if self.joystick.connected else self.joystick.problem),
+                  "  event terakhir: " + self.joystick.last_event,
+                  "", "Cek arah sebelum balancing (roda mati):",
+                  "  badan miring ke DEPAN -> psi POSITIF (salah: IMU_SIGN)",
+                  "  dorong robot ke DEPAN di lantai -> theta / s NAIK (salah: ENCODER_DIRECTION)",
+                  "  robot diangkat, MULAI, badan dimiringkan ke DEPAN -> kedua roda berputar ke DEPAN "
+                  "(salah: MOTOR_SIGN roda itu)"]
+        return baris
 
-    def page_ise(self) -> list:
-        rec = self.recorder
-        lines = []
-        if rec.recording:
-            lines.append(f"Merekam: {rec.name}")
-            lines.append(f"  durasi {rec.duration:7.1f} s | {len(rec.rows)} sampel")
-            lines.append(f"  ISE psi    = {rec.ise_psi_deg2s:12.4f} deg^2 s      ({rec.ise[2]:.6f} rad^2 s)")
-            lines.append(f"  ISE dpsi   = {rec.ise_dpsi_deg2s:12.2f} (deg/s)^2 s  ({rec.ise[3]:.6f} (rad/s)^2 s)")
-            lines.append(f"  ISE theta  = {rec.ise[0]:12.4f} rad^2 s")
-            lines.append(f"  ISE dtheta = {rec.ise[1]:12.4f} (rad/s)^2 s")
-        else:
-            lines.append("Tidak sedang merekam. Rekaman dimulai saat MULAI dan disimpan saat roda dimatikan.")
-        lines.append("")
-        lines.append(f"Terakhir: {rec.last_summary or '-'}")
-        lines.append(f"Folder  : {ise.plot_dir()}")
-        try:
-            files = sorted(f for f in os.listdir(ise.plot_dir()) if f.endswith(".png"))[-6:]
-        except OSError:
-            files = []
-        lines.extend("  " + name for name in files)
-        return lines
-
-    def page_help(self) -> list:
-        lines = ["Joystick:"] + ["  " + line for line in jm.HELP_LINES]
-        lines.append("")
-        lines.append(f"Event joystick terakhir: {self.joystick.last_event}")
-        if not self.joystick.connected:
-            lines.extend(self.wrap("Joystick: ", self.joystick.problem))
-            lines.append("Perangkat input yang ada (isi JOYSTICK_PORT di config.py dengan yang benar):")
-            lines.extend("  " + name for name in self.joystick.available_devices()[:8])
-        return lines
+    def hal_bantuan(self):
+        return (["Joystick:"] + ["  " + teks for teks in jm.BANTUAN]
+                + ["", "Hasil ISE: folder %s (PERCOBAAN dan PENGUJIAN)" % ise.FOLDER_PLOT,
+                   "  python3 ise.py --daftar                     daftar percobaan",
+                   "  python3 ise.py --bandingkan --pd 3 --cbf 5   PD KE-03 vs PD+CBF KE-05",
+                   "  tambahkan --pengujian untuk hasil PENGUJIAN (L3)"])
 
 
-def _on_sigterm(*_args) -> None:
+def _sigterm(*_):
     raise KeyboardInterrupt
 
 
-def main() -> int:
-    log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.LOG_FILE)
-    logging.basicConfig(filename=log_path, level=logging.INFO,
+def main():
+    path_log = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.LOG_FILE)
+    logging.basicConfig(filename=path_log, level=logging.INFO,
                         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-    signal.signal(signal.SIGTERM, _on_sigterm)
+    signal.signal(signal.SIGTERM, _sigterm)
     app = Atera()
-    sys.stdout.write("\x1b[?1049h\x1b[?25l\x1b[2J")      # layar alternatif, kursor disembunyikan
-    code, error = 0, ""
+    sys.stdout.write("\x1b[?1049h\x1b[?25l\x1b[2J")          # layar alternatif, kursor disembunyikan
+    error = ""
     try:
         app.setup()
         app.run()
@@ -815,18 +564,17 @@ def main() -> int:
         LOGGER.info("Dihentikan dari keyboard")
     except Exception as exc:
         LOGGER.exception("Error fatal")
-        code, error = 1, f"{type(exc).__name__}: {exc}"
+        error = "%s: %s" % (type(exc).__name__, exc)
     finally:
         try:
-            app.cleanup()
+            app.tutup()
         finally:
             sys.stdout.write("\x1b[?25h\x1b[?1049l")
             sys.stdout.flush()
-    if error:
-        print(f"ATERA berhenti karena error: {error}\nDetail: {log_path}")
-    elif app.recorder.last_summary:
-        print("Percobaan terakhir: " + app.recorder.last_summary)
-    return code
+    print("ATERA berhenti" + (" karena error: %s (detail: %s)" % (error, path_log) if error else "."))
+    if app.perekam.file_terakhir:
+        print("Percobaan terakhir: %s" % app.perekam.path_terakhir)
+    return 1 if error else 0
 
 
 if __name__ == "__main__":

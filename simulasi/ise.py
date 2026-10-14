@@ -1,14 +1,16 @@
-"""ise.py - Evaluasi ISE (Integral Square Error) robot ATERA.
+"""ise.py - Evaluasi ISE (Integral Square Error) robot ATERA (robot fisik).
 
+Format CSV, PNG, dan nama file sama dengan simulasi/ise.py, jadi hasil robot fisik dan simulasi bisa dibandingkan.
 ISE = jumlah (error^2 * dt), dihitung untuk theta, dtheta, psi, dan dpsi.
 
 Hasil disimpan di dua subfolder PLOT_EVALUASI (HHmmSS = jam, menit, detik saat disimpan):
-    PLOT_EVALUASI/PERCOBAAN/YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.csv / .png       (perekaman biasa)
-    PLOT_EVALUASI/PENGUJIAN/YYYYMMDD_HHmmSS_COBA PD_PENGUJIAN KE-XX.csv / .png       (mode pengujian, tombol T)
+    PLOT_EVALUASI/PERCOBAAN/YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.csv / .png       (MULAI sampai X / R3 / KOMET)
+    PLOT_EVALUASI/PENGUJIAN/YYYYMMDD_HHmmSS_COBA PD_PENGUJIAN KE-XX.csv / .png       (L3, DURASI_PENGUJIAN detik)
     (PD diganti PD+CBF untuk mode PD + CBF-QP)
 Nomor KE-XX naik otomatis per tanggal, per mode, dan per jenis (PERCOBAAN / PENGUJIAN).
 File lama (langsung di PLOT_EVALUASI, atau tanpa HHmmSS) tetap terbaca sebagai PERCOBAAN.
-Bila gain diubah saat sedang direkam, nama file diberi akhiran _TUNING.
+Penyimpanan saat robot masih balancing berjalan di PROSES TERPISAH (simpan(latar=True)), supaya matplotlib
+tidak menahan loop kontrol.
 
 Kolom c_h1, c_h2, ... (hanya mode PD + CBF-QP): nilai tiap constraint CBF-QP (urutan DAFTAR_C di cbf_qp.py) pada
 torsi u yang dipakai siklus itu. c >= 0 = terpenuhi, c ~ 0 = constraint sedang aktif (membatasi u), c < 0 =
@@ -36,7 +38,9 @@ Hasil --bandingkan disimpan di subfolder yang sama:
 
 import argparse
 import csv
+import logging
 import math
+import multiprocessing
 import os
 import re
 from datetime import datetime
@@ -48,9 +52,12 @@ import matplotlib.pyplot as plt
 import config
 
 FOLDER_PLOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.ISE_PLOT_DIR)
+LOGGER = logging.getLogger(__name__)
+_NAMA_DIPAKAI = []                  # nama yang sudah dibagikan program ini (file-nya bisa belum selesai ditulis)
+_PROSES = []                        # proses penyimpanan latar yang masih berjalan
 
-JENIS_PERCOBAAN = "PERCOBAAN"       # perekaman biasa (E / Q / KOMET)
-JENIS_PENGUJIAN = "PENGUJIAN"       # mode pengujian (tombol T): dari dorongan O / P selama beberapa detik
+JENIS_PERCOBAAN = "PERCOBAAN"       # perekaman biasa (MULAI sampai X / R3 / KOMET)
+JENIS_PENGUJIAN = "PENGUJIAN"       # L3: DURASI_PENGUJIAN detik sejak tombol ditekan
 
 
 def folder_jenis(jenis):
@@ -130,13 +137,32 @@ def nama_percobaan(mode, tuning, jenis=JENIS_PERCOBAAN):
     tanggal = sekarang.strftime("%Y%m%d")
     jam = sekarang.strftime("%H%M%S")
     nomor = 1
-    for percobaan in daftar_percobaan(jenis):
-        if percobaan["tanggal"] == tanggal and percobaan["mode"] == mode and percobaan["nomor"] >= nomor:
-            nomor = percobaan["nomor"] + 1
+    terpakai = [(p["tanggal"], p["mode"], p["nomor"]) for p in daftar_percobaan(jenis)]
+    for nama_lama in _NAMA_DIPAKAI:
+        cocok = POLA_NAMA.match(nama_lama + ".csv")
+        if cocok is not None and cocok.group(4) == jenis:
+            terpakai.append((cocok.group(1), cocok.group(3), int(cocok.group(5))))
+    for tanggal_lama, mode_lama, nomor_lama in terpakai:
+        if tanggal_lama == tanggal and mode_lama == mode and nomor_lama >= nomor:
+            nomor = nomor_lama + 1
     nama = "%s_%s_COBA %s_%s KE-%02d" % (tanggal, jam, mode, jenis, nomor)
     if tuning:
         nama = nama + "_TUNING"
+    _NAMA_DIPAKAI.append(nama)
     return nama
+
+
+def simpan_berjalan():
+    """Jumlah penyimpanan latar yang belum selesai."""
+    _PROSES[:] = [proses for proses in _PROSES if proses.is_alive()]
+    return len(_PROSES)
+
+
+def tunggu_simpan(batas_waktu=30.0):
+    """Tunggu semua penyimpanan latar selesai (dipanggil saat program keluar)."""
+    for proses in _PROSES:
+        proses.join(batas_waktu)
+    simpan_berjalan()
 
 
 def gambar_kotak_safety(ax, x_min, x_max, y_min, y_max):
@@ -287,15 +313,40 @@ class PerekamISE:
             baris.extend("" if c is None else c for c in nilai_c)
         self.data.append(baris)
 
-    def simpan(self):
-        """Simpan CSV dan PNG (selalu, bila ada data). Mengembalikan nama percobaan, atau "" bila belum ada data."""
+    def simpan(self, latar=False):
+        """Simpan CSV dan PNG (bila ada data). Mengembalikan nama percobaan, atau "" bila belum ada data.
+
+        latar=True: ditulis di proses terpisah (fork) supaya loop kontrol tidak tertahan; nama ditentukan di sini.
+        """
         if len(self.data) == 0:
             self.alasan = "belum ada data (sudah disimpan, atau belum ada siklus yang direkam)"
             return ""
         self.alasan = ""
 
+        nama = nama_percobaan(self.mode, len(self.gain_berubah) > 0, self.jenis)
+        if latar:
+            proses = multiprocessing.get_context("fork").Process(target=self._tulis, args=(nama,))
+            proses.start()
+            _PROSES.append(proses)
+        else:
+            self._tulis_csv_png(nama)
+        self.file_terakhir = nama
+        self.path_terakhir = os.path.join(folder_jenis(self.jenis), nama)
+        self.data = []
+        return nama
+
+    def _tulis(self, nama):
+        """Isi proses latar: keluaran layar dibuang, kesalahan hanya ditulis ke log (GUI tidak terganggu)."""
+        kosong = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(kosong, 1)
+        os.dup2(kosong, 2)
+        try:
+            self._tulis_csv_png(nama)
+        except Exception:
+            LOGGER.exception("gagal menyimpan %s", nama)
+
+    def _tulis_csv_png(self, nama):
         tuning = len(self.gain_berubah) > 0
-        nama = nama_percobaan(self.mode, tuning, self.jenis)
         folder = folder_jenis(self.jenis)
         path_csv = os.path.join(folder, nama + ".csv")
         path_png = os.path.join(folder, nama + ".png")
@@ -334,7 +385,6 @@ class PerekamISE:
                 peringatan = ("CBF-QP TIDAK AKTIF %.1f %% waktu (ALPHA_NOL: ada Alpha = 0 di config.py), "
                               "selama itu u = u_PD seperti mode PD" % alpha_nol)
                 judul = judul + "\n" + peringatan
-                print("PERHATIAN: " + peringatan)
         if tuning:
             judul = judul + "\nTUNING: gain diubah saat direkam (%s), ISE tidak untuk dibandingkan" \
                 % ", ".join(self.gain_berubah)
@@ -381,11 +431,6 @@ class PerekamISE:
         fig.tight_layout()
         fig.savefig(path_png, dpi=130)
         plt.close(fig)
-
-        self.file_terakhir = nama
-        self.path_terakhir = os.path.join(folder, nama)
-        self.data = []
-        return nama
 
 
 # =============================================================================
@@ -713,7 +758,7 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
          "%.3f" % hasil_pd["s_maks"], "%.3f" % hasil_cbf["s_maks"], selisih(hasil_pd["s_maks"], hasil_cbf["s_maks"])],
         ["|u| maks [N m]  (batas %.2f)" % config.u_max, "%.3f" % hasil_pd["u_maks"],
          "%.3f" % hasil_cbf["u_maks"], selisih(hasil_pd["u_maks"], hasil_cbf["u_maks"])],
-        ["Dorongan (O / P)", teks_dorongan(hasil_pd), teks_dorongan(hasil_cbf), ""],
+        ["Dorongan (O / P, hanya simulasi)", teks_dorongan(hasil_pd), teks_dorongan(hasil_cbf), ""],
         ["CBF-QP berstatus OK [% waktu]", "-",
          "-" if hasil_cbf["cbf_ok"] is None else "%.1f" % hasil_cbf["cbf_ok"], ""],
     ]

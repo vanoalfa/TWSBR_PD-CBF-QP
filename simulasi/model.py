@@ -30,7 +30,7 @@ import config
 def hitung_theta(sudut_encoder, psi):
     """Sudut roda theta untuk state x[0]. Dipakai juga untuk kecepatan: hitung_theta(dtheta_encoder, dpsi).
 
-    sudut_encoder : sudut roda dari encoder DDSM115 [rad] (simulasi: joint roda PyBullet)
+    sudut_encoder : sudut roda dari encoder DDSM115 [rad]
     psi           : sudut badan hasil Kalman [rad]
 
     ENCODER_RELATIVE_TO_BODY = True  : encoder mengukur roda RELATIF terhadap badan, theta = encoder + psi

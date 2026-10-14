@@ -1,60 +1,67 @@
-"""pd_control.py - kontrol PD nominal ATERA. Keluarannya u_PD.
+"""pd_control.py - Kontrol PD robot ATERA.
 
-    u_PD = Kp_theta*theta + Kd_dtheta*dtheta + Kp_psi*psi + Kd_dpsi*dpsi + Kvel
+Keluaran: u_PD = torsi untuk SATU roda (N m).
 
-    x    = [theta, dtheta, psi, dpsi]   (SI, rad)
-    u_PD = torsi TOTAL kedua roda [N m] (tiap roda menerima u_PD / 2)
+    u_PD = Kp_psi*psi + Kd_psi*dpsi + Kp_theta*theta + Kd_theta*dtheta + Kvel*arah
 
-Catatan untuk tuning:
-- Tidak ada saturasi di sini. Batas aktuator diterapkan di ddsm115.py (mode PD) atau
-  sebagai bound u di cbf_qp.py (mode PD+CBF).
-- Dengan konvensi tanda di config.py, keempat gain POSITIF. Kp_psi dan Kd_dpsi menegakkan
-  badan; Kp_theta dan Kd_dtheta mengembalikan roda ke posisi awal sehingga robot diam.
-  Hanya dengan gain psi, model linear punya dua pole di 0 (robot berdiri tapi hanyut).
-- Dari model linear: Kd_dtheta harus jauh lebih kecil dari Kd_dpsi (kira-kira
-  Kd_dtheta < 0.4 * Kd_dpsi), begitu juga Kp_theta terhadap Kp_psi. Naikkan pelan-pelan.
-  Cek pole dengan:  python3 model.py
-- Kvel adalah konstanta torsi (bias). Di bidang datar biarkan 0; di bidang miring nilainya
-  mendekati model.equilibrium()[1] untuk menahan robot di tanjakan.
-- Untuk perintah gerak, atera_main.py memanggil compute(x - x_ref): rumusnya tetap sama,
-  hanya titik acuannya yang digeser.
+    state x = [theta, dtheta, psi, dpsi], semua gain positif.
+    Hasilnya sama dengan simulasi/pd_control.py (-1 * (Kp*(setpoint - state) + ...) dengan setpoint 0).
+
+Mode Balancing (Tombol B) : Kp_theta dipakai, arah = 0.
+Mode Navigate  (Tombol A) : Kp_theta = 0, arah dari joystick (-1 mundur, 0 lepas, +1 maju).
+Error (setpoint - state) tetap dihitung untuk ISE (ise.py).
 """
-
-from __future__ import annotations
 
 import config
 
+MODE_BALANCING = "BALANCING"
+MODE_NAVIGATE = "NAVIGATE"
 
-class PDController:
-    def __init__(self) -> None:
-        self.reload()
 
-    def reload(self) -> None:
-        """Baca ulang gain dari config.py."""
-        self.Kp_theta = float(config.Kp_theta)
-        self.Kd_dtheta = float(config.Kd_dtheta)
+class PDControl:
+    def __init__(self):
+        # Gain
         self.Kp_psi = float(config.Kp_psi)
-        self.Kd_dpsi = float(config.Kd_dpsi)
+        self.Kd_psi = float(config.Kd_psi)
+        self.Kp_theta = float(config.Kp_theta)
+        self.Kd_theta = float(config.Kd_theta)
         self.Kvel = float(config.Kvel)
 
-    def terms(self, x) -> tuple:
-        """Kelima suku u_PD secara terpisah (untuk GUI dan log)."""
-        return (
-            self.Kp_theta * float(x[0]),
-            self.Kd_dtheta * float(x[1]),
-            self.Kp_psi * float(x[2]),
-            self.Kd_dpsi * float(x[3]),
-            self.Kvel,
-        )
+        # Perintah dari joystick
+        self.mode_gerak = MODE_BALANCING
+        self.arah = 0                  # -1 mundur, 0 lepas, +1 maju
 
-    def compute(self, x) -> float:
-        """u_PD [N m] dari state x = [theta, dtheta, psi, dpsi]."""
-        return float(sum(self.terms(x)))
+        # Nilai terakhir (GUI dan CSV)
+        self.error_theta = self.error_dtheta = self.error_psi = self.error_dpsi = 0.0
+        self.u_PD = 0.0
 
+    def set_command(self, arah, mode_gerak):
+        """arah = -1 / 0 / +1 (+1 = maju), mode_gerak = MODE_BALANCING / MODE_NAVIGATE."""
+        self.mode_gerak = mode_gerak
+        self.arah = int(arah)
 
-_default = PDController()
+    def compute(self, x):
+        """u_PD [N m] untuk state x = [theta, dtheta, psi, dpsi]."""
+        theta = float(x[0])
+        dtheta = float(x[1])
+        psi = float(x[2])
+        dpsi = float(x[3])
 
+        # Mode Balancing: Kp_theta dipakai dan arah diabaikan.
+        if self.mode_gerak == MODE_BALANCING:
+            Kp_theta = self.Kp_theta
+            arah = 0
+        else:
+            Kp_theta = 0.0
+            arah = self.arah
 
-def compute(x) -> float:
-    """Kontrak: pd.compute(x) -> float [N m]."""
-    return _default.compute(x)
+        # Persamaan PD
+        u_PD = (self.Kp_psi * psi) + (self.Kd_psi * dpsi) + (Kp_theta * theta) + (self.Kd_theta * dtheta) + (self.Kvel * arah)
+        self.u_PD = u_PD
+
+        # Error untuk ISE
+        self.error_theta = config.theta_setpoint - theta
+        self.error_dtheta = config.dtheta_setpoint - dtheta
+        self.error_psi = config.psi_setpoint - psi
+        self.error_dpsi = config.dpsi_setpoint - dpsi
+        return u_PD
