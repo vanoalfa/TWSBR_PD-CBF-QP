@@ -234,6 +234,11 @@ def simpan_gambar(fig, path_png):
     fig.savefig(path_png[:-4] + ".eps", format="eps")
 
 
+def warna_mode(mode):
+    """Warna kurva: PD ungu, PD+CBF biru (config.PLOT_WARNA_PD / PLOT_WARNA_PD_CBF)."""
+    return config.PLOT_WARNA_PD_CBF if mode == MODE_PD_CBF else config.PLOT_WARNA_PD
+
+
 def angka(nilai):
     """Angka pendek untuk tulisan gain: 15.0 -> '15', 0.0400 -> '0.04'."""
     return "%g" % nilai
@@ -416,7 +421,8 @@ class PerekamISE:
         gambar_batas_jarak(gambar3)
 
         # Gambar 1: X = psi, Y = dpsi
-        gambar1.plot(psi, dpsi, color="tab:blue", linewidth=1.0)
+        warna = warna_mode(self.mode)
+        gambar1.plot(psi, dpsi, color=warna, linewidth=1.0)
         gambar1.plot(psi[0], dpsi[0], "o", color="tab:green", label="awal")
         gambar1.plot(psi[-1], dpsi[-1], "x", color="black", markersize=9, label="akhir")
         gambar1.set_xlabel("psi [rad]")
@@ -427,7 +433,7 @@ class PerekamISE:
         gambar1.legend(fontsize=7)
 
         # Gambar 2: X = theta, Y = dtheta
-        gambar2.plot(theta, dtheta, color="tab:orange", linewidth=1.0)
+        gambar2.plot(theta, dtheta, color=warna, linewidth=1.0)
         gambar2.plot(theta[0], dtheta[0], "o", color="tab:green", label="awal")
         gambar2.plot(theta[-1], dtheta[-1], "x", color="black", markersize=9, label="akhir")
         gambar2.set_xlabel("theta [rad]   (s = R*theta)")
@@ -438,7 +444,7 @@ class PerekamISE:
         gambar2.legend(fontsize=7)
 
         # Gambar 3: X = s, Y = 0
-        gambar3.plot(jarak, [0.0] * len(jarak), color="tab:purple", linewidth=2.0)
+        gambar3.plot(jarak, [0.0] * len(jarak), color=warna, linewidth=2.0)
         gambar3.plot(jarak[0], 0.0, "o", color="tab:green", label="awal")
         gambar3.plot(jarak[-1], 0.0, "x", color="black", markersize=9, label="akhir")
         gambar3.legend(fontsize=8, loc="upper right")
@@ -676,9 +682,25 @@ def label_percobaan(percobaan):
     return label
 
 
-def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
-    coba_pd = pilih_percobaan(MODE_PD, nomor_pd, tanggal, jenis)
-    coba_cbf = pilih_percobaan(MODE_PD_CBF, nomor_cbf, tanggal, jenis)
+def cari_percobaan(nama, jenis=JENIS_PERCOBAAN):
+    """Percobaan dengan nama file (tanpa .csv) persis sama, atau None."""
+    for percobaan in daftar_percobaan(jenis):
+        if percobaan["nama"] == nama:
+            return percobaan
+    return None
+
+
+def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN, nama_pd=None, nama_cbf=None):
+    """nama_pd / nama_cbf (nama file tanpa .csv): langsung memilih file itu (dipakai pembanding otomatis
+    atera_main.py di mode pengujian). Bila None, dipilih dari nomor dan tanggal."""
+    if nama_pd is not None:
+        coba_pd = cari_percobaan(nama_pd, jenis)
+    else:
+        coba_pd = pilih_percobaan(MODE_PD, nomor_pd, tanggal, jenis)
+    if nama_cbf is not None:
+        coba_cbf = cari_percobaan(nama_cbf, jenis)
+    else:
+        coba_cbf = pilih_percobaan(MODE_PD_CBF, nomor_cbf, tanggal, jenis)
     kata = jenis.capitalize()
 
     keterangan = ""

@@ -1,11 +1,16 @@
 """atera_main.py - Program utama ATERA (SEMENTARA, untuk simulasi PyBullet dengan keyboard).
 
 Jalankan:
-    python3 atera_main.py --PD            kontrol PD saja
-    python3 atera_main.py --CBFQP         kontrol PD + CBF-QP
-    tambahkan --plot untuk membuka jendela plot realtime
+    python3 atera_main.py            tanpa plot realtime
+    python3 atera_main.py --plot     dengan jendela plot realtime
 
-Satu kali jalan = satu mode kontrol. Semua perintah dan tombol dicetak di terminal saat program mulai.
+Mode kontrol PD / PD + CBF-QP dipilih dengan tombol di jendela Kontrol (atau keyboard 1 / 2). Mode awal = PD.
+Mengganti mode: data perekaman biasa disimpan, lalu robot diletakkan ulang (seperti R) dengan mode baru.
+Semua perintah dan tombol dicetak di terminal saat program mulai.
+
+PEMBANDING (mode pengujian): setiap PENGUJIAN yang disimpan menjadi pembanding mode-nya. Plot realtime
+menggambar pembanding PD (ungu) dan PD+CBF (biru) di belakang kurva sekarang. Bila keduanya ada, gambar
+BANDING PENGUJIAN dibuat otomatis (sama dengan python3 ise.py --bandingkan --pengujian).
 
 Dua mode gerak (pd_control.py): Balancing (tombol B) dan Navigate (tombol N). Dua jenis perekaman ISE:
     PERCOBAAN : dari robot diletakkan (atau sejak E terakhir) sampai E ditekan, KOMET, atau keluar.
@@ -29,13 +34,14 @@ from simulasi import NAMA_ALPHA, Simulasi
 
 BANTUAN = """
 ====================== ATERA - simulasi PyBullet ======================
-MENJALANKAN (satu kali jalan = satu mode kontrol)
-  python3 atera_main.py --PD             kontrol PD saja
-  python3 atera_main.py --CBFQP          kontrol PD + CBF-QP
-  python3 atera_main.py --CBFQP --plot   --plot = tambah jendela plot realtime
+MENJALANKAN
+  python3 atera_main.py           tanpa plot realtime
+  python3 atera_main.py --plot    dengan jendela plot realtime
 
 TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya dengan mouse;
         keyboard di jendela PyBullet juga tetap bisa sebagai cadangan)
+  1 / 2    mode kontrol PD / PD + CBF-QP (tombol di atas jendela Kontrol). Data perekaman biasa disimpan,
+           lalu robot diletakkan ulang dengan mode baru (pengujian yang sedang berjalan dibatalkan).
   B        Mode Balancing : robot diam di satu titik, W A S D diabaikan. Titik nol s (s = R*theta) dipindah
            ke posisi robot saat B ditekan. Semua barrier CBF aktif.
   N        Mode Navigate  : W A S D dipakai (Kp_theta = 0, barrier jarak s h5 dan h6 nonaktif)
@@ -49,6 +55,9 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
            belum disimpan DIBUANG; tekan E dulu bila ingin disimpan). Nilai parameter tetap.
   T        masuk / keluar MODE PENGUJIAN. Di mode ini perekaman biasa berhenti; setiap O / P memulai
            satu PENGUJIAN: direkam %.0f s sejak dorongan, lalu disimpan otomatis (_PENGUJIAN KE-XX).
+           PENGUJIAN yang tersimpan = PEMBANDING mode itu (plot realtime: PD ungu, PD+CBF biru, pudar).
+           Bila pembanding PD dan PD+CBF sudah ada, gambar BANDING PENGUJIAN dibuat otomatis.
+           Cara membandingkan: T -> mode PD -> O -> tunggu selesai -> mode PD + CBF-QP -> O.
   KOMET    |psi| > SAFE_TILT_DEG (semua mode), atau |s| > S_KOMET (hanya mode Balancing): motor dimatikan,
            perekaman berhenti (pengujian yang sedang berjalan langsung disimpan). Lanjutkan dengan R, E, atau Q.
   Berhenti juga bisa: tutup jendela PyBullet, atau Ctrl+C di terminal (hasil ISE tetap tersimpan)
@@ -75,16 +84,53 @@ HASIL ISE (folder PLOT_EVALUASI/PERCOBAAN dan PLOT_EVALUASI/PENGUJIAN, file .csv
 
 
 def simpan_ise(perekam):
-    """Simpan perekaman ISE dan tulis hasilnya di terminal (berhasil, tidak ada data, atau gagal)."""
+    """Simpan perekaman ISE dan tulis hasilnya di terminal. Mengembalikan nama file ("" = tidak tersimpan)."""
     try:
         nama = perekam.simpan()
     except Exception as kesalahan:
         print("GAGAL menyimpan ISE -> %s: %s" % (type(kesalahan).__name__, kesalahan))
-        return
+        return ""
     if nama != "":
-        print("Tersimpan: %s.csv dan .png" % perekam.path_terakhir)
+        print("Tersimpan: %s.csv, .png, .eps" % perekam.path_terakhir)
     else:
         print("ISE tidak disimpan:", perekam.alasan)
+    return nama
+
+
+def simpan_pengujian(sim, perekam_uji, pembanding):
+    """Simpan PENGUJIAN dan jadikan pembanding mode-nya (pembanding: dict mode -> nama file).
+    Bila pembanding PD dan PD+CBF sudah ada, gambar BANDING PENGUJIAN dibuat otomatis."""
+    mode = perekam_uji.mode
+    nama = simpan_ise(perekam_uji)
+    if nama == "":
+        return
+    pembanding[mode] = nama
+    try:
+        data = ise.baca_csv(perekam_uji.path_terakhir + ".csv")
+        cocok = ise.POLA_NAMA.match(nama + ".csv")
+        label = "%s KE-%s" % (mode, cocok.group(5)) if cocok else mode
+        sim.kirim_pembanding(mode, label, data)
+    except Exception as kesalahan:
+        print("Pembanding tidak bisa digambar -> %s: %s" % (type(kesalahan).__name__, kesalahan))
+    sim.teks_pembanding = teks_pembanding(pembanding)
+    print("PEMBANDING %s = %s" % (mode, nama))
+    if pembanding[ise.MODE_PD] and pembanding[ise.MODE_PD_CBF]:
+        print("Pembanding PD dan PD+CBF ada: membuat gambar BANDING PENGUJIAN ...")
+        try:
+            ise.perintah_bandingkan(None, None, None, ise.JENIS_PENGUJIAN,
+                                    nama_pd=pembanding[ise.MODE_PD], nama_cbf=pembanding[ise.MODE_PD_CBF])
+        except Exception as kesalahan:
+            print("GAGAL membuat gambar BANDING -> %s: %s" % (type(kesalahan).__name__, kesalahan))
+
+
+def teks_pembanding(pembanding):
+    """Teks untuk jendela Kontrol, contoh: 'pembanding  PD: ..._PENGUJIAN KE-03  |  PD+CBF: -'."""
+    bagian = []
+    for mode in (ise.MODE_PD, ise.MODE_PD_CBF):
+        nama = pembanding[mode]
+        cocok = ise.POLA_NAMA.match(nama + ".csv") if nama else None
+        bagian.append("%s: %s" % (mode, ("KE-%s (%s)" % (cocok.group(5), cocok.group(2))) if cocok else "-"))
+    return "pembanding pengujian   " + "   |   ".join(bagian)
 
 
 def letakkan_ulang(sim, perekam, mode):
@@ -96,37 +142,37 @@ def letakkan_ulang(sim, perekam, mode):
 
 def main():
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--PD", action="store_true")
-    parser.add_argument("--CBFQP", action="store_true")
     parser.add_argument("--plot", action="store_true")
     parser.add_argument("-h", "--help", action="store_true")
-    pilihan = parser.parse_args()
+    pilihan, lainnya = parser.parse_known_args()
 
     print(BANTUAN)
     if pilihan.help:
         return
-    if pilihan.PD == pilihan.CBFQP:
-        print("Pilih SATU mode kontrol:  python3 atera_main.py --PD   atau   python3 atera_main.py --CBFQP")
-        return
+    if lainnya:
+        print("Argumen diabaikan: %s (mode kontrol sekarang dipilih di jendela Kontrol)" % " ".join(lainnya))
 
-    mode = ise.MODE_PD if pilihan.PD else ise.MODE_PD_CBF
+    # ASUMSI: mode kontrol awal = PD (bisa diganti kapan saja dengan tombol / keyboard 1 / 2).
+    mode = ise.MODE_PD
 
     pd = PDControl()
 
-    # CBF-QP memakai acados. Disiapkan sebelum jendela simulasi dibuka.
+    # CBF-QP memakai acados, selalu disiapkan sebelum jendela simulasi dibuka supaya tombol PD + CBF-QP bisa
+    # langsung dipakai. Bila gagal, simulasi tetap jalan dengan mode PD saja (tombol PD + CBF-QP dimatikan).
     # zeta tidak dikunci: CBF-QP membaca config.zeta tiap siklus, jadi ikut berubah bila zeta_DEG diubah.
     cbf = None
-    if mode == ise.MODE_PD_CBF:
-        print("Menyiapkan CBF-QP (acados), tunggu beberapa detik ...")
-        try:
-            from cbf_qp import CBFQP
-            cbf = CBFQP()
-        except Exception as kesalahan:
-            print("CBF-QP TIDAK BISA DIPAKAI -> %s: %s" % (type(kesalahan).__name__, kesalahan))
-            print("Perbaiki dulu, atau jalankan dengan:  python3 atera_main.py --PD")
-            return
+    print("Menyiapkan CBF-QP (acados), tunggu beberapa detik ...")
+    try:
+        from cbf_qp import CBFQP
+        cbf = CBFQP()
+    except Exception as kesalahan:
+        print("CBF-QP TIDAK BISA DIPAKAI -> %s: %s" % (type(kesalahan).__name__, kesalahan))
+        print("Simulasi tetap jalan, hanya mode PD.")
 
     sim = Simulasi(gui=True, plot=pilihan.plot, judul=mode)
+    sim.cbf_ada = cbf is not None
+    pembanding = {ise.MODE_PD: "", ise.MODE_PD_CBF: ""}       # nama file PENGUJIAN pembanding tiap mode
+    sim.teks_pembanding = teks_pembanding(pembanding)
 
     if pd.Kp_psi == 0.0 and pd.Kd_psi == 0.0:
         print("PERHATIAN: Kp_psi dan Kd_psi di config.py masih 0, robot akan komet. Isi di jendela Kontrol.")
@@ -203,7 +249,7 @@ def main():
                 if mode_pengujian:
                     if pengujian_berjalan:
                         print("Tombol E: pengujian disimpan sebelum %.0f s." % config.DURASI_PENGUJIAN)
-                        simpan_ise(perekam_uji)
+                        simpan_pengujian(sim, perekam_uji, pembanding)
                         pengujian_berjalan = False
                     else:
                         print("Tombol E: tidak ada pengujian yang sedang berjalan.")
@@ -212,6 +258,32 @@ def main():
                     simpan_ise(perekam)
                     perekam.mulai(mode, ise.JENIS_PERCOBAAN)     # percobaan baru dari keadaan sekarang
                     t = 0.0
+
+            # ------------------------------------------- mode kontrol PD / PD + CBF-QP
+            mode_baru = None
+            if "mode_pd" in tombol_baru:
+                mode_baru = ise.MODE_PD
+            if "mode_cbf" in tombol_baru:
+                mode_baru = ise.MODE_PD_CBF
+            if mode_baru is not None and mode_baru != mode:
+                if mode_baru == ise.MODE_PD_CBF and cbf is None:
+                    print("PD + CBF-QP tidak bisa dipilih: CBF-QP gagal disiapkan (lihat pesan saat program mulai).")
+                else:
+                    if pengujian_berjalan:
+                        print("Pengujian yang sedang berjalan dibatalkan (tidak disimpan).")
+                        pengujian_berjalan = False
+                    if not mode_pengujian:
+                        print("Ganti mode kontrol: data %s disimpan dulu." % mode)
+                        simpan_ise(perekam)
+                    mode = mode_baru
+                    sim.atur_mode(mode)
+                    letakkan_ulang(sim, perekam, mode)
+                    mode_gerak = MODE_BALANCING
+                    komet = False
+                    t = 0.0
+                    waktu_berikutnya = time.time()
+                    print("Mode kontrol: %s. Robot diletakkan ulang, ISE mulai dari 0." % mode)
+                    continue
 
             if "r" in tombol_baru:
                 if pengujian_berjalan:
@@ -315,7 +387,7 @@ def main():
                       "Tekan R (ulang), E (simpan data), atau Q (keluar + simpan)." % sebab)
                 if pengujian_berjalan:
                     print("komet saat pengujian: pengujian disimpan sampai saat komet.")
-                    simpan_ise(perekam_uji)
+                    simpan_pengujian(sim, perekam_uji, pembanding)
                     pengujian_berjalan = False
 
             nilai_c = None                  # nilai constraint CBF-QP (dicatat di CSV), hanya mode PD + CBF-QP
@@ -366,7 +438,7 @@ def main():
                                        u_PD, u, status_cbf, params, dorong, nilai_c)
                     if t_uji >= config.DURASI_PENGUJIAN - 0.5 * config.DT:
                         print("PENGUJIAN selesai (%.0f s)." % config.DURASI_PENGUJIAN)
-                        simpan_ise(perekam_uji)
+                        simpan_pengujian(sim, perekam_uji, pembanding)
                         pengujian_berjalan = False
 
             # ----------------------------------------------------------- tampilan
@@ -431,7 +503,7 @@ def main():
         # Selalu dijalankan, juga bila program berhenti karena error: simpan dulu, baru tutup jendela.
         if pengujian_berjalan:
             print("Pengujian belum selesai: disimpan sampai saat ini.")
-            simpan_ise(perekam_uji)
+            simpan_pengujian(sim, perekam_uji, pembanding)
         elif not mode_pengujian:
             simpan_ise(perekam)
         else:

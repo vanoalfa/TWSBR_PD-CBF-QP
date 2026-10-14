@@ -221,8 +221,8 @@ PLOT_BATAS = {"psi": 1.0, "dpsi": 10.0, "theta": 60.0, "dtheta": 30.0, "s": 3.0}
 PLOT_SAFETY_TEBAL = 2.2             # garis yang membentuk kotak barrier (menyambung)
 PLOT_SAFETY_TIPIS = 1.0             # perpanjangan garis di luar kotak (putus-putus)
 PLOT_KOMET_TEBAL = 1.6
-PLOT_WARNA_PD = "tab:blue"
-PLOT_WARNA_PD_CBF = "tab:green"     # bukan oranye, supaya tidak tertukar dengan penanda 10 deg
+PLOT_WARNA_PD = "tab:purple"        # kurva mode PD (ungu)
+PLOT_WARNA_PD_CBF = "tab:blue"      # kurva mode PD + CBF-QP (biru)
 
 # =============================================================================
 # 11. REALISME SIMULASI  (hanya dipakai simulasi.py, tidak dipakai robot fisik)
@@ -310,6 +310,8 @@ WARNA_QT_TEKAN = "#1d9e5a"       # tombol sedang ditekan
 WARNA_QT_MODE = "#544bb8"        # mode yang sedang aktif
 WARNA_QT_ABAI = "#9a9a9a"        # tulisan tombol yang sedang diabaikan
 WARNA_QT_UJI = "#c26a00"         # mode pengujian aktif
+WARNA_QT_PD = "#9467bd"          # tombol mode kontrol PD aktif (= tab:purple)
+WARNA_QT_PD_CBF = "#1f77b4"      # tombol mode kontrol PD + CBF-QP aktif (= tab:blue)
 # Jumlah desimal tampilan tiap parameter di jendela Kontrol: nama -> desimal. Semua Alpha_n memakai DESIMAL_ALPHA.
 # Angka yang diketik boleh lebih teliti; tampilannya menyesuaikan.
 DESIMAL = {"Kp_psi": 2, "Kd_psi": 3, "Kp_theta": 4, "Kd_theta": 4, "Kvel": 4, "Gaya_dorong": 2, "zeta_DEG": 1,

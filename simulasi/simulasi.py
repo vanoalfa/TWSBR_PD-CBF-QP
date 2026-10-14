@@ -1,7 +1,7 @@
 """simulasi.py - Dunia simulasi PyBullet untuk robot ATERA.
 
-Jalankan:  python3 atera_main.py --PD   atau   python3 atera_main.py --CBFQP
-           (python3 simulasi.py --PD / --CBFQP hasilnya sama)
+Jalankan:  python3 atera_main.py --plot     (mode kontrol PD / PD + CBF-QP dipilih di jendela Kontrol)
+           (python3 simulasi.py --plot hasilnya sama)
 
 File ini hanya mengurus simulasinya:
     - dunia (plane.urdf bawaan PyBullet), robot, sensor, motor, dorongan
@@ -9,8 +9,9 @@ File ini hanya mengurus simulasinya:
         a. torsi roda = arus perintah x MOTOR_KT_EFEKTIF (bukan MOTOR_KT)
         b. torsi baru bekerja SIM_JEDA_TORSI detik setelah perintah dihitung
         c. psi dibaca lewat model MPU6050 (akselerometer + gyro + noise) dan Kalman yang sama dengan robot
-    - jendela "ATERA - Kontrol" (Qt): tombol W A S D B N O P + kolom angka parameter (input utama)
-      (B = mode Balancing, N = mode Navigate)
+    - jendela "ATERA - Kontrol" (Qt): tombol mode kontrol PD / PD + CBF-QP, tombol W A S D B N O P,
+      dan kolom angka parameter (input utama). B = mode Balancing, N = mode Navigate
+    - plot realtime: kurva sekarang + kurva PEMBANDING (pengujian terakhir tiap mode: PD ungu, PD+CBF biru)
     - keyboard di jendela PyBullet (input cadangan, tombolnya sama)
     - tampilan di jendela PyBullet: teks parameter dan bidang merah safety set
     - jendela plot realtime (hanya bila dijalankan dengan --plot)
@@ -141,7 +142,8 @@ def cetak_nilai(nilai, awal):
 #
 # Jendela Kontrol (Qt) dan jendela plot (matplotlib) dijalankan di PROSES TERPISAH dari PyBullet, jadi bila
 # jendelanya gagal / crash, simulasi tetap jalan. Data dikirim antar proses lewat antrean:
-#     jendela -> simulasi : ("nilai", dict parameter), ("tombol", huruf baru ditekan), ("tahan", dict tombol ditahan)
+#     jendela -> simulasi : ("nilai", dict parameter), ("tombol", huruf baru ditekan / "mode_pd" / "mode_cbf"),
+#                           ("tahan", dict tombol ditahan)
 #     simulasi -> jendela : ("status", dict) untuk menyalakan tombol dan menulis mode / dorongan
 # Pasang Qt:  pip install PyQt5
 # =============================================================================
@@ -293,7 +295,11 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         bawah    : arus tiap motor terhadap waktu
     Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang.
     Batas sumbu tetap (config.PLOT_BATAS). Merah = constraint CBF (kotak psi ikut psi_max_DEG di Kontrol),
-    hitam = batas KOMET, kuning / oranye = penanda |psi| 5 / 10 deg."""
+    hitam = batas KOMET, kuning / oranye = penanda |psi| 5 / 10 deg.
+    Warna kurva = mode kontrol (PD ungu, PD+CBF biru). Kurva PEMBANDING (pengujian terakhir tiap mode) digambar
+    pudar di belakang kurva sekarang; di Gambar 3 pembanding PD di atas garis 0, pembanding PD+CBF di bawahnya.
+    judul = mode kontrol awal. Kiriman khusus: ("RESET",), ("MODE", mode), ("PEMBANDING", mode, label, psi, dpsi,
+    theta, dtheta)."""
     os.environ["QT_QPA_PLATFORM"] = platform
     try:
         import numpy as np
@@ -317,16 +323,31 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         gambar2 = fig.add_subplot(kisi[0, 1])
         gambar3 = fig.add_subplot(kisi[1, :])
         ax_arus = fig.add_subplot(kisi[2, :])
-        try:
-            fig.canvas.manager.set_window_title("ATERA - plot realtime " + judul)
-        except Exception:
-            pass
+        warna = {ise.MODE_PD: config.PLOT_WARNA_PD, ise.MODE_PD_CBF: config.PLOT_WARNA_PD_CBF}
+        mode_plot = judul if judul in warna else ise.MODE_PD
+
+        def judul_jendela():
+            try:
+                fig.canvas.manager.set_window_title("ATERA - plot realtime (%s)" % mode_plot)
+            except Exception:
+                pass
+            fig.suptitle("mode kontrol %s   |   data %.0f s terakhir" % (mode_plot, config.PLOT_RENTANG),
+                         fontsize=9, color="gray")
+
         psi_max_plot = config.psi_max
         kotak_psi = ise.gambar_safety_set(gambar1, gambar2, psi_max_plot)
         ise.gambar_batas_jarak(gambar3)
 
         # Gambar 1: X = psi, Y = dpsi
-        garis_psi, = gambar1.plot([], [], color="tab:blue", linewidth=1.0)
+        # Kurva pembanding (pudar, di belakang kurva sekarang). Gambar 3: PD di y = +0.5, PD+CBF di y = -0.5.
+        pembanding = {}
+        tinggi_s = {ise.MODE_PD: 0.5, ise.MODE_PD_CBF: -0.5}
+        for m in (ise.MODE_PD, ise.MODE_PD_CBF):
+            pembanding[m] = (gambar1.plot([], [], color=warna[m], linewidth=1.0, alpha=0.45, zorder=1.8)[0],
+                             gambar2.plot([], [], color=warna[m], linewidth=1.0, alpha=0.45, zorder=1.8)[0],
+                             gambar3.plot([], [], color=warna[m], linewidth=3.0, alpha=0.45, zorder=1.8)[0])
+
+        garis_psi, = gambar1.plot([], [], color=warna[mode_plot], linewidth=1.4)
         titik_psi, = gambar1.plot([], [], "o", color="black", markersize=6, label="sekarang")
         gambar1.set_xlabel("psi [rad]")
         gambar1.set_ylabel("dpsi [rad/s]")
@@ -334,7 +355,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         gambar1.legend(fontsize=7, loc="upper right")
 
         # Gambar 2: X = theta, Y = dtheta
-        garis_theta, = gambar2.plot([], [], color="tab:orange", linewidth=1.0)
+        garis_theta, = gambar2.plot([], [], color=warna[mode_plot], linewidth=1.4)
         titik_theta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang")
         gambar2.set_xlabel("theta [rad]   (s = R*theta)")
         gambar2.set_ylabel("dtheta [rad/s]")
@@ -342,7 +363,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         gambar2.legend(fontsize=7, loc="upper right")
 
         # Gambar 3: X = s, Y = 0
-        garis_s, = gambar3.plot([], [], color="tab:purple", linewidth=2.0)
+        garis_s, = gambar3.plot([], [], color=warna[mode_plot], linewidth=2.0)
         titik_s, = gambar3.plot([], [], "o", color="black", markersize=6, label="sekarang")
         gambar3.legend(fontsize=7, loc="upper right")
 
@@ -356,7 +377,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 
         for ax in (gambar1, gambar2, ax_arus):
             ax.grid(True, color="0.85")
-        fig.suptitle("data %.0f s terakhir" % config.PLOT_RENTANG, fontsize=9, color="gray")
+        judul_jendela()
         fig.tight_layout()
         fig.show()
         jawaban.put(("siap", ""))
@@ -376,6 +397,26 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                 except Exception:
                     break
                 for isi in kiriman:
+                    if isi[0] == "MODE":
+                        # Mode kontrol diganti: warna kurva sekarang ikut mode baru.
+                        mode_plot = isi[1] if isi[1] in warna else ise.MODE_PD
+                        for garis in (garis_psi, garis_theta, garis_s):
+                            garis.set_color(warna[mode_plot])
+                        judul_jendela()
+                        ada_baru = True
+                        continue
+                    if isi[0] == "PEMBANDING":
+                        _, m, label, p_psi, p_dpsi, p_theta, p_dtheta = isi
+                        g1, g2, g3 = pembanding[m]
+                        g1.set_data(p_psi, p_dpsi)
+                        g2.set_data(p_theta, p_dtheta)
+                        g3.set_data([config.R * v for v in p_theta], [tinggi_s[m]] * len(p_theta))
+                        for g in (g1, g2, g3):
+                            g.set_label("pembanding " + label)
+                        for ax in (gambar1, gambar2, gambar3):
+                            ax.legend(fontsize=7, loc="upper right")
+                        ada_baru = True
+                        continue
                     if isi[0] == "RESET":
                         # Robot diletakkan ulang (R, KOMET lalu R, atau zeta diubah): plot mulai dari awal.
                         data_t = []
@@ -439,6 +480,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 
 class JendelaKontrol:
     """Jendela Qt "ATERA - Kontrol":
+        - paling atas : tombol mode kontrol PD (ungu) / PD + CBF-QP (biru), atau keyboard 1 / 2
         - bagian atas : tombol W A S D, B N, O P (bisa diklik / ditahan dengan mouse, atau ditekan di keyboard)
         - bagian bawah: kolom angka tiap parameter (dua blok: gain + lingkungan, dan Alpha). Kolom berwarna = beda dari config.py
 
@@ -459,7 +501,8 @@ class JendelaKontrol:
             self.tahan_mouse[huruf] = False
         self.tahan_terkirim = None
         self.status = {"judul": "", "mode_balancing": True, "tahan": {}, "dorong": "dorong: -", "arah_dorong": 0,
-                       "komet": False, "mode_pengujian": False, "pengujian": ""}
+                       "komet": False, "mode_pengujian": False, "pengujian": "", "cbf_ada": True,
+                       "pembanding": ""}
 
         self.root = None               # jendela Qt; None bila gagal dibuat atau sudah ditutup
         self.pesan = ""
@@ -480,6 +523,26 @@ class JendelaKontrol:
         jendela = QtWidgets.QWidget()
         jendela.setWindowTitle("ATERA - Kontrol")
         susunan = QtWidgets.QVBoxLayout(jendela)
+
+        # ------------------------------------------------ mode kontrol (PD / PD + CBF-QP)
+        baris_mode = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel("Mode kontrol:")
+        label.setStyleSheet("font-weight: bold")
+        baris_mode.addWidget(label)
+        self.tombol_mode = {}
+        for kunci, teks in (("mode_pd", "1  |  PD"), ("mode_cbf", "2  |  PD + CBF-QP")):
+            tombol = QtWidgets.QPushButton(teks)
+            tombol.setFixedSize(150, 34)
+            tombol.setFocusPolicy(QtCore.Qt.NoFocus)
+            tombol.setToolTip("Ganti mode kontrol: data sekarang disimpan, lalu robot diletakkan ulang")
+            tombol.clicked.connect(lambda dicentang=False, k=kunci: self.kirim(("tombol", k)))
+            baris_mode.addWidget(tombol)
+            self.tombol_mode[kunci] = tombol
+        baris_mode.addStretch(1)
+        susunan.addLayout(baris_mode)
+        self.label_pembanding = QtWidgets.QLabel("")
+        self.label_pembanding.setStyleSheet("color: gray")
+        susunan.addWidget(self.label_pembanding)
 
         # ------------------------------------------------ bagian tombol
         self.label_mode = QtWidgets.QLabel("")
@@ -586,6 +649,7 @@ class JendelaKontrol:
 
         self.saringan = Saringan(self)
         self.app.installEventFilter(self.saringan)
+        self.kode_mode = {QtCore.Qt.Key_1: "mode_pd", QtCore.Qt.Key_2: "mode_cbf"}
         self.kode_tombol = {QtCore.Qt.Key_W: "w", QtCore.Qt.Key_A: "a", QtCore.Qt.Key_S: "s",
                             QtCore.Qt.Key_D: "d", QtCore.Qt.Key_B: "b", QtCore.Qt.Key_N: "n",
                             QtCore.Qt.Key_O: "o", QtCore.Qt.Key_P: "p", QtCore.Qt.Key_Q: "q",
@@ -612,6 +676,10 @@ class JendelaKontrol:
         # Saat mengetik angka di kolom parameter, huruf tidak dipakai sebagai tombol.
         if isinstance(self.app.focusWidget(), self.QtWidgets.QLineEdit):
             return False
+        if kejadian.key() in self.kode_mode:
+            if jenis == QEvent.KeyPress and not kejadian.isAutoRepeat():
+                self.kirim(("tombol", self.kode_mode[kejadian.key()]))
+            return True
         huruf = self.kode_tombol.get(kejadian.key())
         if huruf is None:
             return False
@@ -695,6 +763,16 @@ class JendelaKontrol:
 
         self.tombol["t"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_UJI, "white")
                                        if status.get("mode_pengujian", False) else "")
+
+        # Mode kontrol: tombol mode yang aktif diberi warna kurvanya (PD ungu, PD + CBF-QP biru).
+        cbf_ada = status.get("cbf_ada", True)
+        self.tombol_mode["mode_pd"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_PD, "white")
+                                                  if status["judul"] == "PD" else "")
+        self.tombol_mode["mode_cbf"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_PD_CBF, "white")
+                                                   if status["judul"] == "PD+CBF" else "")
+        self.tombol_mode["mode_cbf"].setEnabled(cbf_ada)
+        self.tombol_mode["mode_cbf"].setToolTip("" if cbf_ada else "CBF-QP gagal disiapkan (lihat terminal)")
+        self.label_pembanding.setText(status.get("pembanding", ""))
         if status.get("komet", False):
             self.label_mode.setText("komet, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
             self.label_mode.setStyleSheet("font-weight: bold; color: #b3261e")
@@ -788,7 +866,9 @@ class Simulasi:
         self.gui = gui
         self.dt_fisika = config.DT / config.SUBSTEP
         self.zeta = config.zeta
-        self.judul = judul
+        self.judul = judul             # mode kontrol sekarang (ise.MODE_PD / ise.MODE_PD_CBF), lihat atur_mode()
+        self.cbf_ada = True            # False = CBF-QP gagal disiapkan, tombol PD + CBF-QP dimatikan
+        self.teks_pembanding = ""      # ditulis di jendela Kontrol
 
         p.connect(p.GUI if gui else p.DIRECT)
         p.setGravity(0.0, 0.0, -config.g)
@@ -1116,6 +1196,18 @@ class Simulasi:
             kosong = float("nan")
             self.plot_kiriman.append((self.waktu, kosong, kosong, kosong, kosong, kosong, config.psi_max))
 
+    def atur_mode(self, mode):
+        """Mode kontrol diganti (tombol PD / PD + CBF-QP): jendela Kontrol dan warna kurva plot ikut."""
+        self.judul = mode
+        if self.plot is not None:
+            self.plot_kiriman.append(("MODE", mode))
+
+    def kirim_pembanding(self, mode, label, data):
+        """Kurva pembanding satu mode (data = hasil ise.baca_csv) dikirim ke plot realtime."""
+        if self.plot is not None:
+            self.plot_kiriman.append(("PEMBANDING", mode, label, list(data["psi_rad"]), list(data["dpsi_rad_s"]),
+                                      list(data["theta_rad"]), list(data["dtheta_rad_s"])))
+
     def dorong(self, arah):
         """arah = +1 didorong ke depan (O), -1 didorong ke belakang (P)."""
         self.arah_dorong = arah
@@ -1207,7 +1299,8 @@ class Simulasi:
     def baca_keyboard(self):
         """Baca tombol dari jendela Kontrol (utama) dan dari keyboard di jendela PyBullet (cadangan).
 
-        Mengembalikan daftar tombol yang baru ditekan: 'b', 'n', 'o', 'p', 'q', 'r', 'e', 't'.
+        Mengembalikan daftar tombol yang baru ditekan: 'b', 'n', 'o', 'p', 'q', 'r', 'e', 't',
+        'mode_pd' (tombol PD / keyboard 1), 'mode_cbf' (tombol PD + CBF-QP / keyboard 2).
         Tombol gerak (ditahan) disimpan di:
             self.arah  : +1 maju (W), -1 mundur (S), 0 lepas
             self.belok : -1 kiri (A), +1 kanan (D), 0 lepas
@@ -1247,6 +1340,9 @@ class Simulasi:
         for huruf in ("b", "n", "o", "p", "q", "r", "e", "t"):
             if baru_ditekan(huruf) and huruf not in hasil:
                 hasil.append(huruf)
+        for angka, kunci in (("1", "mode_pd"), ("2", "mode_cbf")):
+            if baru_ditekan(angka) and kunci not in hasil:
+                hasil.append(kunci)
         return hasil
 
     # ----------------------------------------------------- bidang hijau dorong
@@ -1499,7 +1595,8 @@ class Simulasi:
             self.kontrol.kirim_status({"judul": self.judul, "mode_balancing": mode_gerak == MODE_BALANCING,
                                        "tahan": dict(self.ditahan), "dorong": teks_dorong,
                                        "arah_dorong": arah_dorong, "komet": bool(komet),
-                                       "mode_pengujian": pengujian != "", "pengujian": pengujian})
+                                       "mode_pengujian": pengujian != "", "pengujian": pengujian,
+                                       "cbf_ada": self.cbf_ada, "pembanding": self.teks_pembanding})
         if self.hitung_tampil % config.PLOT_SETIAP == 0:
             self.gambar_plot()
 
