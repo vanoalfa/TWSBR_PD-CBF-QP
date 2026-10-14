@@ -87,10 +87,10 @@ S_KOMET = 2.0                       # [m]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari D-Pad joystick
-Kp_psi = 24.50       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 2.97       #5.2                # [N m s/rad]
-Kp_theta = 0.8      #0.24             # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
-Kd_theta = 0.44      #0.41             # [N m s/rad]
+Kp_psi = 10.91       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 02.31       #5.2                # [N m s/rad]
+Kp_theta = 0.10      #0.24             # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
+Kd_theta = 0.13      #0.41             # [N m s/rad]
 Kvel = -0.05                # [N m]       hanya aktif di mode Navigate (Tombol A / N)
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
@@ -102,12 +102,12 @@ BALANCE_DIRECTION_SIGN = -1.0
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 22.71 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 24.56 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 0 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 0 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
-Alpha_5 = 0 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
-Alpha_6 = 0 #84.67          # [1/s]  h7, h8 (dtheta, CBF orde 1)
+Alpha_1 = 54.73 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 44.85 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 55.32 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
+Alpha_4 = 33.34 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
+Alpha_5 = 80.97 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
+Alpha_6 = 485.31 #84.67          # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
@@ -221,7 +221,7 @@ PLOT_WARNA_PD_CBF = "tab:orange"
 # Hasil testing/DELAY/atera_delay_testing.py, 20261009.
 # K efektif = G x j_theta, G = 255 (kiri) dan 264 (kanan) rad/s^2 per A -> 0.234 dan 0.243 N m/A.
 # ASUMSI: benar bila j_theta = 9.2e-4 (lihat BUTUH PENGUJIAN BEBAN TAMBAHAN di atas).
-MOTOR_KT_EFEKTIF = 0.238            # [N m/A] torsi roda nyata per A arus perintah (rata-rata kiri dan kanan)
+MOTOR_KT_EFEKTIF = 0.75 #0.238            # [N m/A] torsi roda nyata per A arus perintah (rata-rata kiri dan kanan)
 # torsi nyata / torsi perintah. Dipakai simulasi.py (torsi roda di PyBullet) DAN cbf_qp.py (g(x) di model CBF-QP),
 # supaya CBF-QP menghitung dengan tenaga roda yang sama dengan yang dipakai simulasi.
 RASIO_TORSI = MOTOR_KT_EFEKTIF / MOTOR_KT
@@ -348,7 +348,8 @@ DESIMAL_ALPHA = 2
 #       skor trial = -OPTUNA_BOBOT_GAYA x gaya_lolos + skor pengujian pada gaya_lolos
 #     Bobot dibuat besar supaya gaya lebih tinggi SELALU lebih baik; ISE hanya membedakan trial dengan gaya sama.
 #     Bila gaya terendah pun komet: skor trial = skor pengujian pada gaya terendah (dengan penalti komet).
-#   Tahap CBFQP_*: gaya tetap = gaya_pd_terbaik (profil, diisi dari hasil tahap PD) + OPTUNA_GAYA_TAMBAH_CBF.
+#   Tahap CBFQP_*: satu pengujian pada TIAP gaya OPTUNA_GAYA_CBF_FRAKSI x gaya_pd_terbaik (profil, diisi dari
+#     hasil tahap PD); skor trial = jumlah skor semua gaya. Alpha dinilai dari dorongan kecil sampai besar.
 # Diagnostik bangbang_per_s (CSV) / bb/s (terminal) = berapa kali per detik torsi u berbalik dari >= +a ke <= -a
 #   (atau sebaliknya), a = OPTUNA_AMBANG_BANGBANG x u_max. Getaran kecil di sekitar 0 (noise) tidak dihitung.
 #   Angka besar (puluhan per detik) = kontrol bang-bang. Tidak masuk skor.
@@ -357,28 +358,47 @@ OPTUNA_TRIAL_PD = 16300                 # jumlah trial tahap PD (bisa diubah per
 OPTUNA_TRIAL_CBFQP = 16300              # jumlah trial tahap CBFQP_* (bisa diubah per tahap di OPTUNA_TAHAP)
 OPTUNA_LANGKAH = 0.01                 # 2 angka di belakang koma
 
-# Batas pencarian tiap variabel: nama -> (batas bawah, batas atas). Edit sesuai kebutuhan sebelum tuning.
+# Batas pencarian PER PROFIL: OPTUNA_BATAS[profil][nama] = (batas bawah, batas atas). Edit sebelum tuning.
+# Batas tidak termasuk pemeriksaan skenario: mengubahnya tidak membuat study ditolak (trial lama tetap tersimpan).
 # Alpha = 0 membuat CBF-QP tidak aktif (status ALPHA_NOL), jadi batas bawah Alpha harus > 0.
-# Dasar pemilihan (model linear model.py, rasio torsi 0.317, sampling 200 Hz, jeda torsi 5 ms; analisis 20261012):
-#   Kp_psi   : > 1.7 agar badan bisa ditegakkan; <= 60 agar daerah linear >= 1.4 deg dan jauh dari batas jeda
-#   Kd_psi   : stabil kira-kira 0.5 .. 6.4 (di atas itu loop tidak stabil karena jeda 5 ms -> bang-bang);
-#              untuk Kp_psi 33.15, Kp_theta 0.24, Kd_theta 0.41: stabil 1.35 .. 6.40 (analisis 20261013)
-#   Kp_theta : harus > 0, batas atas stabil kira-kira Kp_psi / 6
-#   Kd_theta : harus > 0, batas atas stabil kira-kira 0.35 x Kd_psi
-#   Alpha_1, Alpha_2 : hasil kali 211 .. 800 (>= 211 supaya torsi +-1.5 N m tidak dipotong saat tegak;
-#                      Alpha_1 <= ~28 supaya badan masih bisa direm sebelum psi_max)
-#   Alpha_6  : >= 10.8 supaya barrier dtheta tidak memotong torsi saat robot diam (dtheta_max = 13 rad/s)
+# Profil berbeda butuh batas berbeda: torsi roda DATASHEET (0.75) sekitar 3.15x lebih kuat dari TERUKUR (0.238),
+# sehingga gain yang sama bekerja seperti gain 3x lebih besar.
+# Dasar pemilihan (model linear model.py, sampling 200 Hz, jeda torsi 5 ms; analisis 20261012-13). Batas stabil
+# model ternyata konservatif (gain terbaik DATASHEET Kd_psi 2.97 stabil di simulasi, model memberi batas ~1.9),
+# jadi batas atas diberi margin sekitar 1.5-2x di atas batas model.
+#                         TERUKUR (0.238)                       DATASHEET (0.75)
+#   Kp_psi   : > 1.7 (badan bisa ditegakkan)                > 0.55
+#   Kd_psi   : batas stabil model ~5.5-6.4                  ~1.8-2.0  (di atasnya bang-bang karena jeda)
+#   Kp_theta : batas stabil model ~Kp_psi / 30 .. / 15      ~Kp_psi / 12
+#   Kd_theta : batas stabil model ~1.0                      ~0.4
+#   Alpha_1 x Alpha_2 >= 211                                >= 664   (torsi +-1.5 N m tidak dipotong saat tegak)
+#   Alpha_1  <= ~28                                         <= ~55   (badan masih bisa direm sebelum psi_max)
+#   Alpha_3  >= 8.8                                         >= 28    (barrier dpsi tidak memotong torsi saat tegak)
+#   Alpha_4 x Alpha_5 >= 7.1                                >= 22    (barrier s tidak memotong torsi saat diam)
+#   Alpha_6  >= 10.8                                        >= 34    (barrier dtheta, dtheta_max = 13 rad/s)
+# Rentang terlalu lebar (contoh Kp_psi 5..100, Kd_psi 0.5..100) membuat sebagian besar trial tidak stabil:
+# hanya ~4 % (TERUKUR) dan ~1 % (DATASHEET) kombinasi yang stabil menurut model, sehingga Optuna sulit belajar.
 OPTUNA_BATAS = {
-    "Kp_psi":   (5.0, 100.0),
-    "Kd_psi":   (0.5, 100.0),
-    "Kp_theta": (0.0, 4.0),
-    "Kd_theta": (0.0, 1.5),
-    "Alpha_1":  (10.00, 30.00),
-    "Alpha_2":  (10.00, 30.00),
-    "Alpha_3":  (20.00, 100.0),
-    "Alpha_4":  (10.00, 100.0),
-    "Alpha_5":  (10.00, 100.0),
-    "Alpha_6":  (11.00, 100.0),
+    "TERUKUR": {
+        "Kp_psi":   (5.0, 80.0),
+        "Kd_psi":   (0.5, 9.0),
+        "Kp_theta": (0.0, 4.0),
+        "Kd_theta": (0.0, 1.5),
+        "Alpha_1":  (14.53, 28.28),
+        "Alpha_2":  (14.53, 28.28),
+        "Alpha_3":  (20.00, 100.0),
+        "Alpha_4":  (10.00, 100.0),
+        "Alpha_5":  (10.00, 100.0),
+        "Alpha_6":  (11.00, 100.0),
+    },
+    "DATASHEET": {
+        "Alpha_1": (25.77, 54.77),
+        "Alpha_2": (25.77, 54.77),
+        "Alpha_3": (30.00, 150.0),
+        "Alpha_4": (10.00, 100.0),
+        "Alpha_5": (10.00, 100.0),
+        "Alpha_6": (1.00, 500.0),
+    },
 }
 
 # Definisi tahap (urutan = urutan pengerjaan):
@@ -404,7 +424,7 @@ OPTUNA_TAHAP = {
 # kt_efektif  : torsi roda nyata per A arus perintah [N m/A], menggantikan MOTOR_KT_EFEKTIF saat tuning
 # gaya_dorong : [N] gaya dorong TERENDAH yang dicoba tahap PD (awal pencarian gaya)
 # gaya_pd_terbaik : [N] gaya lolos tertinggi dari hasil tahap PD (dicetak tuning_optuna.py, salin ke sini).
-#                   Tahap CBFQP_* memakai gaya_pd_terbaik + OPTUNA_GAYA_TAMBAH_CBF. None = belum ada.
+#                   Tahap CBFQP_* memakai OPTUNA_GAYA_CBF_FRAKSI x gaya_pd_terbaik. None = belum ada.
 # Jalankan:  python3 tuning_optuna.py --profil TERUKUR --tahap PD
 OPTUNA_PROFIL = {
     "TERUKUR": {
@@ -417,7 +437,7 @@ OPTUNA_PROFIL = {
     "DATASHEET": {
         "kt_efektif": 0.75,         # datasheet Waveshare DDSM115 (= MOTOR_KT)
         "gaya_dorong": 5.0,        # [N] gaya terendah yang dicoba tahap PD
-        "gaya_pd_terbaik": 5.5,    # [N] isi dari hasil tahap PD (dicetak tuning_optuna.py)
+        "gaya_pd_terbaik": 25.0,    # [N] isi dari hasil tahap PD (dicetak tuning_optuna.py)
         "terverifikasi": False,
         "catatan": "BELUM TERVERIFIKASI: nilai 0.75 belum cocok dengan uji delay (0.24). "
                    "BUTUH PENGUJIAN TORSI RODA (ddsm115_torsi_statis_testing.py)",
@@ -442,7 +462,7 @@ OPTUNA_GESER_DORONG = 0.13          # [s] ASUMSI: pergeseran waktu dorong per ul
 OPTUNA_GAYA_MAKS = 25.0             # [N] gaya tertinggi yang dicoba tahap PD
 OPTUNA_GAYA_LANGKAH = 0.5           # [N] ketelitian pencarian gaya tahap PD
 OPTUNA_BOBOT_GAYA = 1000.0          # [per N] bobot gaya lolos di skor tahap PD (jauh lebih besar dari ISE)
-OPTUNA_GAYA_TAMBAH_CBF = 6.5        # [N] tahap CBFQP_* memakai gaya_pd_terbaik + nilai ini
+OPTUNA_GAYA_CBF_FRAKSI = [0.50, 0.75, 1.0, 1.01, 1.15, 1.25, 1.5, 1.75, 2]   # tahap CBFQP_*: gaya = fraksi x gaya_pd_terbaik (boleh > 1)
 OPTUNA_AMBANG_BANGBANG = 0.5        # fraksi u_max; |u| di atas ini dihitung torsi besar (diagnostik bb/s)
 OPTUNA_PENALTI_KOMET = 1000.0
 OPTUNA_PENALTI_JARAK = 10.0         # [per detik]
