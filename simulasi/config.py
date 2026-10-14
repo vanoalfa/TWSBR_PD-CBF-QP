@@ -64,7 +64,8 @@ dtheta_setpoint = 0.0               # [rad/s]
 #                              4. SAFETY SET DAN KOMET
 # =============================================================================
 # Safety set (batas simetris: min = -max)
-psi_max = math.pi / 12.0            # [rad]    |psi|    <= psi_max
+psi_max_DEG = 15.0                  # [deg]    batas psi yang dijaga CBF (h1, h2); bisa diubah di jendela Kontrol
+psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
 dtheta_max = 13.0                   # [rad/s]  |dtheta| <= dtheta_max
 # ASUMSI: di bawah batas kecepatan motor DDSM115 (no-load 200 rpm = 20.9 rad/s, wiki Waveshare) dan di atas
@@ -78,7 +79,7 @@ s_min = -s_max
 # KOMET = kondisi robot yang sudah tidak tertolong, berlaku di mode PD maupun PD+CBF. Roda dimatikan.
 #   Jatuh : |psi| > SAFE_TILT_DEG                      (semua mode gerak)
 #   Lari  : |s|   > S_KOMET        (hanya mode Balancing, di mode Navigate robot memang boleh berjalan jauh)
-SAFE_TILT_DEG = 30.0                # [deg]
+SAFE_TILT_DEG = 40.0                # [deg]  ASUMSI: dipilih pengguna (20261014)
 S_KOMET = 2.0                       # [m]
 
 # =============================================================================
@@ -208,12 +209,20 @@ DURASI_PENGUJIAN = 30.0             # [s]
 # ulang berkali-kali saat angkanya masih diketik).
 ZETA_TUNGGU = 0.5                   # [s]
 
-# Garis batas safety set dan warna kurva di gambar ise.py dan plot realtime
+# Warna garis batas di gambar ise.py dan plot realtime:
+#   merah  = constraint barrier CBF-QP (psi_max, dpsi_max, dtheta_max, s_max)
+#   hitam  = batas KOMET (SAFE_TILT_DEG dan S_KOMET)
+#   kuning / oranye = penanda |psi| 5 deg / 10 deg (hanya gambar, tidak dipakai kontrol)
 PLOT_SAFETY_WARNA = "red"
+PLOT_KOMET_WARNA = "black"
+PLOT_PENANDA_PSI = [(5.0, "gold"), (10.0, "darkorange")]  # (derajat, warna); "gold" = kuning yang terbaca di latar putih
+# Batas sumbu tetap semua gambar: psi [rad], dpsi [rad/s], theta [rad], dtheta [rad/s], s [m]  (theta 60 rad = s 3 m)
+PLOT_BATAS = {"psi": 1.0, "dpsi": 10.0, "theta": 60.0, "dtheta": 30.0, "s": 3.0}
 PLOT_SAFETY_TEBAL = 2.2             # garis yang membentuk kotak barrier (menyambung)
 PLOT_SAFETY_TIPIS = 1.0             # perpanjangan garis di luar kotak (putus-putus)
+PLOT_KOMET_TEBAL = 1.6
 PLOT_WARNA_PD = "tab:blue"
-PLOT_WARNA_PD_CBF = "tab:orange"
+PLOT_WARNA_PD_CBF = "tab:green"     # bukan oranye, supaya tidak tertukar dengan penanda 10 deg
 
 # =============================================================================
 # 11. REALISME SIMULASI  (hanya dipakai simulasi.py, tidak dipakai robot fisik)
@@ -303,7 +312,8 @@ WARNA_QT_ABAI = "#9a9a9a"        # tulisan tombol yang sedang diabaikan
 WARNA_QT_UJI = "#c26a00"         # mode pengujian aktif
 # Jumlah desimal tampilan tiap parameter di jendela Kontrol: nama -> desimal. Semua Alpha_n memakai DESIMAL_ALPHA.
 # Angka yang diketik boleh lebih teliti; tampilannya menyesuaikan.
-DESIMAL = {"Kp_psi": 2, "Kd_psi": 3, "Kp_theta": 4, "Kd_theta": 4, "Kvel": 4, "Gaya_dorong": 2, "zeta_DEG": 1}
+DESIMAL = {"Kp_psi": 2, "Kd_psi": 3, "Kp_theta": 4, "Kd_theta": 4, "Kvel": 4, "Gaya_dorong": 2, "zeta_DEG": 1,
+           "psi_max_DEG": 1}
 DESIMAL_ALPHA = 2
 
 # =============================================================================

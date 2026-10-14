@@ -56,7 +56,9 @@ class PDControl:
             arah = self.arah
 
         # Persamaan PD
-        u_PD = (self.Kp_psi * psi) + (self.Kd_psi * dpsi) + (Kp_theta * theta) + (self.Kd_theta * dtheta) + (self.Kvel * arah)
+        u_PD = (self.Kp_psi * psi) + (self.Kd_psi * dpsi) \
+            + (Kp_theta * theta) + (self.Kd_theta * dtheta) \
+            + (self.Kvel * arah)
         self.u_PD = u_PD
 
         # Error untuk ISE

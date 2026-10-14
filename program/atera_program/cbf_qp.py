@@ -7,8 +7,8 @@
 
     u = torsi SATU roda [N m].   Hard constraint, tanpa slack.
     Alpha_1, Alpha_2, ... diambil dari config.py (semua Alpha_<nomor> yang berurutan mulai dari 1).
-    zeta (kemiringan bidang) juga parameter: nilainya dibaca dari config.zeta tiap siklus, jadi bisa diubah
-    saat program berjalan tanpa membangun ulang solver.
+    zeta (kemiringan bidang) dan psi_max (batas h1, h2) juga parameter: nilainya dibaca dari config.zeta dan
+    config.psi_max tiap siklus, jadi bisa diubah saat program berjalan tanpa membangun ulang solver.
 
 Mode gerak (mode_cbf): Balancing dan Navigate memakai SATU solver acados yang sama. Setiap constraint diberi
 parameter mask m_k (1 = aktif, 0 = dilewati): c_k dipakai sebagai  m_k*c_k + (1 - m_k),  jadi constraint dengan
@@ -119,7 +119,7 @@ def siapkan_acados():
     return folder
 
 
-def workplace(x, u, f, g, zeta):
+def workplace(x, u, f, g, zeta, psi_max):
     """Tempat menulis barrier function h dan constraint CBF. Mengembalikan (DAFTAR_C, C_MODE).
 
     Yang bisa dipakai di dalam WORKPLACE:
@@ -128,10 +128,11 @@ def workplace(x, u, f, g, zeta):
         f, g                      : model dx/dt = f(x) + g(x)*u   (dari model.py, sudah memakai zeta dan rasio_torsi,
                                     u = torsi perintah satu roda)
         zeta                      : kemiringan bidang [rad] (simbol, nilainya dari config.zeta)
+        psi_max                   : batas psi [rad] (simbol, nilainya dari config.psi_max tiap siklus)
         lie(h, v)                 : turunan Lie, L_v h = (dh/dx) * v
         Alpha_1, Alpha_2, ...     : semua Alpha_<nomor> di config.py (otomatis)
         MODE_BALANCING, MODE_NAVIGATE : nama mode gerak (kunci C_MODE)
-        config.<nama>             : nilai lain dari config.py (psi_max, dpsi_max, dtheta_max, MAX_CURRENT_A, ...)
+        config.<nama>             : nilai lain dari config.py (dpsi_max, dtheta_max, s_max, MAX_CURRENT_A, ...)
     """
     theta = x[config.IDX_THETA]
     dtheta = x[config.IDX_DTHETA]
@@ -164,8 +165,8 @@ def workplace(x, u, f, g, zeta):
     # -----------------------------------------------------------------------------------------
 
     # 1. Tulis definisi h di bawah
-    h1 = -psi + config.psi_max
-    h2 = psi + config.psi_max
+    h1 = -psi + psi_max
+    h2 = psi + psi_max
     h3 = -dpsi + config.dpsi_max
     h4 = dpsi + config.dpsi_max
     h5 = -s + config.s_max              # s <= s_max
@@ -206,14 +207,15 @@ def workplace(x, u, f, g, zeta):
 
 
 def _cbf_expressions():
-    """Simbol x, u, p = [Alpha_1, Alpha_2, ..., zeta, rasio_torsi], f, g, DAFTAR_C, C_MODE dan nama Alpha dari
-    WORKPLACE. Constraint: c >= 0."""
+    """Simbol x, u, p = [Alpha_1, Alpha_2, ..., zeta, rasio_torsi, psi_max], f, g, DAFTAR_C, C_MODE dan nama Alpha
+    dari WORKPLACE. Constraint: c >= 0."""
     nama_alpha = config.NAMA_ALPHA
     x = ca.SX.sym("x", config.NX)
     u = ca.SX.sym("u", config.NU)
-    p = ca.SX.sym("p", len(nama_alpha) + 2)        # dua elemen terakhir: zeta, rasio_torsi
+    p = ca.SX.sym("p", len(nama_alpha) + 3)        # tiga elemen terakhir: zeta, rasio_torsi, psi_max
     zeta = p[len(nama_alpha)]
     rasio_torsi = p[len(nama_alpha) + 1]
+    psi_max = p[len(nama_alpha) + 2]
 
     # Alpha_1, Alpha_2, ... dibuat sebagai nama global supaya bisa langsung ditulis di WORKPLACE.
     for i in range(len(nama_alpha)):
@@ -222,7 +224,7 @@ def _cbf_expressions():
     f, g = model.fg_casadi(x, zeta)
     g = rasio_torsi * g                            # u = torsi perintah, torsi nyata = rasio_torsi * u (lihat docstring modul)
     try:
-        daftar_c, c_mode = workplace(x, u, f, g, zeta)
+        daftar_c, c_mode = workplace(x, u, f, g, zeta, psi_max)
     except NameError as kesalahan:
         raise RuntimeError("WORKPLACE PROGRAM memakai nama yang belum ada (%s). Bila itu Alpha, tambahkan dulu "
                            "di config.py dengan nomor berurutan (Alpha_1, Alpha_2, ...)." % kesalahan)
@@ -270,7 +272,7 @@ class CBFQP:
         # Mask tiap mode sebagai parameter solver: c_efektif = m*c + (1 - m)  (m = 0 -> selalu terpenuhi, a = 0)
         m = ca.SX.sym("m", self.NH)
         c = ca.vertcat(*[m[k] * daftar_c[k] + (1.0 - m[k]) for k in range(self.NH)])
-        p_semua = ca.vertcat(p, m)                      # p_semua = [Alpha..., zeta, rasio_torsi, mask...]
+        p_semua = ca.vertcat(p, m)                      # p_semua = [Alpha..., zeta, rasio_torsi, psi_max, mask...]
 
         # Alpha yang dipakai constraint aktif tiap mode (hanya ini yang wajib > 0 di mode itu)
         self._daftar_c = daftar_c
@@ -298,7 +300,7 @@ class CBFQP:
         else:                                          # acados < 0.4
             ocp.dims.N = self.N
         ocp.solver_options.tf = float(self.N)          # langkah waktu 1 -> cost tidak diskalakan
-        ocp.parameter_values = np.ones(len(self.nama_alpha) + 2 + self.NH)
+        ocp.parameter_values = np.ones(len(self.nama_alpha) + 3 + self.NH)
 
         # cost stage 0: 1/2*(u - yref)' W (u - yref), W = 2  ->  (u - u_PD)^2 ; yref = u_PD diisi tiap siklus
         ocp.cost.cost_type_0 = "LINEAR_LS"
@@ -404,10 +406,11 @@ class CBFQP:
         return np.array(nilai)
 
     def _parameter(self, alphas=None) -> np.ndarray:
-        """p = [Alpha_1, Alpha_2, ..., zeta, rasio_torsi, mask_1, ..., mask_NH]."""
+        """p = [Alpha_1, Alpha_2, ..., zeta, rasio_torsi, psi_max, mask_1, ..., mask_NH]."""
         if alphas is None:
             alphas = self._alphas()
-        return np.concatenate([np.asarray(alphas, dtype=float), [self.zeta(), self.rasio_torsi], self.mask])
+        return np.concatenate([np.asarray(alphas, dtype=float), [self.zeta(), self.rasio_torsi, float(config.psi_max)],
+                               self.mask])
 
     def constraint_coefficients(self, x, alphas=None):
         """a, b (masing-masing ndarray(NH)) pada constraint a*u + b >= 0. Constraint yang dimask: a = 0, b = 1."""

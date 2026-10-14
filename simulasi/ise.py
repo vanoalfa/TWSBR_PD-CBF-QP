@@ -1,26 +1,32 @@
-"""ise.py - Evaluasi ISE (Integral Square Error) robot ATERA (robot fisik).
+"""ise.py - Evaluasi ISE (Integral Square Error) robot ATERA.
 
-Format CSV, PNG, dan nama file sama dengan simulasi/ise.py, jadi hasil robot fisik dan simulasi bisa dibandingkan.
 ISE = jumlah (error^2 * dt), dihitung untuk theta, dtheta, psi, dan dpsi.
 
 Hasil disimpan di dua subfolder PLOT_EVALUASI (HHmmSS = jam, menit, detik saat disimpan):
-    PLOT_EVALUASI/PERCOBAAN/YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.csv / .png       (MULAI sampai X / R3 / KOMET)
-    PLOT_EVALUASI/PENGUJIAN/YYYYMMDD_HHmmSS_COBA PD_PENGUJIAN KE-XX.csv / .png       (L3, DURASI_PENGUJIAN detik)
+    PLOT_EVALUASI/PERCOBAAN/YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.csv / .png       (perekaman biasa)
+    PLOT_EVALUASI/PENGUJIAN/YYYYMMDD_HHmmSS_COBA PD_PENGUJIAN KE-XX.csv / .png       (mode pengujian, tombol T)
     (PD diganti PD+CBF untuk mode PD + CBF-QP)
 Nomor KE-XX naik otomatis per tanggal, per mode, dan per jenis (PERCOBAAN / PENGUJIAN).
 File lama (langsung di PLOT_EVALUASI, atau tanpa HHmmSS) tetap terbaca sebagai PERCOBAAN.
-Penyimpanan saat robot masih balancing berjalan di PROSES TERPISAH (simpan(latar=True)), supaya matplotlib
-tidak menahan loop kontrol.
+Bila gain diubah saat sedang direkam, nama file diberi akhiran _TUNING.
 
 Kolom c_h1, c_h2, ... (hanya mode PD + CBF-QP): nilai tiap constraint CBF-QP (urutan DAFTAR_C di cbf_qp.py) pada
 torsi u yang dipakai siklus itu. c >= 0 = terpenuhi, c ~ 0 = constraint sedang aktif (membatasi u), c < 0 =
 dilanggar (status GAGAL). Kosong = constraint tidak dipakai di mode gerak itu, atau mode PD.
 
+Setiap gambar disimpan sebagai .png dan .eps (vektor, untuk LaTeX). Batas sumbu tetap (config.PLOT_BATAS):
+psi +-1 rad, dpsi +-10 rad/s, theta +-60 rad, dtheta +-30 rad/s, s +-3 m.
+Warna garis:
+    merah          : constraint barrier CBF-QP (psi_max, dpsi_max, dtheta_max, s_max). Kotak psi memakai psi_max
+                     yang tercatat di CSV (kolom psi_max_DEG, bisa diubah di jendela Kontrol)
+    hitam          : batas KOMET (|psi| = SAFE_TILT_DEG, |s| = S_KOMET)
+    kuning, oranye : penanda |psi| = 5 deg dan 10 deg (config.PLOT_PENANDA_PSI), hanya gambar
+
 Isi gambar:
-    Gambar 1: sumbu X = psi,   sumbu Y = dpsi       kotak batas psi dan dpsi
-    Gambar 2: sumbu X = theta, sumbu Y = dtheta     kotak batas jarak (theta = s/R) dan dtheta
-    Gambar 3: sumbu X = s = R*theta [m], sumbu Y = 0   batas s_min dan s_max
-Garis batas safety set (merah):
+    Gambar 1: sumbu X = psi,   sumbu Y = dpsi       kotak batas psi dan dpsi, garis KOMET psi
+    Gambar 2: sumbu X = theta, sumbu Y = dtheta     kotak batas jarak (theta = s/R) dan dtheta, garis KOMET s/R
+    Gambar 3: sumbu X = s = R*theta [m], sumbu Y = 0   batas s_min dan s_max, garis KOMET s
+Garis batas safety set CBF (merah):
     - bagian yang membentuk kotak barrier : garis tebal menyambung
     - perpanjangan garis di luar kotak    : garis tipis putus-putus
     - Gambar 3 (jarak s) hanya punya 2 batas, jadi keduanya garis tebal menyambung
@@ -38,9 +44,7 @@ Hasil --bandingkan disimpan di subfolder yang sama:
 
 import argparse
 import csv
-import logging
 import math
-import multiprocessing
 import os
 import re
 from datetime import datetime
@@ -48,16 +52,15 @@ from datetime import datetime
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+plt.rcParams["legend.framealpha"] = 1.0     # EPS tidak mendukung transparansi
+plt.rcParams["axes.axisbelow"] = True       # grid di bawah garis batas
 
 import config
 
 FOLDER_PLOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.ISE_PLOT_DIR)
-LOGGER = logging.getLogger(__name__)
-_NAMA_DIPAKAI = []                  # nama yang sudah dibagikan program ini (file-nya bisa belum selesai ditulis)
-_PROSES = []                        # proses penyimpanan latar yang masih berjalan
 
-JENIS_PERCOBAAN = "PERCOBAAN"       # perekaman biasa (MULAI sampai X / R3 / KOMET)
-JENIS_PENGUJIAN = "PENGUJIAN"       # L3: DURASI_PENGUJIAN detik sejak tombol ditekan
+JENIS_PERCOBAAN = "PERCOBAAN"       # perekaman biasa (E / Q / KOMET)
+JENIS_PENGUJIAN = "PENGUJIAN"       # mode pengujian (tombol T): dari dorongan O / P selama beberapa detik
 
 
 def folder_jenis(jenis):
@@ -69,7 +72,7 @@ MODE_PD_CBF = "PD+CBF"
 STATUS_ALPHA_NOL = "ALPHA_NOL"      # sama dengan cbf_qp.STATUS_ALPHA (tidak di-import: mode PD tidak butuh acados)
 
 KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
-KOLOM_GAIN_CBF = config.NAMA_ALPHA
+KOLOM_GAIN_CBF = config.NAMA_ALPHA + ["psi_max_DEG"]
 KOLOM_GAIN = KOLOM_GAIN_PD + KOLOM_GAIN_CBF
 
 KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
@@ -137,54 +140,63 @@ def nama_percobaan(mode, tuning, jenis=JENIS_PERCOBAAN):
     tanggal = sekarang.strftime("%Y%m%d")
     jam = sekarang.strftime("%H%M%S")
     nomor = 1
-    terpakai = [(p["tanggal"], p["mode"], p["nomor"]) for p in daftar_percobaan(jenis)]
-    for nama_lama in _NAMA_DIPAKAI:
-        cocok = POLA_NAMA.match(nama_lama + ".csv")
-        if cocok is not None and cocok.group(4) == jenis:
-            terpakai.append((cocok.group(1), cocok.group(3), int(cocok.group(5))))
-    for tanggal_lama, mode_lama, nomor_lama in terpakai:
-        if tanggal_lama == tanggal and mode_lama == mode and nomor_lama >= nomor:
-            nomor = nomor_lama + 1
+    for percobaan in daftar_percobaan(jenis):
+        if percobaan["tanggal"] == tanggal and percobaan["mode"] == mode and percobaan["nomor"] >= nomor:
+            nomor = percobaan["nomor"] + 1
     nama = "%s_%s_COBA %s_%s KE-%02d" % (tanggal, jam, mode, jenis, nomor)
     if tuning:
         nama = nama + "_TUNING"
-    _NAMA_DIPAKAI.append(nama)
     return nama
 
 
-def simpan_berjalan():
-    """Jumlah penyimpanan latar yang belum selesai."""
-    _PROSES[:] = [proses for proses in _PROSES if proses.is_alive()]
-    return len(_PROSES)
-
-
-def tunggu_simpan(batas_waktu=30.0):
-    """Tunggu semua penyimpanan latar selesai (dipanggil saat program keluar)."""
-    for proses in _PROSES:
-        proses.join(batas_waktu)
-    simpan_berjalan()
-
-
 def gambar_kotak_safety(ax, x_min, x_max, y_min, y_max):
-    """Batas safety set dua variabel.
-    Kotak barrier (x_min..x_max, y_min..y_max): merah tebal menyambung.
-    Perpanjangan keempat garis di luar kotak: merah tipis putus-putus."""
-    ax.axvline(x_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--", zorder=1.4,
-               label="perpanjangan batas")
-    ax.axvline(x_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--", zorder=1.4)
-    ax.axhline(y_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--", zorder=1.4)
-    ax.axhline(y_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--", zorder=1.4)
-    ax.plot([x_min, x_max, x_max, x_min, x_min], [y_min, y_min, y_max, y_max, y_min],
-            color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, zorder=1.5, label="batas safety set (barrier)")
+    """Batas safety set dua variabel. Kotak barrier: garis tebal menyambung. Perpanjangan garisnya di luar kotak:
+    garis tipis putus-putus. Mengembalikan daftar garis (supaya bisa dihapus dan digambar ulang)."""
+    artis = [ax.axvline(x_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--",
+                        zorder=1.4, label="perpanjangan batas"),
+             ax.axvline(x_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--",
+                        zorder=1.4),
+             ax.axhline(y_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--",
+                        zorder=1.4),
+             ax.axhline(y_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--",
+                        zorder=1.4)]
+    artis += ax.plot([x_min, x_max, x_max, x_min, x_min], [y_min, y_min, y_max, y_max, y_min],
+                     color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, zorder=1.5,
+                     label="batas safety set (barrier)")
+    return artis
+
+
+def gambar_komet(ax, batas, label, sumbu="x"):
+    """Garis hitam batas KOMET di +-batas. sumbu = "x" (garis tegak) atau "y" (garis mendatar)."""
+    garis = ax.axvline if sumbu == "x" else ax.axhline
+    for tanda in (1.0, -1.0):
+        garis(tanda * batas, color=config.PLOT_KOMET_WARNA, linewidth=config.PLOT_KOMET_TEBAL, zorder=1.6,
+              label=label if tanda > 0 else None)
+
+
+def gambar_penanda_psi(ax, sumbu="x"):
+    """Garis penanda |psi| (config.PLOT_PENANDA_PSI: 5 deg kuning, 10 deg oranye). sumbu = "x" atau "y" (psi di sumbu itu)."""
+    garis = ax.axvline if sumbu == "x" else ax.axhline
+    for derajat, warna in config.PLOT_PENANDA_PSI:
+        for tanda in (1.0, -1.0):
+            garis(tanda * math.radians(derajat), color=warna, linewidth=1.2, linestyle=":", zorder=1.3,
+                  label=("|psi| = %g deg" % derajat) if tanda > 0 else None)
 
 
 def ada_batas_jarak():
     return hasattr(config, "s_max") and hasattr(config, "s_min")
 
 
-def gambar_safety_set(gambar1, gambar2):
-    """Gambar 1: kotak psi x dpsi.  Gambar 2: kotak theta (= s/R) x dtheta."""
-    gambar_kotak_safety(gambar1, config.psi_min, config.psi_max, config.dpsi_min, config.dpsi_max)
+def gambar_safety_set(gambar1, gambar2, psi_max=None):
+    """Gambar 1: kotak psi x dpsi (merah) + penanda |psi| + KOMET psi (hitam).
+    Gambar 2: kotak theta (= s/R) x dtheta (merah) + KOMET s/R (hitam). Batas sumbu tetap.
+    psi_max [rad]: None = config.psi_max. Mengembalikan garis kotak psi (untuk digambar ulang bila psi_max berubah)."""
+    if psi_max is None:
+        psi_max = config.psi_max
+    artis = gambar_kotak_safety(gambar1, -psi_max, psi_max, config.dpsi_min, config.dpsi_max)
+    gambar_penanda_psi(gambar1)
+    gambar_komet(gambar1, math.radians(config.SAFE_TILT_DEG), "KOMET |psi| = %g deg" % config.SAFE_TILT_DEG)
+    gambar_komet(gambar2, config.S_KOMET / config.R, "KOMET |s| = %g m" % config.S_KOMET)
     if ada_batas_jarak():
         gambar_kotak_safety(gambar2, config.s_min / config.R, config.s_max / config.R,
                             config.dtheta_min, config.dtheta_max)
@@ -192,25 +204,49 @@ def gambar_safety_set(gambar1, gambar2):
         # tanpa batas jarak tidak ada kotak: hanya 2 garis dtheta
         gambar2.axhline(config.dtheta_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, label="batas safety set")
         gambar2.axhline(config.dtheta_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL)
+    batas = config.PLOT_BATAS
+    gambar1.set_xlim(-batas["psi"], batas["psi"])
+    gambar1.set_ylim(-batas["dpsi"], batas["dpsi"])
+    gambar2.set_xlim(-batas["theta"], batas["theta"])
+    gambar2.set_ylim(-batas["dtheta"], batas["dtheta"])
+    return artis
 
 
 def gambar_batas_jarak(gambar3):
-    """Gambar 3 (jarak s): hanya 2 batas (s_min, s_max), keduanya garis tebal menyambung."""
+    """Gambar 3 (jarak s): batas s_min dan s_max (merah, garis tebal menyambung) dan KOMET +-S_KOMET (hitam)."""
     if ada_batas_jarak():
         gambar3.axvline(config.s_max, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, zorder=1.5,
                         label="batas safety set (barrier)")
         gambar3.axvline(config.s_min, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, zorder=1.5)
+    gambar_komet(gambar3, config.S_KOMET, "KOMET |s| = %g m" % config.S_KOMET)
     gambar3.axhline(0.0, color="gray", linewidth=0.6, zorder=1.0)
+    gambar3.set_xlim(-config.PLOT_BATAS["s"], config.PLOT_BATAS["s"])
     gambar3.set_ylim(-1.0, 1.0)
     gambar3.set_yticks([0.0])
     gambar3.set_xlabel("s = R*theta [m]   (jarak tempuh dari posisi awal)")
     gambar3.set_title("Gambar 3", fontsize=10)
-    gambar3.grid(True, axis="x", alpha=0.4)
+    gambar3.grid(True, axis="x", color="0.85")
+
+
+def simpan_gambar(fig, path_png):
+    """Simpan .png dan .eps (nama sama)."""
+    fig.savefig(path_png, dpi=130)
+    fig.savefig(path_png[:-4] + ".eps", format="eps")
 
 
 def angka(nilai):
     """Angka pendek untuk tulisan gain: 15.0 -> '15', 0.0400 -> '0.04'."""
     return "%g" % nilai
+
+
+def bungkus(teks, lebar=150):
+    """Potong teks 'a | b | c' menjadi beberapa baris (judul gambar tidak terpotong)."""
+    baris = [""]
+    for bagian in teks.split(" | "):
+        if baris[-1] != "" and len(baris[-1]) + len(bagian) + 3 > lebar:
+            baris.append("")
+        baris[-1] = bagian if baris[-1] == "" else baris[-1] + " | " + bagian
+    return "\n".join(baris)
 
 
 def teks_gain(mode, gain_awal, gain_akhir):
@@ -222,6 +258,8 @@ def teks_gain(mode, gain_awal, gain_akhir):
         while ("Alpha_%d" % nomor) in gain_akhir:
             daftar.append("Alpha_%d" % nomor)
             nomor = nomor + 1
+        if "psi_max_DEG" in gain_akhir:
+            daftar.append("psi_max_DEG")
     bagian = []
     for nama in daftar:
         if abs(gain_awal[nama] - gain_akhir[nama]) > 1e-12:
@@ -313,40 +351,15 @@ class PerekamISE:
             baris.extend("" if c is None else c for c in nilai_c)
         self.data.append(baris)
 
-    def simpan(self, latar=False):
-        """Simpan CSV dan PNG (bila ada data). Mengembalikan nama percobaan, atau "" bila belum ada data.
-
-        latar=True: ditulis di proses terpisah (fork) supaya loop kontrol tidak tertahan; nama ditentukan di sini.
-        """
+    def simpan(self):
+        """Simpan CSV dan PNG (selalu, bila ada data). Mengembalikan nama percobaan, atau "" bila belum ada data."""
         if len(self.data) == 0:
             self.alasan = "belum ada data (sudah disimpan, atau belum ada siklus yang direkam)"
             return ""
         self.alasan = ""
 
-        nama = nama_percobaan(self.mode, len(self.gain_berubah) > 0, self.jenis)
-        if latar:
-            proses = multiprocessing.get_context("fork").Process(target=self._tulis, args=(nama,))
-            proses.start()
-            _PROSES.append(proses)
-        else:
-            self._tulis_csv_png(nama)
-        self.file_terakhir = nama
-        self.path_terakhir = os.path.join(folder_jenis(self.jenis), nama)
-        self.data = []
-        return nama
-
-    def _tulis(self, nama):
-        """Isi proses latar: keluaran layar dibuang, kesalahan hanya ditulis ke log (GUI tidak terganggu)."""
-        kosong = os.open(os.devnull, os.O_WRONLY)
-        os.dup2(kosong, 1)
-        os.dup2(kosong, 2)
-        try:
-            self._tulis_csv_png(nama)
-        except Exception:
-            LOGGER.exception("gagal menyimpan %s", nama)
-
-    def _tulis_csv_png(self, nama):
         tuning = len(self.gain_berubah) > 0
+        nama = nama_percobaan(self.mode, tuning, self.jenis)
         folder = folder_jenis(self.jenis)
         path_csv = os.path.join(folder, nama + ".csv")
         path_png = os.path.join(folder, nama + ".png")
@@ -375,7 +388,7 @@ class PerekamISE:
         durasi = self.data[-1][0]
 
         judul = "%s  |  mode %s  |  durasi %.1f s  |  zeta %.1f deg" % (nama, self.mode, durasi, self.zeta_deg)
-        judul = judul + "\n" + teks_gain(self.mode, self.gain_awal, self.gain_akhir)
+        judul = judul + "\n" + bungkus(teks_gain(self.mode, self.gain_awal, self.gain_akhir))
         if self.mode == MODE_PD_CBF:
             status = [baris[11] for baris in self.data]
             cbf_ok = persen_cbf_ok(status)
@@ -385,6 +398,7 @@ class PerekamISE:
                 peringatan = ("CBF-QP TIDAK AKTIF %.1f %% waktu (ALPHA_NOL: ada Alpha = 0 di config.py), "
                               "selama itu u = u_PD seperti mode PD" % alpha_nol)
                 judul = judul + "\n" + peringatan
+                print("PERHATIAN: " + peringatan)
         if tuning:
             judul = judul + "\nTUNING: gain diubah saat direkam (%s), ISE tidak untuk dibandingkan" \
                 % ", ".join(self.gain_berubah)
@@ -397,7 +411,8 @@ class PerekamISE:
         gambar2 = fig.add_subplot(kisi[0, 1])
         gambar3 = fig.add_subplot(kisi[1, :])
         fig.suptitle(judul, fontsize=10)
-        gambar_safety_set(gambar1, gambar2)
+        psi_max = math.radians(self.gain_akhir.get("psi_max_DEG", config.psi_max_DEG))
+        gambar_safety_set(gambar1, gambar2, psi_max)
         gambar_batas_jarak(gambar3)
 
         # Gambar 1: X = psi, Y = dpsi
@@ -408,8 +423,8 @@ class PerekamISE:
         gambar1.set_ylabel("dpsi [rad/s]")
         gambar1.set_title("Gambar 1\nISE psi = %.6f rad^2 s   |   ISE dpsi = %.6f (rad/s)^2 s"
                           % (self.ise_psi, self.ise_dpsi), fontsize=10)
-        gambar1.grid(True, alpha=0.4)
-        gambar1.legend(fontsize=8)
+        gambar1.grid(True, color="0.85")
+        gambar1.legend(fontsize=7)
 
         # Gambar 2: X = theta, Y = dtheta
         gambar2.plot(theta, dtheta, color="tab:orange", linewidth=1.0)
@@ -419,8 +434,8 @@ class PerekamISE:
         gambar2.set_ylabel("dtheta [rad/s]")
         gambar2.set_title("Gambar 2\nISE theta = %.6f rad^2 s   |   ISE dtheta = %.6f (rad/s)^2 s"
                           % (self.ise_theta, self.ise_dtheta), fontsize=10)
-        gambar2.grid(True, alpha=0.4)
-        gambar2.legend(fontsize=8)
+        gambar2.grid(True, color="0.85")
+        gambar2.legend(fontsize=7)
 
         # Gambar 3: X = s, Y = 0
         gambar3.plot(jarak, [0.0] * len(jarak), color="tab:purple", linewidth=2.0)
@@ -429,8 +444,13 @@ class PerekamISE:
         gambar3.legend(fontsize=8, loc="upper right")
 
         fig.tight_layout()
-        fig.savefig(path_png, dpi=130)
+        simpan_gambar(fig, path_png)
         plt.close(fig)
+
+        self.file_terakhir = nama
+        self.path_terakhir = os.path.join(folder, nama)
+        self.data = []
+        return nama
 
 
 # =============================================================================
@@ -458,9 +478,12 @@ def baca_csv(path):
         data["status_cbf"] = []
         ada_gain = True
         zeta_deg = None                # None = file lama, zeta tidak tercatat
+        psi_max_deg = None             # None = file lama, psi_max tidak tercatat (dipakai config.psi_max_DEG)
         for baris in pembaca:
             if zeta_deg is None and baris.get("zeta_DEG") not in (None, ""):
                 zeta_deg = float(baris["zeta_DEG"])
+            if baris.get("psi_max_DEG") not in (None, ""):
+                psi_max_deg = float(baris["psi_max_DEG"])           # nilai terakhir
             for nama in kolom_angka:
                 teks = baris.get(nama)
                 if teks is None or teks == "":
@@ -474,6 +497,7 @@ def baca_csv(path):
     data["ada_gain"] = ada_gain
     data["nama_alpha"] = nama_alpha
     data["zeta_deg"] = zeta_deg
+    data["psi_max_deg"] = psi_max_deg if psi_max_deg is not None else float(config.psi_max_DEG)
     return data
 
 
@@ -587,6 +611,7 @@ def gain_dari_data(data):
     for nama in KOLOM_GAIN_PD + data["nama_alpha"]:
         awal[nama] = data[nama][0] if len(data[nama]) > 0 else 0.0
         akhir[nama] = data[nama][-1] if len(data[nama]) > 0 else 0.0
+    awal["psi_max_DEG"] = akhir["psi_max_DEG"] = data["psi_max_deg"]
     return awal, akhir
 
 
@@ -706,6 +731,8 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
     dorongan_cbf = (hasil_cbf["dorong_depan"], hasil_cbf["dorong_belakang"], round(hasil_cbf["dorong_maks"], 3))
     if data_pd["zeta_deg"] != data_cbf["zeta_deg"]:
         catatan.append("kemiringan lantai (zeta) kedua percobaan berbeda")
+    if abs(data_pd["psi_max_deg"] - data_cbf["psi_max_deg"]) > 1e-9:
+        catatan.append("psi_max kedua percobaan berbeda (kotak psi = psi_max PD+CBF)")
     if dorongan_pd != dorongan_cbf:
         catatan.append("dorongan kedua percobaan berbeda")
     if hasil_cbf["alpha_nol"] > 0.0:
@@ -736,7 +763,7 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
             return "-"
         return "%+.1f %%" % (100.0 * (nilai_cbf - nilai_pd) / nilai_pd)
 
-    batas_psi = math.degrees(config.psi_max)
+    batas_psi = data_cbf["psi_max_deg"]
     tabel = [
         ["Durasi file [s]", "%.1f" % durasi_pd, "%.1f" % durasi_cbf, ""],
         ["Kemiringan lantai zeta", teks_zeta(data_pd["zeta_deg"]), teks_zeta(data_cbf["zeta_deg"]), ""],
@@ -758,7 +785,7 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
          "%.3f" % hasil_pd["s_maks"], "%.3f" % hasil_cbf["s_maks"], selisih(hasil_pd["s_maks"], hasil_cbf["s_maks"])],
         ["|u| maks [N m]  (batas %.2f)" % config.u_max, "%.3f" % hasil_pd["u_maks"],
          "%.3f" % hasil_cbf["u_maks"], selisih(hasil_pd["u_maks"], hasil_cbf["u_maks"])],
-        ["Dorongan (O / P, hanya simulasi)", teks_dorongan(hasil_pd), teks_dorongan(hasil_cbf), ""],
+        ["Dorongan (O / P)", teks_dorongan(hasil_pd), teks_dorongan(hasil_cbf), ""],
         ["CBF-QP berstatus OK [% waktu]", "-",
          "-" if hasil_cbf["cbf_ok"] is None else "%.1f" % hasil_cbf["cbf_ok"], ""],
     ]
@@ -775,7 +802,7 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
     judul = "%s\nISE dihitung dan data digambar dari t = 0 sampai %.1f s (durasi percobaan yang lebih pendek)" \
         % (nama, t_banding)
     fig.suptitle(judul, fontsize=11)
-    gambar_safety_set(gambar1, gambar2)
+    gambar_safety_set(gambar1, gambar2, math.radians(data_cbf["psi_max_deg"]))
     gambar_batas_jarak(gambar3)
 
     # Gambar 1: X = psi, Y = dpsi
@@ -785,8 +812,8 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
     gambar1.set_xlabel("psi [rad]")
     gambar1.set_ylabel("dpsi [rad/s]")
     gambar1.set_title("Gambar 1", fontsize=10)
-    gambar1.grid(True, alpha=0.4)
-    gambar1.legend(fontsize=8)
+    gambar1.grid(True, color="0.85")
+    gambar1.legend(fontsize=7)
 
     # Gambar 2: X = theta, Y = dtheta
     gambar2.plot(potong_pd["theta_rad"], potong_pd["dtheta_rad_s"], color=config.PLOT_WARNA_PD, linewidth=1.0, label=label_pd)
@@ -795,13 +822,13 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
     gambar2.set_xlabel("theta [rad]   (s = R*theta)")
     gambar2.set_ylabel("dtheta [rad/s]")
     gambar2.set_title("Gambar 2", fontsize=10)
-    gambar2.grid(True, alpha=0.4)
-    gambar2.legend(fontsize=8)
+    gambar2.grid(True, color="0.85")
+    gambar2.legend(fontsize=7)
 
     # Gambar 3: X = s, Y = 0 (kedua percobaan di garis yang sama; PD digambar lebih tebal di bawah)
     jarak_pd = [config.R * nilai for nilai in potong_pd["theta_rad"]]
     jarak_cbf = [config.R * nilai for nilai in potong_cbf["theta_rad"]]
-    gambar3.plot(jarak_pd, [0.0] * len(jarak_pd), color=config.PLOT_WARNA_PD, linewidth=6.0, alpha=0.6, label=label_pd)
+    gambar3.plot(jarak_pd, [0.0] * len(jarak_pd), color=config.PLOT_WARNA_PD, linewidth=6.0, label=label_pd)
     gambar3.plot(jarak_cbf, [0.0] * len(jarak_cbf), color=config.PLOT_WARNA_PD_CBF, linewidth=2.0, label=label_cbf)
     gambar3.legend(fontsize=8, loc="upper right")
 
@@ -825,7 +852,7 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN):
                          color="tab:red", transform=kotak_tabel.transAxes)
 
     fig.tight_layout()
-    fig.savefig(path_png, dpi=130)
+    simpan_gambar(fig, path_png)
     plt.close(fig)
 
     # -------------------------------------------------------------- terminal

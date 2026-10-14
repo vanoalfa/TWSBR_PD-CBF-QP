@@ -8,12 +8,14 @@ Kontrolnya sama dengan simulasi (simulasi/atera_main.py), hanya sumber state dan
     -> mode PD     : u = u_PD dibatasi arus
        mode PD+CBF : u = cbf.compute(x, u_PD)    (cbf_qp.py, acados HPIPM N = 1)
     -> roda kiri u + u_belok, roda kanan u - u_belok, arus = torsi / MOTOR_KT  (ddsm115.py)
-    -> ise.py merekam (format CSV / PNG sama dengan simulasi)
+    -> ise.py merekam (kolom CSV sama dengan simulasi) ke PLOT_EVALUASI/ATERA_RASPI
 
 State: DIAM -(Y)-> SIAP -(MULAI)-> BALANCING -(X)-> SIAP
        BALANCING -> KOMET    : |psi| > SAFE_TILT_DEG, |s| > S_KOMET (mode Balancing), atau torsi jenuh terlalu lama
        BALANCING -> GANGGUAN : IMU / motor gagal dibaca saat balancing
        Di KOMET / GANGGUAN roda mati dan data tersimpan; tegakkan robot lalu tekan MULAI lagi.
+Titik nol s (s = R*theta = 0) dipasang oleh Tombol Y (bersama kalibrasi IMU) dan Tombol B (kapan saja), bukan oleh
+MULAI. MULAI ditolak bila robot lebih dari s_max dari titik nol: kembalikan robot ke dekatnya, atau tekan B di sini.
 Tombol: lihat joystick_mapping.py (halaman BANTUAN di GUI). Log: config.LOG_FILE.
 """
 
@@ -71,6 +73,7 @@ class Atera:
         self.perekam = ise.PerekamISE()            # PERCOBAAN: MULAI sampai X / R3 / KOMET
         self.perekam_uji = ise.PerekamISE()        # PENGUJIAN: L3, DURASI_PENGUJIAN detik
         self.gain = {nama: float(getattr(config, nama)) for nama in NAMA_GAIN}
+        self.gain["psi_max_DEG"] = float(config.psi_max_DEG)
         self.gain["zeta_DEG"] = float(config.zeta_DEG)
 
         self.state = DIAM
@@ -176,12 +179,24 @@ class Atera:
             self.atur_pesan("Kalibrasi GAGAL: %s" % exc)
             return
         self.state = SIAP
+        try:
+            self.sample = self.imu.read()                  # psi dengan sudut nol baru, untuk titik nol s
+        except OSError as exc:
+            LOGGER.error("%s", exc)
+        self.nolkan_s()
         hasil = self.kalibrasi_hasil
         if hasil["gyro_std"] > config.IMU_CAL_MAX_GYRO_STD:
             self.atur_pesan("Robot bergerak saat kalibrasi (simpangan gyro %.1f deg/s). Ulangi Tombol Y."
                             % hasil["gyro_std"])
         else:
-            self.atur_pesan("Kalibrasi selesai (sudut nol %+.2f deg). Tekan MULAI." % hasil["zero_offset_deg"])
+            self.atur_pesan("Kalibrasi selesai (sudut nol %+.2f deg, s = 0 di sini). Tekan MULAI."
+                            % hasil["zero_offset_deg"])
+
+    def nolkan_s(self):
+        """Titik nol s (theta = 0) = posisi robot sekarang."""
+        self.motors.reset_wheel_angles()
+        self.theta_nol = 0.0
+        self.theta_nol = self.baca_state()[0]
 
     def mulai(self):
         if self.state == BALANCING:
@@ -198,13 +213,13 @@ class Atera:
             alasan = "tegakkan robot dulu (|psi| harus < %g deg)" % config.START_TILT_DEG
         elif self.mode_kontrol == ise.MODE_PD_CBF and self.cbf is None:
             alasan = "CBF-QP tidak tersedia (%s), pilih mode PD (LB)" % self.cbf_alasan
+        elif abs(model.hitung_s(self.baca_state())) > config.s_max:
+            alasan = ("robot %.2f m dari titik nol s (batas %g m): kembalikan ke dekat titik nol, atau tekan B "
+                      "untuk memasang titik nol di sini" % (model.hitung_s(self.x), config.s_max))
         if alasan:
             self.atur_pesan("MULAI ditolak: " + alasan)
             return
-        self.motors.reset_wheel_angles()
         self.mode_gerak = MODE_BALANCING
-        self.theta_nol = 0.0
-        self.theta_nol = self.baca_state()[0]          # titik nol s = posisi robot saat MULAI
         self.lama_jenuh = 0.0
         self.jumlah_cbf = {}
         self.uji_berjalan = False
@@ -249,14 +264,19 @@ class Atera:
             self.atur_pesan("Mode kontrol: %s" % mode)
 
     def ganti_mode_gerak(self, mode):
-        if self.state != BALANCING:
-            self.atur_pesan("Tombol A / B berlaku saat balancing (MULAI selalu dimulai di mode Balancing).")
-            return
-        self.mode_gerak = mode
+        """B: titik nol s pindah ke posisi sekarang (kapan saja), saat balancing juga masuk mode Balancing.
+        A: mode Navigate (hanya saat balancing)."""
         if mode == MODE_BALANCING:
-            self.theta_nol = self.theta_nol + self.x[0]          # titik nol s dipindah ke posisi sekarang
-            self.atur_pesan("Mode Balancing: robot ditahan di sini (titik nol s dipindah).")
+            self.nolkan_s()
+            if self.state == BALANCING:
+                self.mode_gerak = MODE_BALANCING
+                self.atur_pesan("Mode Balancing: robot ditahan di sini (s = 0 di sini).")
+            else:
+                self.atur_pesan("Titik nol s dipasang di sini (s = 0). Tekan MULAI.")
+        elif self.state != BALANCING:
+            self.atur_pesan("Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.")
         else:
+            self.mode_gerak = MODE_NAVIGATE
             self.atur_pesan("Mode Navigate: D-Pad / analog kiri untuk maju-mundur dan belok.")
 
     def mulai_pengujian(self):
@@ -463,7 +483,7 @@ class Atera:
         baris = ["  psi    %+8.2f deg   %s  +-%.0f deg" % (x[2] * DEG, batang(x[2], config.psi_max), config.psi_max * DEG),
                  "  dpsi   %+8.3f rad/s %s  +-%.2f rad/s" % (x[3], batang(x[3], config.dpsi_max), config.dpsi_max),
                  "  dtheta %+8.3f rad/s %s  +-%.1f rad/s" % (x[1], batang(x[1], config.dtheta_max), config.dtheta_max),
-                 "  s      %+8.3f m     %s  +-%.1f m (theta %+.2f rad)" % (s, batang(s, config.s_max), config.s_max, x[0]),
+                 "  s      %+8.3f m     %s  +-%.1f m dari titik nol Y/B (theta %+.2f rad)" % (s, batang(s, config.s_max), config.s_max, x[0]),
                  "  u      %+8.3f N m   %s  +-%.2f N m" % (self.u, batang(self.u, config.u_max), config.u_max),
                  "",
                  "  u_PD %+.3f N m -> u %+.3f N m | belok %+.3f | arus kiri %+.2f A, kanan %+.2f A (batas %.1f A)"
@@ -495,7 +515,8 @@ class Atera:
         baris.append("CBF-QP (%s) | status %s | acados %d | solve %.3f ms | u diizinkan [%+.3f, %+.3f] N m"
                      % ("dipakai" if self.mode_kontrol == ise.MODE_PD_CBF else "tidak dipakai, mode PD",
                         cbf.status, cbf.acados_status, cbf.solve_ms, lo, hi))
-        baris.append("  Alpha: " + "  ".join("%s=%g" % (n, getattr(config, n)) for n in cbf.nama_alpha))
+        baris.append("  Alpha: " + "  ".join("%s=%g" % (n, getattr(config, n)) for n in cbf.nama_alpha)
+                     + "  | psi_max=%g deg" % config.psi_max_DEG)
         baris.append("  sejak MULAI: " + (", ".join("%s %d" % kv for kv in self.jumlah_cbf.items()) or "-"))
         if self.mode_kontrol == ise.MODE_PD:
             return baris + ["  nilai constraint c_h hanya dihitung di mode PD+CBF (RB)"]
@@ -539,9 +560,9 @@ class Atera:
 
     def hal_bantuan(self):
         return (["Joystick:"] + ["  " + teks for teks in jm.BANTUAN]
-                + ["", "Hasil ISE: folder %s (PERCOBAAN dan PENGUJIAN)" % ise.FOLDER_PLOT,
-                   "  python3 ise.py --daftar                     daftar percobaan",
-                   "  python3 ise.py --bandingkan --pd 3 --cbf 5   PD KE-03 vs PD+CBF KE-05",
+                + ["", "Hasil: %s/<PERCOBAAN atau PENGUJIAN>/<PD atau CBFQP>" % config.ISE_PLOT_DIR,
+                   "  python3 ise.py --daftar                     daftar dan metrik percobaan",
+                   "  python3 ise.py --bandingkan --pd 3 --cbf 5   PD KE-03 vs PD+CBF KE-05 (folder BANDING)",
                    "  tambahkan --pengujian untuk hasil PENGUJIAN (L3)"])
 
 

@@ -61,8 +61,10 @@ JENDELA "ATERA - Kontrol"
   Gain diubah saat direkam -> nama file ISE diberi akhiran _TUNING.
   zeta_DEG = kemiringan lantai [deg] (+ = menanjak ke depan). Bila diubah: lantai ikut miring, robot
            diletakkan ulang, data yang belum disimpan dibuang (sama seperti R).
+  psi_max_DEG = batas |psi| yang dijaga CBF (h1, h2) [deg], langsung dipakai (bidang merah ikut pindah).
+           Plot: merah = batas CBF, hitam = batas KOMET (psi 40 deg, s 2 m), kuning / oranye = penanda 5 / 10 deg.
 
-HASIL ISE (folder PLOT_EVALUASI/PERCOBAAN dan PLOT_EVALUASI/PENGUJIAN)
+HASIL ISE (folder PLOT_EVALUASI/PERCOBAAN dan PLOT_EVALUASI/PENGUJIAN, file .csv + .png + .eps)
   python3 ise.py --daftar                                         daftar semua percobaan
   python3 ise.py --bandingkan                                     PD terbaru vs PD+CBF terbaru
   python3 ise.py --bandingkan --pd 3 --cbf 5                      PD KE-03 vs PD+CBF KE-05
@@ -281,6 +283,10 @@ def main():
             pd.Kvel = params["Kvel"]
             for nama in NAMA_ALPHA:                # cbf_qp.py membaca Alpha dari config tiap siklus
                 setattr(config, nama, params[nama])
+            if params["psi_max_DEG"] > 0.0:        # batas psi CBF (h1, h2), dibaca cbf_qp.py tiap siklus
+                config.psi_max_DEG = params["psi_max_DEG"]
+                config.psi_max = math.radians(config.psi_max_DEG)
+                config.psi_min = -config.psi_max
 
             # Perintah gerak. Di Mode Balancing arah diabaikan (diatur di dalam PDControl).
             # CBF-QP memilih constraint sesuai mode gerak (mode_cbf aman dipanggil tiap siklus).

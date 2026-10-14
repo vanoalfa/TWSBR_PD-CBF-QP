@@ -57,7 +57,7 @@ NAMA_GAIN = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"] + NAMA_ALPHA
 
 # Parameter di jendela Kontrol: (nama, jumlah desimal). Isinya dari config.DESIMAL dan config.DESIMAL_ALPHA.
 DAFTAR_PARAMS = [(_nama, config.DESIMAL.get(_nama, config.DESIMAL_ALPHA))
-                 for _nama in NAMA_GAIN + ["Gaya_dorong", "zeta_DEG"]]
+                 for _nama in NAMA_GAIN + ["Gaya_dorong", "zeta_DEG", "psi_max_DEG"]]
 
 FOLDER_INI = os.path.dirname(os.path.abspath(__file__))
 PILIHAN_URDF = [os.path.join(FOLDER_INI, path) for path in config.URDF_PILIHAN]
@@ -291,7 +291,9 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         Gambar 2 : sumbu X = theta, sumbu Y = dtheta
         Gambar 3 : sumbu X = s = R*theta, sumbu Y = 0
         bawah    : arus tiap motor terhadap waktu
-    Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang."""
+    Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang.
+    Batas sumbu tetap (config.PLOT_BATAS). Merah = constraint CBF (kotak psi ikut psi_max_DEG di Kontrol),
+    hitam = batas KOMET, kuning / oranye = penanda |psi| 5 / 10 deg."""
     os.environ["QT_QPA_PLATFORM"] = platform
     try:
         import numpy as np
@@ -319,7 +321,8 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
             fig.canvas.manager.set_window_title("ATERA - plot realtime " + judul)
         except Exception:
             pass
-        ise.gambar_safety_set(gambar1, gambar2)
+        psi_max_plot = config.psi_max
+        kotak_psi = ise.gambar_safety_set(gambar1, gambar2, psi_max_plot)
         ise.gambar_batas_jarak(gambar3)
 
         # Gambar 1: X = psi, Y = dpsi
@@ -327,7 +330,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         titik_psi, = gambar1.plot([], [], "o", color="black", markersize=6, label="sekarang")
         gambar1.set_xlabel("psi [rad]")
         gambar1.set_ylabel("dpsi [rad/s]")
-        gambar1.set_title("Gambar 1", fontsize=10)
+        gambar1.set_title("Gambar 1   (psi_max = %g deg)" % math.degrees(psi_max_plot), fontsize=10)
         gambar1.legend(fontsize=7, loc="upper right")
 
         # Gambar 2: X = theta, Y = dtheta
@@ -345,24 +348,18 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 
         # Arus terhadap waktu (hanya 2 batas, garis tebal menyambung)
         garis_arus, = ax_arus.plot([], [], color="tab:green")
-        ax_arus.axhline(config.MAX_CURRENT_A, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL)
-        ax_arus.axhline(config.MIN_CURRENT_A, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL)
+        ax_arus.axhline(config.MAX_CURRENT_A, color="black", linewidth=1.0, linestyle=":")    # batas arus (bukan CBF)
+        ax_arus.axhline(config.MIN_CURRENT_A, color="black", linewidth=1.0, linestyle=":")
         ax_arus.set_ylim(1.2 * config.MIN_CURRENT_A, 1.2 * config.MAX_CURRENT_A)
         ax_arus.set_ylabel("arus per motor [A]")
         ax_arus.set_xlabel("waktu [s]")
 
         for ax in (gambar1, gambar2, ax_arus):
-            ax.grid(True, alpha=0.4)
+            ax.grid(True, color="0.85")
         fig.suptitle("data %.0f s terakhir" % config.PLOT_RENTANG, fontsize=9, color="gray")
         fig.tight_layout()
         fig.show()
         jawaban.put(("siap", ""))
-
-        # Batas sumbu minimal: sedikit lebih lebar dari kotak safety set
-        ada_jarak = ise.ada_batas_jarak()
-        if ada_jarak:
-            theta_bawah = config.s_min / config.R
-            theta_atas = config.s_max / config.R
 
         data_t = []
         data_psi = []
@@ -388,7 +385,16 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                         data_dtheta = []
                         data_arus = []
                         continue
-                    t, psi, dpsi, theta, dtheta, arus = isi
+                    t, psi, dpsi, theta, dtheta, arus, psi_max_baru = isi
+                    if psi_max_baru != psi_max_plot:
+                        # psi_max diubah di jendela Kontrol: kotak psi digeser
+                        psi_max_plot = psi_max_baru
+                        kotak_psi[0].set_xdata([-psi_max_plot, -psi_max_plot])
+                        kotak_psi[1].set_xdata([psi_max_plot, psi_max_plot])
+                        kotak_psi[4].set_xdata([-psi_max_plot, psi_max_plot, psi_max_plot, -psi_max_plot,
+                                                -psi_max_plot])
+                        gambar1.set_title("Gambar 1   (psi_max = %g deg)" % math.degrees(psi_max_plot), fontsize=10)
+                        fig.canvas.draw_idle()
                     data_t.append(t)
                     data_psi.append(psi)
                     data_dpsi.append(dpsi)
@@ -423,27 +429,6 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     titik_psi.set_data([data_psi[-1]], [data_dpsi[-1]])
                     titik_theta.set_data([data_theta[-1]], [data_dtheta[-1]])
                     titik_s.set_data([config.R * data_theta[-1]], [0.0])
-
-                # Batas sumbu: minimal sedikit lebih lebar dari safety set, melebar bila data keluar.
-                if np.any(~np.isnan(psi)):
-                    batas_x = max(1.2 * config.psi_max, 1.1 * np.nanmax(np.abs(psi)))
-                    batas_y = max(1.2 * config.dpsi_max, 1.1 * np.nanmax(np.abs(dpsi)))
-                    gambar1.set_xlim(-batas_x, batas_x)
-                    gambar1.set_ylim(-batas_y, batas_y)
-
-                    bawah = np.nanmin(theta)
-                    atas = np.nanmax(theta)
-                    if ada_jarak:                       # kotak batas jarak selalu terlihat
-                        bawah = min(bawah, theta_bawah)
-                        atas = max(atas, theta_atas)
-                    lebar = max(1.0, atas - bawah)
-                    gambar2.set_xlim(bawah - 0.1 * lebar, atas + 0.1 * lebar)
-                    batas_y = max(1.2 * config.dtheta_max, 1.1 * np.nanmax(np.abs(dtheta)))
-                    gambar2.set_ylim(-batas_y, batas_y)
-
-                    bawah = config.R * (bawah - 0.1 * lebar)
-                    atas = config.R * (atas + 0.1 * lebar)
-                    gambar3.set_xlim(bawah, atas)
                 ax_arus.set_xlim(max(0.0, data_t[-1] - config.PLOT_RENTANG), max(config.PLOT_RENTANG, data_t[-1]))
                 fig.canvas.draw_idle()
             fig.canvas.flush_events()
@@ -1129,7 +1114,7 @@ class Simulasi:
         garis lurus yang melompat dari keadaan lama ke keadaan baru."""
         if self.plot is not None:
             kosong = float("nan")
-            self.plot_kiriman.append((self.waktu, kosong, kosong, kosong, kosong, kosong))
+            self.plot_kiriman.append((self.waktu, kosong, kosong, kosong, kosong, kosong, config.psi_max))
 
     def dorong(self, arah):
         """arah = +1 didorong ke depan (O), -1 didorong ke belakang (P)."""
@@ -1204,7 +1189,7 @@ class Simulasi:
         if self.plot is not None:
             self.plot_kiriman.append((self.waktu, float(self.x_terakhir[2]), float(self.x_terakhir[3]),
                                       float(self.x_terakhir[0]), float(self.x_terakhir[1]),
-                                      u / config.MOTOR_KT))
+                                      u / config.MOTOR_KT, config.psi_max))
 
     # ----------------------------------------------------------------- params
     def baca_params(self):

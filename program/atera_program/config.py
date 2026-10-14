@@ -36,7 +36,7 @@ IDX_THETA, IDX_DTHETA, IDX_PSI, IDX_DPSI = 0, 1, 2, 3
 NX = 4
 NU = 1
 
-theta_setpoint = 0.0                # [rad]   sudut roda dinolkan saat MULAI dan saat Tombol B
+theta_setpoint = 0.0                # [rad]   titik nol s / theta dipasang Tombol Y (kalibrasi) dan Tombol B
 dtheta_setpoint = 0.0               # [rad/s]
 psi_setpoint = 0.0                  # [rad]
 dpsi_setpoint = 0.0                 # [rad/s]
@@ -44,7 +44,8 @@ dpsi_setpoint = 0.0                 # [rad/s]
 # =============================================================================
 #                              3. SAFETY SET DAN KOMET
 # =============================================================================
-psi_max = math.pi / 12.0            # [rad]    |psi|    <= psi_max
+psi_max_DEG = 15.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
+psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
 dtheta_max = 13.0                   # [rad/s]  |dtheta| <= dtheta_max
 s_max = 1.0                         # [m]      |s| <= s_max, s = R*theta dari titik nol s
@@ -53,7 +54,7 @@ psi_min, dpsi_min, dtheta_min, s_min = -psi_max, -dpsi_max, -dtheta_max, -s_max
 # KOMET = robot tidak tertolong, roda dimatikan (sama dengan simulasi):
 #   jatuh : |psi| > SAFE_TILT_DEG (semua mode gerak)
 #   lari  : |s|   > S_KOMET       (hanya mode Balancing)
-SAFE_TILT_DEG = 30.0                # [deg]
+SAFE_TILT_DEG = 40.0                # [deg]  ASUMSI: dipilih pengguna (20261014)
 S_KOMET = 2.0                       # [m]
 START_TILT_DEG = 15.0               # [deg] MULAI ditolak bila |psi| lebih besar
 # Pengaman tambahan robot fisik (tidak ada di simulasi): |u| terus di batas arus selama ini -> roda dimatikan.
@@ -162,12 +163,17 @@ DT = 1.0 / CONTROL_HZ               # [s]
 UI_HZ = 10.0
 LOOP_MIN_RASIO = 0.8                # loop di bawah 80 % CONTROL_HZ -> peringatan
 LOG_FILE = "atera.log"
-ISE_PLOT_DIR = "PLOT_EVALUASI"
+ISE_PLOT_DIR = "PLOT_EVALUASI/ATERA_RASPI"   # hasil robot fisik: <jenis>/<PD atau CBFQP>/ (lihat ise.py)
 DURASI_PENGUJIAN = 30.0             # [s] lama satu PENGUJIAN (L3), sama dengan simulasi
+# ASUMSI: robot dianggap pulih setelah gangguan bila |psi| < EVAL_PSI_PULIH_DEG terus-menerus EVAL_PULIH_LAMA_S detik
+EVAL_PSI_PULIH_DEG = 2.0            # [deg]
+EVAL_PULIH_LAMA_S = 1.0             # [s]
 
-PLOT_SAFETY_WARNA = "red"
+PLOT_SAFETY_WARNA = "black"         # kotak / garis safety set CBF (psi_max, dpsi_max, ...)
 PLOT_SAFETY_TEBAL = 2.2
 PLOT_SAFETY_TIPIS = 1.0
+PLOT_PENANDA_PSI = [(5.0, "orange"), (10.0, "red")]   # garis penanda |psi| (derajat, warna), hanya gambar
+PLOT_BATAS = {"psi": 1.0, "dpsi": 10.0, "theta": 30.0, "dtheta": 30.0}   # batas sumbu tetap [rad, rad/s]
 PLOT_WARNA_PD = "tab:blue"
 PLOT_WARNA_PD_CBF = "tab:orange"
 
