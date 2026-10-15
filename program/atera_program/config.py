@@ -181,6 +181,10 @@ PLOT_BATAS = {"psi": 1.0, "dpsi": 10.0, "theta": 60.0, "dtheta": 30.0, "s": 3.0}
 PLOT_SAFETY_TEBAL = 2.2             # garis yang membentuk kotak barrier (menyambung)
 PLOT_SAFETY_TIPIS = 1.0             # perpanjangan garis di luar kotak (putus-putus)
 PLOT_KOMET_TEBAL = 1.6
+# Barrier yang digambar di plot: nama -> (nomor h batas atas, nomor h batas bawah) di DAFTAR_C cbf_qp.py.
+# Batas yang constraint-nya tidak aktif (tidak dicentang / tidak dipakai mode itu) digambar abu-abu tipis.
+CBF_BARRIER_H = {"psi": (1, 2), "dpsi": (3, 4), "s": (5, 6), "dtheta": (7, 8)}
+PLOT_NONAKTIF_WARNA = "0.6"
 PLOT_WARNA_PD = "tab:purple"        # kurva mode PD (ungu)
 PLOT_WARNA_PD_CBF = "tab:blue"      # kurva mode PD + CBF-QP (biru)
 

@@ -8,15 +8,19 @@ Mode kontrol PD / PD + CBF-QP dipilih dengan tombol di jendela Kontrol (atau key
 Mengganti mode: data perekaman biasa disimpan, lalu robot diletakkan ulang (seperti R) dengan mode baru.
 Semua perintah dan tombol dicetak di terminal saat program mulai.
 
-PEMBANDING (mode pengujian): setiap PENGUJIAN yang disimpan menjadi pembanding mode-nya. Plot realtime
-menggambar pembanding PD (ungu) dan PD+CBF (biru) di belakang kurva sekarang. Bila keduanya ada, gambar
-BANDING PENGUJIAN dibuat otomatis (sama dengan python3 ise.py --bandingkan --pengujian).
+CONSTRAINT CBF-QP: dipilih dengan kotak centang h1 .. h8 di jendela Kontrol (awal = C_MODE Balancing di WORKPLACE
+cbf_qp.py). Yang dicentang dipakai di mode Balancing maupun Navigate. Plot: barrier dicentang merah, lainnya abu-abu.
+
+PEREKAM PERBANDINGAN (tombol 3): PD vs PD + CBF-QP dengan dorongan yang sama. Setiap rekaman yang selesai menjadi
+PEMBANDING mode-nya (plot realtime: PD ungu, PD+CBF biru, pudar). Bila keduanya ada, gambar BANDING PERBANDINGAN
+dibuat otomatis (sama dengan python3 ise.py --bandingkan --perbandingan). Disimpan di PLOT_EVALUASI/PERBANDINGAN.
 
 Dua mode gerak (pd_control.py): Balancing (tombol B) dan Navigate (tombol N). Dua jenis perekaman ISE:
     PERCOBAAN : dari robot diletakkan (atau sejak E terakhir) sampai E ditekan, KOMET, atau keluar.
                 Disimpan di PLOT_EVALUASI/PERCOBAAN.
     PENGUJIAN : mode pengujian (tombol T). Perekaman dimulai saat dorongan O / P diberikan dan berhenti
                 otomatis setelah config.DURASI_PENGUJIAN detik. Disimpan di PLOT_EVALUASI/PENGUJIAN.
+    PERBANDINGAN : perekam perbandingan (tombol 3), sama seperti PENGUJIAN, ditambah pembanding dan BANDING otomatis.
 """
 
 import argparse
@@ -42,9 +46,15 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
         keyboard di jendela PyBullet juga tetap bisa sebagai cadangan)
   1 / 2    mode kontrol PD / PD + CBF-QP (tombol di atas jendela Kontrol). Data perekaman biasa disimpan,
            lalu robot diletakkan ulang dengan mode baru (pengujian yang sedang berjalan dibatalkan).
+  3        nyala / mati PEREKAM PERBANDINGAN. Plot realtime kosong sampai O / P. Cara memakai:
+             1 (PD) -> 3 -> R -> O (atau P) -> tunggu %.0f s (disimpan otomatis, jadi pembanding PD)
+             2 (PD + CBF-QP) -> R -> O (dorongan sama) -> tunggu -> disimpan + gambar BANDING otomatis
+           3 tidak perlu dimatikan di antaranya. Gaya dorong (Gaya_dorong) jangan diubah di antara keduanya.
+  h1..h8   kotak centang constraint CBF-QP yang dipakai (di jendela Kontrol), berlaku di semua mode gerak.
   B        Mode Balancing : robot diam di satu titik, W A S D diabaikan. Titik nol s (s = R*theta) dipindah
-           ke posisi robot saat B ditekan. Semua barrier CBF aktif.
-  N        Mode Navigate  : W A S D dipakai (Kp_theta = 0, barrier jarak s h5 dan h6 nonaktif)
+           ke posisi robot saat B ditekan.
+  N        Mode Navigate  : W A S D dipakai (Kp_theta = 0). Constraint CBF tetap yang dicentang (bila h5 / h6
+           dicentang, robot tidak bisa berjalan lebih jauh dari s_max).
   W / S    maju / mundur (ditahan)
   A / D    belok kiri / kanan (ditahan)
   O        dorong robot ke depan
@@ -55,9 +65,6 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
            belum disimpan DIBUANG; tekan E dulu bila ingin disimpan). Nilai parameter tetap.
   T        masuk / keluar MODE PENGUJIAN. Di mode ini perekaman biasa berhenti; setiap O / P memulai
            satu PENGUJIAN: direkam %.0f s sejak dorongan, lalu disimpan otomatis (_PENGUJIAN KE-XX).
-           PENGUJIAN yang tersimpan = PEMBANDING mode itu (plot realtime: PD ungu, PD+CBF biru, pudar).
-           Bila pembanding PD dan PD+CBF sudah ada, gambar BANDING PENGUJIAN dibuat otomatis.
-           Cara membandingkan: T -> mode PD -> O -> tunggu selesai -> mode PD + CBF-QP -> O.
   KOMET    |psi| > SAFE_TILT_DEG (semua mode), atau |s| > S_KOMET (hanya mode Balancing): motor dimatikan,
            perekaman berhenti (pengujian yang sedang berjalan langsung disimpan). Lanjutkan dengan R, E, atau Q.
   Berhenti juga bisa: tutup jendela PyBullet, atau Ctrl+C di terminal (hasil ISE tetap tersimpan)
@@ -71,16 +78,17 @@ JENDELA "ATERA - Kontrol"
   zeta_DEG = kemiringan lantai [deg] (+ = menanjak ke depan). Bila diubah: lantai ikut miring, robot
            diletakkan ulang, data yang belum disimpan dibuang (sama seperti R).
   psi_max_DEG = batas |psi| yang dijaga CBF (h1, h2) [deg], langsung dipakai (bidang merah ikut pindah).
-           Plot: merah = batas CBF, hitam = batas KOMET (psi 40 deg, s 2 m), kuning / oranye = penanda 5 / 10 deg.
+           Plot: merah = barrier CBF dicentang, abu-abu = tidak dicentang, hitam = batas KOMET (psi 40 deg,
+           s 2 m), kuning / oranye = penanda 5 / 10 deg.
 
-HASIL ISE (folder PLOT_EVALUASI/PERCOBAAN dan PLOT_EVALUASI/PENGUJIAN, file .csv + .png + .eps)
+HASIL ISE (folder PLOT_EVALUASI/PERCOBAAN, /PENGUJIAN, /PERBANDINGAN, file .csv + .png + .eps)
   python3 ise.py --daftar                                         daftar semua percobaan
   python3 ise.py --bandingkan                                     PD terbaru vs PD+CBF terbaru
   python3 ise.py --bandingkan --pd 3 --cbf 5                      PD KE-03 vs PD+CBF KE-05
   python3 ise.py --bandingkan --pd 3 --cbf 5 --tanggal 20261007   sama, untuk tanggal tertentu
-  tambahkan --pengujian untuk hasil mode pengujian, contoh:  python3 ise.py --daftar --pengujian
+  tambahkan --pengujian / --perbandingan untuk hasil tombol T / 3, contoh:  python3 ise.py --daftar --perbandingan
 =======================================================================
-""" % config.DURASI_PENGUJIAN
+""" % (config.DURASI_PENGUJIAN, config.DURASI_PENGUJIAN)
 
 
 def simpan_ise(perekam):
@@ -97,9 +105,9 @@ def simpan_ise(perekam):
     return nama
 
 
-def simpan_pengujian(sim, perekam_uji, pembanding):
-    """Simpan PENGUJIAN dan jadikan pembanding mode-nya (pembanding: dict mode -> nama file).
-    Bila pembanding PD dan PD+CBF sudah ada, gambar BANDING PENGUJIAN dibuat otomatis."""
+def simpan_pembanding(sim, perekam_uji, pembanding):
+    """Simpan rekaman PERBANDINGAN (tombol 3) dan jadikan pembanding mode-nya (pembanding: dict mode -> nama file).
+    Bila pembanding PD dan PD+CBF sudah ada, gambar BANDING PERBANDINGAN dibuat otomatis."""
     mode = perekam_uji.mode
     nama = simpan_ise(perekam_uji)
     if nama == "":
@@ -115,9 +123,9 @@ def simpan_pengujian(sim, perekam_uji, pembanding):
     sim.teks_pembanding = teks_pembanding(pembanding)
     print("PEMBANDING %s = %s" % (mode, nama))
     if pembanding[ise.MODE_PD] and pembanding[ise.MODE_PD_CBF]:
-        print("Pembanding PD dan PD+CBF ada: membuat gambar BANDING PENGUJIAN ...")
+        print("Pembanding PD dan PD+CBF ada: membuat gambar BANDING PERBANDINGAN ...")
         try:
-            ise.perintah_bandingkan(None, None, None, ise.JENIS_PENGUJIAN,
+            ise.perintah_bandingkan(None, None, None, ise.JENIS_PERBANDINGAN,
                                     nama_pd=pembanding[ise.MODE_PD], nama_cbf=pembanding[ise.MODE_PD_CBF])
         except Exception as kesalahan:
             print("GAGAL membuat gambar BANDING -> %s: %s" % (type(kesalahan).__name__, kesalahan))
@@ -130,7 +138,7 @@ def teks_pembanding(pembanding):
         nama = pembanding[mode]
         cocok = ise.POLA_NAMA.match(nama + ".csv") if nama else None
         bagian.append("%s: %s" % (mode, ("KE-%s (%s)" % (cocok.group(5), cocok.group(2))) if cocok else "-"))
-    return "pembanding pengujian   " + "   |   ".join(bagian)
+    return "pembanding (tombol 3)   " + "   |   ".join(bagian)
 
 
 def letakkan_ulang(sim, perekam, mode):
@@ -171,8 +179,18 @@ def main():
 
     sim = Simulasi(gui=True, plot=pilihan.plot, judul=mode)
     sim.cbf_ada = cbf is not None
-    pembanding = {ise.MODE_PD: "", ise.MODE_PD_CBF: ""}       # nama file PENGUJIAN pembanding tiap mode
+    pembanding = {ise.MODE_PD: "", ise.MODE_PD_CBF: ""}       # nama file PERBANDINGAN pembanding tiap mode
     sim.teks_pembanding = teks_pembanding(pembanding)
+
+    # Constraint CBF-QP yang dipakai = kotak centang h1 .. h8 di jendela Kontrol (awal: C_MODE Balancing).
+    if cbf is not None:
+        jumlah_h = cbf.NH
+        centang_awal = [bool(m) for m in cbf.mask_mode[MODE_BALANCING]]
+    else:
+        jumlah_h = max(max(pasangan) for pasangan in config.CBF_BARRIER_H.values())
+        centang_awal = [False] * jumlah_h
+    sim.atur_centang_awal(centang_awal)
+    centang_dipakai = None                 # centang yang sedang dipakai CBF-QP (None = belum diterapkan)
 
     if pd.Kp_psi == 0.0 and pd.Kd_psi == 0.0:
         print("PERHATIAN: Kp_psi dan Kd_psi di config.py masih 0, robot akan komet. Isi di jendela Kontrol.")
@@ -194,6 +212,11 @@ def main():
     pengujian_berjalan = False     # True = sedang merekam satu pengujian
     t_uji = 0.0                    # waktu sejak dorongan pengujian [s]
 
+    # Perekam perbandingan (tombol 3)
+    mode_banding = False           # True = perekaman biasa berhenti, plot kosong sampai O / P
+    banding_berjalan = False       # True = sedang merekam satu perbandingan
+    t_banding = 0.0                # waktu sejak dorongan [s]
+
     # Kemiringan lantai yang sedang dipakai, dan nilai baru yang sedang ditunggu (lihat ZETA_TUNGGU)
     zeta_dipakai = float(config.zeta_DEG)
     zeta_tunggu = zeta_dipakai
@@ -202,9 +225,11 @@ def main():
     perekam = ise.PerekamISE()             # perekaman biasa (PERCOBAAN)
     perekam.mulai(mode, ise.JENIS_PERCOBAAN)
     perekam_uji = ise.PerekamISE()         # mode pengujian (PENGUJIAN)
+    perekam_banding = ise.PerekamISE()     # perekam perbandingan (PERBANDINGAN)
     print("Hasil ISE disimpan di folder:")
     print("   ", os.path.abspath(ise.folder_jenis(ise.JENIS_PERCOBAAN)))
     print("   ", os.path.abspath(ise.folder_jenis(ise.JENIS_PENGUJIAN)))
+    print("   ", os.path.abspath(ise.folder_jenis(ise.JENIS_PERBANDINGAN)))
     print("Mulai. Mode kontrol: %s | Mode Balancing | zeta %.1f deg" % (mode, zeta_dipakai))
 
     t = 0.0
@@ -228,7 +253,39 @@ def main():
                 print("Tombol Q: keluar dan simpan.")
                 break
 
+            if "banding" in tombol_baru:
+                if not mode_banding:
+                    if mode_pengujian:
+                        if pengujian_berjalan:
+                            print("Pengujian yang sedang berjalan dibatalkan (tidak disimpan).")
+                        mode_pengujian = False
+                        pengujian_berjalan = False
+                        print("MODE PENGUJIAN (T) dimatikan.")
+                    mode_banding = True
+                    banding_berjalan = False
+                    perekam.mulai(mode, ise.JENIS_PERCOBAAN)     # perekaman biasa berhenti (data dibuang)
+                    sim.plot_tahan = True
+                    sim.reset_plot()
+                    print("PEREKAM PERBANDINGAN nyala (mode %s): tekan R (robot diletakkan ulang), lalu O / P untuk "
+                          "mulai merekam %.0f s. Tekan 3 lagi untuk mematikan." % (mode, config.DURASI_PENGUJIAN))
+                else:
+                    if banding_berjalan:
+                        print("Rekaman perbandingan yang sedang berjalan dibatalkan (tidak disimpan).")
+                    mode_banding = False
+                    banding_berjalan = False
+                    sim.plot_tahan = False
+                    perekam.mulai(mode, ise.JENIS_PERCOBAAN)
+                    t = 0.0
+                    print("PEREKAM PERBANDINGAN mati: perekaman biasa dimulai lagi.")
+
             if "t" in tombol_baru:
+                if mode_banding:
+                    if banding_berjalan:
+                        print("Rekaman perbandingan yang sedang berjalan dibatalkan (tidak disimpan).")
+                    mode_banding = False
+                    banding_berjalan = False
+                    sim.plot_tahan = False
+                    print("PEREKAM PERBANDINGAN (3) dimatikan.")
                 if not mode_pengujian:
                     mode_pengujian = True
                     pengujian_berjalan = False
@@ -246,10 +303,19 @@ def main():
                     print("Keluar dari MODE PENGUJIAN: perekaman biasa dimulai lagi.")
 
             if "e" in tombol_baru:
-                if mode_pengujian:
+                if mode_banding:
+                    if banding_berjalan:
+                        print("Tombol E: rekaman perbandingan disimpan sebelum %.0f s." % config.DURASI_PENGUJIAN)
+                        simpan_pembanding(sim, perekam_banding, pembanding)
+                        banding_berjalan = False
+                        sim.plot_tahan = True
+                        sim.reset_plot()
+                    else:
+                        print("Tombol E: tidak ada rekaman perbandingan yang sedang berjalan.")
+                elif mode_pengujian:
                     if pengujian_berjalan:
                         print("Tombol E: pengujian disimpan sebelum %.0f s." % config.DURASI_PENGUJIAN)
-                        simpan_pengujian(sim, perekam_uji, pembanding)
+                        simpan_ise(perekam_uji)
                         pengujian_berjalan = False
                     else:
                         print("Tombol E: tidak ada pengujian yang sedang berjalan.")
@@ -272,7 +338,11 @@ def main():
                     if pengujian_berjalan:
                         print("Pengujian yang sedang berjalan dibatalkan (tidak disimpan).")
                         pengujian_berjalan = False
-                    if not mode_pengujian:
+                    if banding_berjalan:
+                        print("Rekaman perbandingan yang sedang berjalan dibatalkan (tidak disimpan).")
+                        banding_berjalan = False
+                        sim.plot_tahan = True
+                    if not mode_pengujian and not mode_banding:
                         print("Ganti mode kontrol: data %s disimpan dulu." % mode)
                         simpan_ise(perekam)
                     mode = mode_baru
@@ -289,6 +359,10 @@ def main():
                 if pengujian_berjalan:
                     print("Pengujian yang sedang berjalan dibatalkan (tidak disimpan).")
                     pengujian_berjalan = False
+                if banding_berjalan:
+                    print("Rekaman perbandingan yang sedang berjalan dibatalkan (tidak disimpan).")
+                    banding_berjalan = False
+                    sim.plot_tahan = True
                 print("Tombol R: robot diletakkan ulang, ISE dan plot mulai dari 0 (data yang belum disimpan dibuang).")
                 letakkan_ulang(sim, perekam, mode)
                 mode_gerak = MODE_BALANCING
@@ -310,6 +384,10 @@ def main():
                 if pengujian_berjalan:
                     print("Pengujian yang sedang berjalan dibatalkan (tidak disimpan).")
                     pengujian_berjalan = False
+                if banding_berjalan:
+                    print("Rekaman perbandingan yang sedang berjalan dibatalkan (tidak disimpan).")
+                    banding_berjalan = False
+                    sim.plot_tahan = True
                 letakkan_ulang(sim, perekam, mode)
                 mode_gerak = MODE_BALANCING
                 komet = False
@@ -330,7 +408,22 @@ def main():
                 if tombol == "o" or tombol == "p":
                     arah_dorong = 1 if tombol == "o" else -1
                     teks_arah = "depan" if arah_dorong > 0 else "belakang"
-                    if not mode_pengujian:
+                    if mode_banding:
+                        if komet:
+                            print("komet: tekan R dulu sebelum memulai rekaman perbandingan.")
+                        elif banding_berjalan:
+                            print("Rekaman perbandingan masih berjalan (%.1f / %.0f s), dorongan diabaikan."
+                                  % (t_banding, config.DURASI_PENGUJIAN))
+                        else:
+                            sim.dorong(arah_dorong)
+                            perekam_banding.mulai(mode, ise.JENIS_PERBANDINGAN)
+                            t_banding = 0.0
+                            banding_berjalan = True
+                            sim.plot_tahan = False
+                            sim.reset_plot()                  # plot realtime mulai dari dorongan ini
+                            print("PERBANDINGAN %s dimulai: didorong ke %s %.1f N, direkam %.0f s."
+                                  % (mode, teks_arah, sim.gaya_dorong, config.DURASI_PENGUJIAN))
+                    elif not mode_pengujian:
                         sim.dorong(arah_dorong)
                         print("Didorong ke %s %.1f N" % (teks_arah, sim.gaya_dorong))
                     elif komet:
@@ -360,11 +453,18 @@ def main():
                 config.psi_max = math.radians(config.psi_max_DEG)
                 config.psi_min = -config.psi_max
 
+            # Constraint CBF-QP = kotak centang di jendela Kontrol (tidak ikut berganti dengan mode gerak).
+            centang = sim.baca_centang()
+            centang = (centang + [False] * jumlah_h)[:jumlah_h]
+            if centang != centang_dipakai:
+                centang_dipakai = centang
+                if cbf is not None:
+                    cbf.pilih_barrier([k + 1 for k in range(jumlah_h) if centang[k]])
+                sim.atur_mask_plot(centang)
+                print("Constraint CBF-QP dipakai: %s" % (ise.teks_mask(centang)))
+
             # Perintah gerak. Di Mode Balancing arah diabaikan (diatur di dalam PDControl).
-            # CBF-QP memilih constraint sesuai mode gerak (mode_cbf aman dipanggil tiap siklus).
             pd.set_command(sim.arah, mode_gerak)
-            if cbf is not None:
-                cbf.mode_cbf(mode_gerak)
             if mode_gerak == MODE_BALANCING:
                 u_belok = 0.0
             else:
@@ -387,8 +487,13 @@ def main():
                       "Tekan R (ulang), E (simpan data), atau Q (keluar + simpan)." % sebab)
                 if pengujian_berjalan:
                     print("komet saat pengujian: pengujian disimpan sampai saat komet.")
-                    simpan_pengujian(sim, perekam_uji, pembanding)
+                    simpan_ise(perekam_uji)
                     pengujian_berjalan = False
+                if banding_berjalan:
+                    print("komet saat rekaman perbandingan: disimpan sampai saat komet.")
+                    simpan_pembanding(sim, perekam_banding, pembanding)
+                    banding_berjalan = False
+                    sim.plot_tahan = True
 
             nilai_c = None                  # nilai constraint CBF-QP (dicatat di CSV), hanya mode PD + CBF-QP
             if komet:
@@ -428,7 +533,22 @@ def main():
             # ------------------------------------------------------- perekaman ISE
             # Data hanya direkam selama belum KOMET.
             if not komet:
-                if not mode_pengujian:
+                if mode_banding:
+                    if banding_berjalan:
+                        t_banding = t_banding + config.DT
+                        perekam_banding.tambah(t_banding, x, pd.error_theta, pd.error_dtheta, pd.error_psi,
+                                               pd.error_dpsi, u_PD, u, status_cbf, params, dorong, nilai_c)
+                        if t_banding >= config.DURASI_PENGUJIAN - 0.5 * config.DT:
+                            print("PERBANDINGAN %s selesai (%.0f s)." % (mode, config.DURASI_PENGUJIAN))
+                            simpan_pembanding(sim, perekam_banding, pembanding)
+                            banding_berjalan = False
+                            sim.plot_tahan = True
+                            sim.reset_plot()              # kurva sekarang dihapus, tinggal pembanding (pudar)
+                            lain = ise.MODE_PD_CBF if mode == ise.MODE_PD else ise.MODE_PD
+                            if not pembanding[lain]:
+                                print("Berikutnya: tekan %s (mode %s), R, lalu O / P dengan dorongan yang sama."
+                                      % ("2" if lain == ise.MODE_PD_CBF else "1", lain))
+                elif not mode_pengujian:
                     t = t + config.DT
                     perekam.tambah(t, x, pd.error_theta, pd.error_dtheta, pd.error_psi, pd.error_dpsi,
                                    u_PD, u, status_cbf, params, dorong, nilai_c)
@@ -438,7 +558,7 @@ def main():
                                        u_PD, u, status_cbf, params, dorong, nilai_c)
                     if t_uji >= config.DURASI_PENGUJIAN - 0.5 * config.DT:
                         print("PENGUJIAN selesai (%.0f s)." % config.DURASI_PENGUJIAN)
-                        simpan_pengujian(sim, perekam_uji, pembanding)
+                        simpan_ise(perekam_uji)
                         pengujian_berjalan = False
 
             # ----------------------------------------------------------- tampilan
@@ -446,7 +566,16 @@ def main():
                 gerak = "Mode Balancing"
             else:
                 gerak = "Mode Navigate"
-            if mode_pengujian:
+            if mode_banding:
+                perekam_aktif = perekam_banding
+                t_tampil = t_banding
+                if banding_berjalan:
+                    teks_uji = "PEREKAM PERBANDINGAN | %s | merekam t %.1f / %.0f s" \
+                        % (mode, t_banding, config.DURASI_PENGUJIAN)
+                else:
+                    teks_uji = "PEREKAM PERBANDINGAN | %s | tekan R lalu O / P (rekam %.0f s), 3 untuk mematikan" \
+                        % (mode, config.DURASI_PENGUJIAN)
+            elif mode_pengujian:
                 perekam_aktif = perekam_uji
                 t_tampil = t_uji
                 if pengujian_berjalan:
@@ -464,7 +593,7 @@ def main():
                 baris = []
                 if komet:
                     baris.append("komet, motor mati  ->  R: ulang   E: simpan data   Q: keluar + simpan")
-                elif mode_pengujian:
+                elif mode_pengujian or mode_banding:
                     baris.append(teks_uji)
                 elif mode == ise.MODE_PD:
                     baris.append("%s | %s | zeta %.1f deg" % (mode, gerak, zeta_dipakai))
@@ -480,7 +609,7 @@ def main():
                              % (perekam_aktif.ise_psi, t_tampil, kecepatan))
                 if len(perekam_aktif.gain_berubah) > 0:
                     baris.append("TUNING: " + " ".join(perekam_aktif.gain_berubah) + " diubah saat direkam")
-                sim.tampilkan(baris, mode_gerak, komet, teks_uji)
+                sim.tampilkan(baris, mode_gerak, komet, teks_uji, mode_banding)
 
             if siklus % 200 == 0 and not komet:
                 print("t %6.1f s (x%.2f) | %-6s | %-14s | psi %+6.2f deg | s %+5.2f m | dtheta %+6.2f rad/s | "
@@ -501,13 +630,16 @@ def main():
         print("Jendela PyBullet ditutup.")
     finally:
         # Selalu dijalankan, juga bila program berhenti karena error: simpan dulu, baru tutup jendela.
-        if pengujian_berjalan:
+        if banding_berjalan:
+            print("Rekaman perbandingan belum selesai: disimpan sampai saat ini.")
+            simpan_pembanding(sim, perekam_banding, pembanding)
+        elif pengujian_berjalan:
             print("Pengujian belum selesai: disimpan sampai saat ini.")
-            simpan_pengujian(sim, perekam_uji, pembanding)
-        elif not mode_pengujian:
+            simpan_ise(perekam_uji)
+        elif not mode_pengujian and not mode_banding:
             simpan_ise(perekam)
         else:
-            print("Mode pengujian: tidak ada pengujian yang belum disimpan.")
+            print("Tidak ada pengujian / rekaman perbandingan yang belum disimpan.")
         sim.cetak_params()
         sim.tutup()
 

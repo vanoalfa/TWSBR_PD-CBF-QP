@@ -101,6 +101,15 @@ def quaternion_dari_matriks(m):
     return [x, y, z, w]
 
 
+def label_constraint():
+    """Label kotak centang constraint CBF-QP: {nomor h: teks}, dari config.CBF_BARRIER_H."""
+    label = {}
+    for nama, (atas, bawah) in config.CBF_BARRIER_H.items():
+        label[atas] = "h%d  %s maks" % (atas, nama)
+        label[bawah] = "h%d  %s min" % (bawah, nama)
+    return label
+
+
 def nilai_awal_params():
     """Nilai awal tiap parameter: gain dari config.py, gaya dorong dari config.GAYA_DORONG_AWAL."""
     nilai = {}
@@ -142,8 +151,9 @@ def cetak_nilai(nilai, awal):
 #
 # Jendela Kontrol (Qt) dan jendela plot (matplotlib) dijalankan di PROSES TERPISAH dari PyBullet, jadi bila
 # jendelanya gagal / crash, simulasi tetap jalan. Data dikirim antar proses lewat antrean:
-#     jendela -> simulasi : ("nilai", dict parameter), ("tombol", huruf baru ditekan / "mode_pd" / "mode_cbf"),
-#                           ("tahan", dict tombol ditahan)
+#     jendela -> simulasi : ("nilai", dict parameter), ("tombol", huruf baru ditekan / "mode_pd" / "mode_cbf" /
+#                           "banding"), ("tahan", dict tombol ditahan), ("centang", list constraint CBF dicentang)
+#     simulasi -> jendela : ("centang", list) sekali di awal: centang awal constraint CBF
 #     simulasi -> jendela : ("status", dict) untuk menyalakan tombol dan menulis mode / dorongan
 # Pasang Qt:  pip install PyQt5
 # =============================================================================
@@ -197,6 +207,8 @@ def proses_kontrol(antrean, antrean_masuk, berhenti, platform):
                     break
                 if jenis == "status":
                     status = isi
+                if jenis == "centang":
+                    jendela.atur_centang(isi)
             if status is not None:
                 jendela.tampilkan_status(status)
 
@@ -217,6 +229,7 @@ class PenghubungKontrol:
         self.awal = nilai_awal_params()
         self.nilai = dict(self.awal)
         self.tombol_baru = []          # tombol B N O P yang baru ditekan dan belum diambil
+        self.centang = None            # constraint CBF yang dicentang (list bool), None = belum ada kiriman
         self.tahan = {"w": False, "a": False, "s": False, "d": False, "o": False, "p": False}
         self.status_terakhir = None
         self.aktif = False
@@ -261,6 +274,8 @@ class PenghubungKontrol:
                 self.tombol_baru.append(isi)
             if jenis == "tahan":
                 self.tahan = isi
+            if jenis == "centang":
+                self.centang = list(isi)
         if not self.proses.is_alive():
             # Jendela ditutup: nilai parameter terakhir tetap dipakai, tombolnya dianggap lepas.
             self.aktif = False
@@ -271,6 +286,12 @@ class PenghubungKontrol:
         hasil = self.tombol_baru
         self.tombol_baru = []
         return hasil
+
+    def kirim_centang(self, centang):
+        """Centang awal constraint CBF ke jendela Kontrol."""
+        self.centang = list(centang)
+        if self.aktif:
+            self.antrean_keluar.put(("centang", list(centang)))
 
     def kirim_status(self, status):
         """Kirim status ke jendela Kontrol (hanya bila berubah)."""
@@ -294,12 +315,13 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         Gambar 3 : sumbu X = s = R*theta, sumbu Y = 0
         bawah    : arus tiap motor terhadap waktu
     Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang.
-    Batas sumbu tetap (config.PLOT_BATAS). Merah = constraint CBF (kotak psi ikut psi_max_DEG di Kontrol),
-    hitam = batas KOMET, kuning / oranye = penanda |psi| 5 / 10 deg.
+    Batas sumbu tetap (config.PLOT_BATAS). Barrier hanya psi, dpsi, dtheta, s: merah = constraint CBF yang dicentang
+    (kotak psi ikut psi_max_DEG di Kontrol), abu-abu = tidak dicentang. Hitam = batas KOMET, kuning / oranye =
+    penanda |psi| 5 / 10 deg.
     Warna kurva = mode kontrol (PD ungu, PD+CBF biru). Kurva PEMBANDING (pengujian terakhir tiap mode) digambar
     pudar di belakang kurva sekarang; di Gambar 3 pembanding PD di atas garis 0, pembanding PD+CBF di bawahnya.
-    judul = mode kontrol awal. Kiriman khusus: ("RESET",), ("MODE", mode), ("PEMBANDING", mode, label, psi, dpsi,
-    theta, dtheta)."""
+    judul = mode kontrol awal. Kiriman khusus: ("RESET",), ("MODE", mode), ("MASK", mask constraint CBF),
+    ("PEMBANDING", mode, label, psi, dpsi, theta, dtheta)."""
     os.environ["QT_QPA_PLATFORM"] = platform
     try:
         import numpy as np
@@ -335,8 +357,20 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                          fontsize=9, color="gray")
 
         psi_max_plot = config.psi_max
-        kotak_psi = ise.gambar_safety_set(gambar1, gambar2, psi_max_plot)
-        ise.gambar_batas_jarak(gambar3)
+        mask_plot = None                        # constraint CBF aktif (dikirim simulasi, lihat ("MASK", mask))
+        garis_aman = ise.gambar_safety_set(gambar1, gambar2, psi_max_plot, mask_plot)
+        batas_s = ise.gambar_batas_jarak(gambar3, mask_plot)
+
+        def judul_gambar1():
+            teks = "Gambar 1   (psi_max = %g deg)" % math.degrees(psi_max_plot)
+            if mask_plot is not None:
+                teks = teks + "   CBF aktif: " + ise.teks_mask(mask_plot)
+            gambar1.set_title(teks, fontsize=10)
+
+        def legenda_semua():
+            ise.legenda(gambar1)
+            ise.legenda(gambar2, perpanjangan=False)
+            ise.legenda(gambar3, perpanjangan=False)
 
         # Gambar 1: X = psi, Y = dpsi
         # Kurva pembanding (pudar, di belakang kurva sekarang). Gambar 3: PD di y = +0.5, PD+CBF di y = -0.5.
@@ -351,8 +385,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         titik_psi, = gambar1.plot([], [], "o", color="black", markersize=6, label="sekarang")
         gambar1.set_xlabel("psi [rad]")
         gambar1.set_ylabel("dpsi [rad/s]")
-        gambar1.set_title("Gambar 1   (psi_max = %g deg)" % math.degrees(psi_max_plot), fontsize=10)
-        gambar1.legend(fontsize=7, loc="upper right")
+        judul_gambar1()
 
         # Gambar 2: X = theta, Y = dtheta
         garis_theta, = gambar2.plot([], [], color=warna[mode_plot], linewidth=1.4)
@@ -360,12 +393,11 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         gambar2.set_xlabel("theta [rad]   (s = R*theta)")
         gambar2.set_ylabel("dtheta [rad/s]")
         gambar2.set_title("Gambar 2", fontsize=10)
-        gambar2.legend(fontsize=7, loc="upper right")
 
         # Gambar 3: X = s, Y = 0
         garis_s, = gambar3.plot([], [], color=warna[mode_plot], linewidth=2.0)
         titik_s, = gambar3.plot([], [], "o", color="black", markersize=6, label="sekarang")
-        gambar3.legend(fontsize=7, loc="upper right")
+        legenda_semua()
 
         # Arus terhadap waktu (hanya 2 batas, garis tebal menyambung)
         garis_arus, = ax_arus.plot([], [], color="tab:green")
@@ -405,6 +437,14 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                         judul_jendela()
                         ada_baru = True
                         continue
+                    if isi[0] == "MASK":
+                        # Centang constraint CBF berubah: barrier aktif merah, tidak aktif abu-abu.
+                        mask_plot = isi[1]
+                        ise.atur_safety_set(garis_aman, psi_max_plot, mask_plot)
+                        ise.atur_batas_jarak(batas_s, mask_plot)
+                        judul_gambar1()
+                        ada_baru = True
+                        continue
                     if isi[0] == "PEMBANDING":
                         _, m, label, p_psi, p_dpsi, p_theta, p_dtheta = isi
                         g1, g2, g3 = pembanding[m]
@@ -413,8 +453,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                         g3.set_data([config.R * v for v in p_theta], [tinggi_s[m]] * len(p_theta))
                         for g in (g1, g2, g3):
                             g.set_label("pembanding " + label)
-                        for ax in (gambar1, gambar2, gambar3):
-                            ax.legend(fontsize=7, loc="upper right")
+                        legenda_semua()
                         ada_baru = True
                         continue
                     if isi[0] == "RESET":
@@ -430,11 +469,8 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     if psi_max_baru != psi_max_plot:
                         # psi_max diubah di jendela Kontrol: kotak psi digeser
                         psi_max_plot = psi_max_baru
-                        kotak_psi[0].set_xdata([-psi_max_plot, -psi_max_plot])
-                        kotak_psi[1].set_xdata([psi_max_plot, psi_max_plot])
-                        kotak_psi[4].set_xdata([-psi_max_plot, psi_max_plot, psi_max_plot, -psi_max_plot,
-                                                -psi_max_plot])
-                        gambar1.set_title("Gambar 1   (psi_max = %g deg)" % math.degrees(psi_max_plot), fontsize=10)
+                        ise.atur_safety_set(garis_aman, psi_max_plot, mask_plot)
+                        judul_gambar1()
                         fig.canvas.draw_idle()
                     data_t.append(t)
                     data_psi.append(psi)
@@ -480,7 +516,8 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 
 class JendelaKontrol:
     """Jendela Qt "ATERA - Kontrol":
-        - paling atas : tombol mode kontrol PD (ungu) / PD + CBF-QP (biru), atau keyboard 1 / 2
+        - paling atas : tombol mode kontrol PD (ungu) / PD + CBF-QP (biru) (keyboard 1 / 2), perekam perbandingan
+                        (keyboard 3), dan kotak centang constraint CBF-QP yang dipakai (h1 .. h8)
         - bagian atas : tombol W A S D, B N, O P (bisa diklik / ditahan dengan mouse, atau ditekan di keyboard)
         - bagian bawah: kolom angka tiap parameter (dua blok: gain + lingkungan, dan Alpha). Kolom berwarna = beda dari config.py
 
@@ -502,9 +539,10 @@ class JendelaKontrol:
         self.tahan_terkirim = None
         self.status = {"judul": "", "mode_balancing": True, "tahan": {}, "dorong": "dorong: -", "arah_dorong": 0,
                        "komet": False, "mode_pengujian": False, "pengujian": "", "cbf_ada": True,
-                       "pembanding": ""}
+                       "pembanding": "", "mode_banding": False}
 
         self.root = None               # jendela Qt; None bila gagal dibuat atau sudah ditutup
+        self.sedang_atur_centang = False
         self.pesan = ""
         self.isian = {}
         self.tombol = {}
@@ -530,16 +568,37 @@ class JendelaKontrol:
         label.setStyleSheet("font-weight: bold")
         baris_mode.addWidget(label)
         self.tombol_mode = {}
-        for kunci, teks in (("mode_pd", "1  |  PD"), ("mode_cbf", "2  |  PD + CBF-QP")):
+        for kunci, teks in (("mode_pd", "1  |  PD"), ("mode_cbf", "2  |  PD + CBF-QP"),
+                            ("banding", "3  |  rekam perbandingan")):
             tombol = QtWidgets.QPushButton(teks)
-            tombol.setFixedSize(150, 34)
+            tombol.setFixedSize(170 if kunci == "banding" else 150, 34)
             tombol.setFocusPolicy(QtCore.Qt.NoFocus)
-            tombol.setToolTip("Ganti mode kontrol: data sekarang disimpan, lalu robot diletakkan ulang")
+            if kunci == "banding":
+                tombol.setToolTip("Nyala / mati perekam perbandingan: R lalu O / P = mulai rekam, disimpan otomatis "
+                                  "dan jadi pembanding mode itu")
+            else:
+                tombol.setToolTip("Ganti mode kontrol: data sekarang disimpan, lalu robot diletakkan ulang")
             tombol.clicked.connect(lambda dicentang=False, k=kunci: self.kirim(("tombol", k)))
             baris_mode.addWidget(tombol)
             self.tombol_mode[kunci] = tombol
         baris_mode.addStretch(1)
         susunan.addLayout(baris_mode)
+
+        # Kotak centang constraint CBF-QP (h1 .. h8): yang dicentang = dipakai CBF-QP, di mode Balancing maupun
+        # Navigate. Centang awal dikirim simulasi (C_MODE Balancing di WORKPLACE cbf_qp.py).
+        baris_centang = QtWidgets.QHBoxLayout()
+        label = QtWidgets.QLabel("Constraint CBF-QP:")
+        label.setStyleSheet("font-weight: bold")
+        baris_centang.addWidget(label)
+        self.centang = {}
+        for nomor, teks in sorted(label_constraint().items()):
+            kotak = QtWidgets.QCheckBox(teks)
+            kotak.setFocusPolicy(QtCore.Qt.NoFocus)
+            kotak.toggled.connect(lambda dicentang=False: self.kirim_centang())
+            baris_centang.addWidget(kotak)
+            self.centang[nomor] = kotak
+        baris_centang.addStretch(1)
+        susunan.addLayout(baris_centang)
         self.label_pembanding = QtWidgets.QLabel("")
         self.label_pembanding.setStyleSheet("color: gray")
         susunan.addWidget(self.label_pembanding)
@@ -649,7 +708,7 @@ class JendelaKontrol:
 
         self.saringan = Saringan(self)
         self.app.installEventFilter(self.saringan)
-        self.kode_mode = {QtCore.Qt.Key_1: "mode_pd", QtCore.Qt.Key_2: "mode_cbf"}
+        self.kode_mode = {QtCore.Qt.Key_1: "mode_pd", QtCore.Qt.Key_2: "mode_cbf", QtCore.Qt.Key_3: "banding"}
         self.kode_tombol = {QtCore.Qt.Key_W: "w", QtCore.Qt.Key_A: "a", QtCore.Qt.Key_S: "s",
                             QtCore.Qt.Key_D: "d", QtCore.Qt.Key_B: "b", QtCore.Qt.Key_N: "n",
                             QtCore.Qt.Key_O: "o", QtCore.Qt.Key_P: "p", QtCore.Qt.Key_Q: "q",
@@ -666,6 +725,23 @@ class JendelaKontrol:
     def kirim(self, pesan):
         if self.antrean is not None:
             self.antrean.put(pesan)
+
+    def daftar_centang(self):
+        """list bool constraint 1 .. N (N = nomor h terbesar di kotak centang)."""
+        jumlah = max(self.centang) if self.centang else 0
+        return [self.centang[n].isChecked() if n in self.centang else False for n in range(1, jumlah + 1)]
+
+    def kirim_centang(self):
+        if not self.sedang_atur_centang:
+            self.kirim(("centang", self.daftar_centang()))
+
+    def atur_centang(self, centang):
+        """Centang dari simulasi (awal). Dikirim balik sekali supaya simulasi dan jendela sama."""
+        self.sedang_atur_centang = True
+        for nomor, kotak in self.centang.items():
+            kotak.setChecked(nomor - 1 < len(centang) and bool(centang[nomor - 1]))
+        self.sedang_atur_centang = False
+        self.kirim_centang()
 
     def saring_keyboard(self, kejadian):
         """Mengembalikan True bila tombol keyboard dipakai di sini (tidak diteruskan ke widget)."""
@@ -761,8 +837,11 @@ class JendelaKontrol:
         self.tombol["o"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white") if menyala_o else "")
         self.tombol["p"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white") if menyala_p else "")
 
+        mode_banding = status.get("mode_banding", False)
         self.tombol["t"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_UJI, "white")
-                                       if status.get("mode_pengujian", False) else "")
+                                       if status.get("mode_pengujian", False) and not mode_banding else "")
+        self.tombol_mode["banding"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_BANDING, "white")
+                                                  if mode_banding else "")
 
         # Mode kontrol: tombol mode yang aktif diberi warna kurvanya (PD ungu, PD + CBF-QP biru).
         cbf_ada = status.get("cbf_ada", True)
@@ -778,7 +857,8 @@ class JendelaKontrol:
             self.label_mode.setStyleSheet("font-weight: bold; color: #b3261e")
         elif status.get("mode_pengujian", False):
             self.label_mode.setText(status.get("pengujian", "MODE PENGUJIAN"))
-            self.label_mode.setStyleSheet("font-weight: bold; color: %s" % config.WARNA_QT_UJI)
+            self.label_mode.setStyleSheet("font-weight: bold; color: %s"
+                                          % (config.WARNA_QT_BANDING if mode_banding else config.WARNA_QT_UJI))
         else:
             self.label_mode.setText("Mode kontrol: %s   |   %s" % (status["judul"],
                                     "Mode Balancing" if mode_balancing else "Mode Navigate"))
@@ -869,6 +949,8 @@ class Simulasi:
         self.judul = judul             # mode kontrol sekarang (ise.MODE_PD / ise.MODE_PD_CBF), lihat atur_mode()
         self.cbf_ada = True            # False = CBF-QP gagal disiapkan, tombol PD + CBF-QP dimatikan
         self.teks_pembanding = ""      # ditulis di jendela Kontrol
+        self.plot_tahan = False        # True = data tidak dikirim ke plot realtime (perekam perbandingan menunggu O / P)
+        self.centang_awal = []         # constraint CBF dicentang bila jendela Kontrol tidak ada
 
         p.connect(p.GUI if gui else p.DIRECT)
         p.setGravity(0.0, 0.0, -config.g)
@@ -1187,14 +1269,32 @@ class Simulasi:
         """Plot realtime dikosongkan dan waktunya mulai lagi dari 0 (dipanggil setiap robot diletakkan ulang)."""
         self.waktu = 0.0
         if self.plot is not None:
-            self.plot_kiriman = [("RESET",)]
+            # data lama dibuang, kiriman khusus (MODE, MASK, PEMBANDING) yang belum terkirim tetap dikirim
+            self.plot_kiriman = [k for k in self.plot_kiriman if isinstance(k[0], str)] + [("RESET",)]
 
     def putus_garis_plot(self):
         """Garis di plot realtime diputus (robot diletakkan ulang atau theta dinolkan), supaya tidak ada
         garis lurus yang melompat dari keadaan lama ke keadaan baru."""
-        if self.plot is not None:
+        if self.plot is not None and not self.plot_tahan:
             kosong = float("nan")
             self.plot_kiriman.append((self.waktu, kosong, kosong, kosong, kosong, kosong, config.psi_max))
+
+    def atur_centang_awal(self, centang):
+        """Centang awal constraint CBF (dari atera_main.py), dikirim ke jendela Kontrol."""
+        self.centang_awal = [bool(c) for c in centang]
+        if self.kontrol is not None:
+            self.kontrol.kirim_centang(self.centang_awal)
+
+    def baca_centang(self):
+        """Constraint CBF yang dicentang sekarang (list bool, urutan DAFTAR_C)."""
+        if self.kontrol is not None and self.kontrol.centang is not None:
+            return list(self.kontrol.centang)
+        return list(self.centang_awal)
+
+    def atur_mask_plot(self, mask):
+        """Constraint CBF aktif ke plot realtime (barrier aktif merah, tidak aktif abu-abu)."""
+        if self.plot is not None:
+            self.plot_kiriman.append(("MASK", [bool(m) for m in mask]))
 
     def atur_mode(self, mode):
         """Mode kontrol diganti (tombol PD / PD + CBF-QP): jendela Kontrol dan warna kurva plot ikut."""
@@ -1278,7 +1378,7 @@ class Simulasi:
 
         # Catat data plot: psi, theta, dan arus tiap motor (i = u / K_t).
         self.waktu = self.waktu + config.DT
-        if self.plot is not None:
+        if self.plot is not None and not self.plot_tahan:
             self.plot_kiriman.append((self.waktu, float(self.x_terakhir[2]), float(self.x_terakhir[3]),
                                       float(self.x_terakhir[0]), float(self.x_terakhir[1]),
                                       u / config.MOTOR_KT, config.psi_max))
@@ -1300,7 +1400,8 @@ class Simulasi:
         """Baca tombol dari jendela Kontrol (utama) dan dari keyboard di jendela PyBullet (cadangan).
 
         Mengembalikan daftar tombol yang baru ditekan: 'b', 'n', 'o', 'p', 'q', 'r', 'e', 't',
-        'mode_pd' (tombol PD / keyboard 1), 'mode_cbf' (tombol PD + CBF-QP / keyboard 2).
+        'mode_pd' (tombol PD / keyboard 1), 'mode_cbf' (tombol PD + CBF-QP / keyboard 2),
+        'banding' (perekam perbandingan / keyboard 3).
         Tombol gerak (ditahan) disimpan di:
             self.arah  : +1 maju (W), -1 mundur (S), 0 lepas
             self.belok : -1 kiri (A), +1 kanan (D), 0 lepas
@@ -1340,7 +1441,7 @@ class Simulasi:
         for huruf in ("b", "n", "o", "p", "q", "r", "e", "t"):
             if baru_ditekan(huruf) and huruf not in hasil:
                 hasil.append(huruf)
-        for angka, kunci in (("1", "mode_pd"), ("2", "mode_cbf")):
+        for angka, kunci in (("1", "mode_pd"), ("2", "mode_cbf"), ("3", "banding")):
             if baru_ditekan(angka) and kunci not in hasil:
                 hasil.append(kunci)
         return hasil
@@ -1555,13 +1656,14 @@ class Simulasi:
         self.plot_kiriman = []
 
     # ---------------------------------------------------------------- tampilan
-    def tampilkan(self, baris, mode_gerak, komet=False, pengujian=""):
+    def tampilkan(self, baris, mode_gerak, komet=False, pengujian="", banding=False):
         """Perbarui semua tampilan. Dipanggil dari atera_main.py beberapa kali per detik.
 
         baris          : daftar teks parameter (ditulis di kiri atas jendela PyBullet)
         mode_gerak     : MODE_BALANCING atau MODE_NAVIGATE
         komet          : True = KOMET, motor dimatikan (ditampilkan di jendela Kontrol)
-        pengujian      : teks status mode pengujian ("" = tidak dalam mode pengujian)
+        pengujian      : teks status mode pengujian / perekam perbandingan ("" = tidak dalam mode itu)
+        banding        : True = perekam perbandingan (tombol 3) menyala
         """
         if not self.gui:
             return
@@ -1596,7 +1698,8 @@ class Simulasi:
                                        "tahan": dict(self.ditahan), "dorong": teks_dorong,
                                        "arah_dorong": arah_dorong, "komet": bool(komet),
                                        "mode_pengujian": pengujian != "", "pengujian": pengujian,
-                                       "cbf_ada": self.cbf_ada, "pembanding": self.teks_pembanding})
+                                       "cbf_ada": self.cbf_ada, "pembanding": self.teks_pembanding,
+                                       "mode_banding": bool(banding)})
         if self.hitung_tampil % config.PLOT_SETIAP == 0:
             self.gambar_plot()
 

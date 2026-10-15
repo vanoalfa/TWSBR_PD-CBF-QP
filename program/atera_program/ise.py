@@ -9,8 +9,9 @@ Nomor KE-XX naik otomatis per tanggal, mode, dan jenis. Kolom CSV sama dengan si
 Penyimpanan saat robot masih balancing berjalan di PROSES TERPISAH (simpan(latar=True)) supaya loop kontrol tidak
 tertahan matplotlib.
 Gambar: .png dan .eps (vektor, untuk LaTeX). Batas sumbu tetap (config.PLOT_BATAS): psi +-1 rad, dpsi +-10 rad/s,
-theta +-60 rad, dtheta +-30 rad/s, s +-3 m. Warna garis:
-    merah          : constraint barrier CBF-QP (psi_max dari CSV kolom psi_max_DEG, dpsi_max, dtheta_max, s_max)
+theta +-60 rad, dtheta +-30 rad/s, s +-3 m. Barrier yang digambar: psi, dpsi, dtheta, s. Warna garis:
+    merah          : barrier CBF-QP yang aktif (kolom c_h tidak kosong; psi_max dari CSV kolom psi_max_DEG)
+    abu-abu tipis  : barrier yang constraint-nya tidak dipakai di mode gerak itu
     hitam          : batas KOMET (|psi| = SAFE_TILT_DEG, |s| = S_KOMET)
     kuning, oranye : penanda |psi| = 5 deg dan 10 deg (config.PLOT_PENANDA_PSI), hanya gambar
 
@@ -207,10 +208,14 @@ class PerekamISE:
 # Membaca CSV dan menghitung metrik
 # =============================================================================
 def baca_csv(path):
-    """Isi CSV sebagai dict kolom -> list (status_cbf berupa teks), ditambah 'gain', 'zeta_deg', 'psi_max_deg'."""
+    """Isi CSV sebagai dict kolom -> list (status_cbf berupa teks), ditambah 'gain', 'zeta_deg', 'psi_max_deg',
+    'mask' (constraint CBF yang dipakai, dari kolom c_h)."""
     with open(path, newline="") as f:
         pembaca = csv.DictReader(f)
         nama_alpha = [k for k in (pembaca.fieldnames or []) if re.fullmatch(r"Alpha_\d+", k)]
+        kolom_c = sorted((k for k in (pembaca.fieldnames or []) if re.fullmatch(r"c_h\d+", k)),
+                         key=lambda k: int(k[3:]))
+        c_dipakai = [False] * len(kolom_c)
         data = {k: [] for k in KOLOM_ANGKA + nama_alpha}
         data["status_cbf"] = []
         for baris in pembaca:
@@ -218,6 +223,11 @@ def baca_csv(path):
                 teks = baris.get(k)
                 data[k].append(float(teks) if teks not in (None, "") else 0.0)
             data["status_cbf"].append(baris.get("status_cbf") or "-")
+            for i, k in enumerate(kolom_c):
+                if baris.get(k) not in (None, ""):
+                    c_dipakai[i] = True
+    # constraint CBF yang dipakai (kolom c_h tidak kosong). None = mode PD / file lama: semua barrier merah
+    data["mask"] = c_dipakai if any(c_dipakai) else None
     # File lama tanpa kolom psi_max_DEG: dipakai config.psi_max_DEG
     psi_max_deg = data["psi_max_DEG"][-1] if data["psi_max_DEG"] and data["psi_max_DEG"][-1] > 0 else config.psi_max_DEG
     data["gain"] = {k: (data[k][0] if data[k] else 0.0) for k in KOLOM_GAIN_PD + nama_alpha}
@@ -370,66 +380,96 @@ def _penanda_psi(ax, sumbu="y"):
                   label=("|psi| = %g deg" % derajat) if tanda == 1 else None)
 
 
-def _batas(ax, nilai, label="batas safety set CBF"):
-    for tanda in (1, -1):
-        ax.axhline(tanda * nilai, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS * 1.2,
-                   linestyle="--", zorder=1.4, label=label if tanda == 1 else None)
+def _aktif(mask, nama):
+    """(batas atas aktif, batas bawah aktif) barrier `nama` ("psi", "dpsi", "s", "dtheta") dari mask constraint
+    (config.CBF_BARRIER_H). mask None = semua dianggap aktif (mode PD / file lama)."""
+    atas, bawah = config.CBF_BARRIER_H[nama]
+    if mask is None:
+        return True, True
+    return (atas - 1 < len(mask) and bool(mask[atas - 1])), (bawah - 1 < len(mask) and bool(mask[bawah - 1]))
 
 
-def _kotak(ax, x_batas, y_batas, x_sumbu, y_sumbu):
-    """Safety set dua variabel: kotak barrier (tebal) + perpanjangan garis (tipis putus-putus). Batas sumbu tetap."""
-    for tanda in (1, -1):
-        ax.axvline(tanda * x_batas, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--",
-                   zorder=1.4, label="perpanjangan batas" if tanda == 1 else None)
-        ax.axhline(tanda * y_batas, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS, linestyle="--",
-                   zorder=1.4)
-    ax.plot([-x_batas, x_batas, x_batas, -x_batas, -x_batas], [-y_batas, -y_batas, y_batas, y_batas, -y_batas],
-            color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TEBAL, zorder=1.5,
-            label="batas safety set (barrier)")
+def _gaya(aktif, tebal):
+    """Barrier aktif: merah (tebal / putus-putus tipis). Tidak aktif: abu-abu tipis."""
+    if aktif:
+        return {"color": config.PLOT_SAFETY_WARNA, "linewidth": config.PLOT_SAFETY_TEBAL if tebal else
+                config.PLOT_SAFETY_TIPIS * 1.2, "linestyle": "-" if tebal else "--", "zorder": 1.5 if tebal else 1.4}
+    return {"color": config.PLOT_NONAKTIF_WARNA, "linewidth": config.PLOT_SAFETY_TIPIS,
+            "linestyle": "--" if tebal else ":", "zorder": 1.2}
+
+
+def _batas(ax, nilai, aktif=(True, True), tebal=False, sumbu="y"):
+    """Garis barrier di +nilai (batas atas) dan -nilai (batas bawah)."""
+    garis = ax.axhline if sumbu == "y" else ax.axvline
+    garis(nilai, **_gaya(aktif[0], tebal))
+    garis(-nilai, **_gaya(aktif[1], tebal))
+
+
+def _kotak(ax, x_batas, y_batas, x_sumbu, y_sumbu, aktif_x=(True, True), aktif_y=(True, True)):
+    """Safety set dua variabel: tiap sisi kotak barrier (tebal) + perpanjangan (tipis). Batas sumbu tetap."""
+    sisi = (([x_batas, x_batas], [-y_batas, y_batas], aktif_x[0], "x", x_batas),
+            ([-x_batas, -x_batas], [-y_batas, y_batas], aktif_x[1], "x", -x_batas),
+            ([-x_batas, x_batas], [y_batas, y_batas], aktif_y[0], "y", y_batas),
+            ([-x_batas, x_batas], [-y_batas, -y_batas], aktif_y[1], "y", -y_batas))
+    for xs, ys, aktif, arah, nilai in sisi:
+        ax.plot(xs, ys, **_gaya(aktif, True))
+        (ax.axvline if arah == "x" else ax.axhline)(nilai, **_gaya(aktif, False))
     ax.set_xlim(-x_sumbu, x_sumbu)
     ax.set_ylim(-y_sumbu, y_sumbu)
 
 
-def _rapikan(ax, judul, xlabel, ylabel, loc="upper right"):
+def _legenda(ax, loc="upper right"):
+    """Legenda: contoh barrier aktif / tidak aktif + garis berlabel (kurva, penanda, KOMET)."""
+    from matplotlib.lines import Line2D
+    proksi = [Line2D([], [], label="barrier CBF aktif", **{k: v for k, v in _gaya(True, True).items() if k != "zorder"}),
+              Line2D([], [], label="barrier CBF tidak aktif",
+                     **{k: v for k, v in _gaya(False, True).items() if k != "zorder"})]
+    garis, label = ax.get_legend_handles_labels()
+    ax.legend(proksi + garis, [g.get_label() for g in proksi] + label, fontsize=7, loc=loc)
+
+
+def _rapikan(ax, judul, xlabel, ylabel, loc="upper right", barrier=True):
     ax.set_title(judul, fontsize=10)
     ax.set_xlabel(xlabel)
     ax.set_ylabel(ylabel)
     ax.grid(True, color="0.85")
-    ax.legend(fontsize=7, loc=loc)
+    if barrier:
+        _legenda(ax, loc)
+    else:
+        ax.legend(fontsize=7, loc=loc)
 
 
-def _grafik_waktu(ax, kumpulan, kolom, judul, satuan, batas, sumbu, label_batas="batas safety set CBF"):
-    """kumpulan: list (label, warna, data). batas: garis safety set (None = tidak ada), sumbu: batas sumbu Y tetap."""
+def _grafik_waktu(ax, kumpulan, kolom, judul, satuan, batas, sumbu, aktif=(True, True)):
+    """kumpulan: list (label, warna, data). batas: nilai barrier (None = tidak ada), sumbu: batas sumbu Y tetap."""
     for label, warna, data in kumpulan:
         ax.plot(data["t_s"], data[kolom], color=warna, linewidth=1.0, label=label, zorder=2)
     if batas is not None:
-        _batas(ax, batas, label_batas)
+        _batas(ax, batas, aktif)
     if sumbu is not None:
         ax.set_ylim(-sumbu, sumbu)
-    _rapikan(ax, judul, "t [s]", satuan)
+    _rapikan(ax, judul, "t [s]", satuan, barrier=batas is not None)
 
 
-def _grafik_psi(ax, kumpulan, psi_max_deg, judul):
-    """psi(t) [rad], sumbu +-PLOT_BATAS psi: psi_max (merah), penanda 5 / 10 deg, KOMET (hitam)."""
+def _grafik_psi(ax, kumpulan, psi_max_deg, judul, mask=None):
+    """psi(t) [rad], sumbu +-PLOT_BATAS psi: barrier psi_max, penanda 5 / 10 deg, KOMET (hitam)."""
     for label, warna, data in kumpulan:
         ax.plot(data["t_s"], data["psi_rad"], color=warna, linewidth=1.0, label=label, zorder=2)
-    _batas(ax, math.radians(psi_max_deg), "psi_max = %g deg (CBF)" % psi_max_deg)
+    _batas(ax, math.radians(psi_max_deg), _aktif(mask, "psi"))
     _penanda_psi(ax, "y")
     _komet(ax, math.radians(config.SAFE_TILT_DEG), "KOMET |psi| = %g deg" % config.SAFE_TILT_DEG)
     ax.set_ylim(-config.PLOT_BATAS["psi"], config.PLOT_BATAS["psi"])
-    _rapikan(ax, judul, "t [s]", "psi [rad]")
+    _rapikan(ax, "%s   (psi_max = %g deg)" % (judul, psi_max_deg), "t [s]", "psi [rad]")
 
 
-def _grafik_s(ax, kumpulan, judul):
-    """s(t) = R*theta [m], sumbu +-PLOT_BATAS s: s_max (merah) dan KOMET S_KOMET (hitam)."""
-    _grafik_waktu(ax, kumpulan, "s_m", judul, "s [m]", config.s_max, config.PLOT_BATAS["s"], "s_max = %g m (CBF)"
-                  % config.s_max)
+def _grafik_s(ax, kumpulan, judul, mask=None):
+    """s(t) = R*theta [m], sumbu +-PLOT_BATAS s: barrier s_max dan KOMET S_KOMET (hitam)."""
     _komet(ax, config.S_KOMET, "KOMET |s| = %g m" % config.S_KOMET)
-    ax.legend(fontsize=7, loc="upper right")
+    _grafik_waktu(ax, kumpulan, "s_m", judul, "s [m]", config.s_max, config.PLOT_BATAS["s"], _aktif(mask, "s"))
 
 
-def _fase_psi(ax, kumpulan, psi_max_deg):
-    _kotak(ax, math.radians(psi_max_deg), config.dpsi_max, config.PLOT_BATAS["psi"], config.PLOT_BATAS["dpsi"])
+def _fase_psi(ax, kumpulan, psi_max_deg, mask=None):
+    _kotak(ax, math.radians(psi_max_deg), config.dpsi_max, config.PLOT_BATAS["psi"], config.PLOT_BATAS["dpsi"],
+           _aktif(mask, "psi"), _aktif(mask, "dpsi"))
     _penanda_psi(ax, "x")
     _komet(ax, math.radians(config.SAFE_TILT_DEG), "KOMET |psi| = %g deg" % config.SAFE_TILT_DEG, "x")
     for label, warna, data in kumpulan:
@@ -437,13 +477,22 @@ def _fase_psi(ax, kumpulan, psi_max_deg):
     _rapikan(ax, "Bidang fase psi - dpsi  (psi_max = %g deg)" % psi_max_deg, "psi [rad]", "dpsi [rad/s]")
 
 
-def _fase_theta(ax, kumpulan):
-    _kotak(ax, config.s_max / config.R, config.dtheta_max, config.PLOT_BATAS["theta"], config.PLOT_BATAS["dtheta"])
-    _komet(ax, config.S_KOMET / config.R, "KOMET |s| = %g m" % config.S_KOMET, "x")
+def _fase_theta(ax, kumpulan, mask=None):
+    """Bidang fase theta - dtheta: hanya barrier dtheta (theta tidak punya barrier; batas jarak ada di grafik s)."""
+    _batas(ax, config.dtheta_max, _aktif(mask, "dtheta"), tebal=True)
     for label, warna, data in kumpulan:
         ax.plot(data["theta_rad"], data["dtheta_rad_s"], color=warna, linewidth=0.8, label=label, zorder=2)
-    _rapikan(ax, "Bidang fase theta - dtheta  (batas theta = s_max / R)", "theta [rad]   (s = R*theta)",
-             "dtheta [rad/s]")
+    ax.set_xlim(-config.PLOT_BATAS["theta"], config.PLOT_BATAS["theta"])
+    ax.set_ylim(-config.PLOT_BATAS["dtheta"], config.PLOT_BATAS["dtheta"])
+    _rapikan(ax, "Bidang fase theta - dtheta", "theta [rad]   (s = R*theta)", "dtheta [rad/s]")
+
+
+def teks_mask(mask):
+    """'h1 h2 ...' constraint aktif, '' bila mask None."""
+    if mask is None:
+        return ""
+    aktif = ["h%d" % (k + 1) for k in range(len(mask)) if mask[k]]
+    return " ".join(aktif) if aktif else "-"
 
 
 def _tabel(ax, kolom, isi, lebar):
@@ -464,16 +513,18 @@ def gambar_percobaan(data, nama, path_png):
 
     fig = plt.figure(figsize=(14, 19))
     kisi = fig.add_gridspec(5, 2, height_ratios=[1, 1, 1, 1.15, 1.25])
-    fig.suptitle("%s  |  durasi %.1f s  |  zeta %.1f deg  |  loop %.0f Hz\n%s"
-                 % (nama, m["durasi"], data["zeta_deg"], m["loop_hz"], bungkus(teks_gain(mode, data["gain"]))),
+    mask = data["mask"]
+    teks_c = ("\nconstraint CBF-QP aktif: " + teks_mask(mask)) if mask is not None else ""
+    fig.suptitle("%s  |  durasi %.1f s  |  zeta %.1f deg  |  loop %.0f Hz\n%s%s"
+                 % (nama, m["durasi"], data["zeta_deg"], m["loop_hz"], bungkus(teks_gain(mode, data["gain"])), teks_c),
                  fontsize=10)
 
-    _grafik_psi(fig.add_subplot(kisi[0, 0]), satu, data["psi_max_deg"], "Sudut badan psi(t)")
+    _grafik_psi(fig.add_subplot(kisi[0, 0]), satu, data["psi_max_deg"], "Sudut badan psi(t)", mask)
     _grafik_waktu(fig.add_subplot(kisi[0, 1]), satu, "dpsi_rad_s", "Kecepatan sudut badan dpsi(t)", "dpsi [rad/s]",
-                  config.dpsi_max, config.PLOT_BATAS["dpsi"])
+                  config.dpsi_max, config.PLOT_BATAS["dpsi"], _aktif(mask, "dpsi"))
     _grafik_waktu(fig.add_subplot(kisi[1, 0]), satu, "dtheta_rad_s", "Kecepatan roda dtheta(t)", "dtheta [rad/s]",
-                  config.dtheta_max, config.PLOT_BATAS["dtheta"])
-    _grafik_s(fig.add_subplot(kisi[1, 1]), satu, "Jarak tempuh s(t) = R*theta")
+                  config.dtheta_max, config.PLOT_BATAS["dtheta"], _aktif(mask, "dtheta"))
+    _grafik_s(fig.add_subplot(kisi[1, 1]), satu, "Jarak tempuh s(t) = R*theta", mask)
 
     ax = fig.add_subplot(kisi[2, 0])
     if mode == MODE_PD_CBF:
@@ -488,7 +539,8 @@ def gambar_percobaan(data, nama, path_png):
     ax.axhline(config.u_max, color="black", linewidth=0.8, linestyle=":", label="batas arus")
     ax.axhline(-config.u_max, color="black", linewidth=0.8, linestyle=":")
     ax.set_ylim(-1.4 * config.u_max, 1.4 * config.u_max)        # u_PD di luar ini terpotong di grafik
-    _rapikan(ax, "Torsi satu roda u_PD dan u (u_PD di luar batas arus terpotong di grafik)", "t [s]", "u [N m]")
+    _rapikan(ax, "Torsi satu roda u_PD dan u (u_PD di luar batas arus terpotong di grafik)", "t [s]", "u [N m]",
+             barrier=False)
 
     ax = fig.add_subplot(kisi[2, 1])
     ax.plot(t, data["ISE_psi"], color=warna, label="ISE psi [rad^2 s]")
@@ -502,8 +554,8 @@ def gambar_percobaan(data, nama, path_png):
     garis = ax.get_lines() + ax2.get_lines()
     ax.legend(garis, [g.get_label() for g in garis], fontsize=7, loc="upper left")
 
-    _fase_psi(fig.add_subplot(kisi[3, 0]), satu, data["psi_max_deg"])
-    _fase_theta(fig.add_subplot(kisi[3, 1]), satu)
+    _fase_psi(fig.add_subplot(kisi[3, 0]), satu, data["psi_max_deg"], mask)
+    _fase_theta(fig.add_subplot(kisi[3, 1]), satu, mask)
 
     baris = [(judul, _f(m[k], fmt)) for judul, k, fmt, _ in BARIS_METRIK]
     setengah = (len(baris) + 1) // 2
@@ -584,16 +636,18 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis):
 
     fig = plt.figure(figsize=(14, 21))
     kisi = fig.add_gridspec(5, 2, height_ratios=[1, 1, 1, 1.1, 1.9])
-    fig.suptitle("%s\nPD: %s\nPD+CBF: %s\ndibandingkan pada t = 0 .. %.1f s (durasi yang lebih pendek)"
+    mask = data[MODE_PD_CBF]["mask"]
+    teks_c = ("\nconstraint CBF-QP aktif (PD+CBF): " + teks_mask(mask)) if mask is not None else ""
+    fig.suptitle("%s\nPD: %s\nPD+CBF: %s\ndibandingkan pada t = 0 .. %.1f s (durasi yang lebih pendek)%s"
                  % (nama, bungkus(teks_gain(MODE_PD, data[MODE_PD]["gain"])),
-                    bungkus(teks_gain(MODE_PD_CBF, data[MODE_PD_CBF]["gain"])), t_banding), fontsize=10)
+                    bungkus(teks_gain(MODE_PD_CBF, data[MODE_PD_CBF]["gain"])), t_banding, teks_c), fontsize=10)
     psi_max_deg = data[MODE_PD_CBF]["psi_max_deg"]
-    _grafik_psi(fig.add_subplot(kisi[0, 0]), kumpulan, psi_max_deg, "psi(t)")
+    _grafik_psi(fig.add_subplot(kisi[0, 0]), kumpulan, psi_max_deg, "psi(t)", mask)
     _grafik_waktu(fig.add_subplot(kisi[0, 1]), kumpulan, "dpsi_rad_s", "dpsi(t)", "dpsi [rad/s]", config.dpsi_max,
-                  config.PLOT_BATAS["dpsi"])
+                  config.PLOT_BATAS["dpsi"], _aktif(mask, "dpsi"))
     _grafik_waktu(fig.add_subplot(kisi[1, 0]), kumpulan, "dtheta_rad_s", "dtheta(t)", "dtheta [rad/s]",
-                  config.dtheta_max, config.PLOT_BATAS["dtheta"])
-    _grafik_s(fig.add_subplot(kisi[1, 1]), kumpulan, "s(t) = R*theta")
+                  config.dtheta_max, config.PLOT_BATAS["dtheta"], _aktif(mask, "dtheta"))
+    _grafik_s(fig.add_subplot(kisi[1, 1]), kumpulan, "s(t) = R*theta", mask)
     ax = fig.add_subplot(kisi[2, 0])
     _grafik_waktu(ax, kumpulan, "u_Nm", "Torsi ke motor u(t)", "u [N m]", None, None)
     ax.axhline(config.u_max, color="black", linewidth=0.8, linestyle=":")
@@ -601,8 +655,8 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis):
     ax.set_ylim(-1.4 * config.u_max, 1.4 * config.u_max)
     _grafik_waktu(fig.add_subplot(kisi[2, 1]), kumpulan, "ISE_psi", "ISE psi kumulatif", "ISE psi [rad^2 s]", None,
                   None)
-    _fase_psi(fig.add_subplot(kisi[3, 0]), kumpulan, psi_max_deg)
-    _fase_theta(fig.add_subplot(kisi[3, 1]), kumpulan)
+    _fase_psi(fig.add_subplot(kisi[3, 0]), kumpulan, psi_max_deg, mask)
+    _fase_theta(fig.add_subplot(kisi[3, 1]), kumpulan, mask)
     ax = fig.add_subplot(kisi[4, :])
     _tabel(ax, ["0 - %.1f s" % t_banding, label[MODE_PD], label[MODE_PD_CBF], "PD+CBF terhadap PD"], isi,
            [0.34, 0.22, 0.22, 0.18])
