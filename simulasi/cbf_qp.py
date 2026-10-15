@@ -111,9 +111,11 @@ def workplace(x, u, f, g, zeta, psi_max):
 
     # 2. Tulis constraint di bawah
     Lf_h1 = lie(h1, f)
-    c_h1 = lie(Lf_h1, f) + lie(Lf_h1, g) * u + Alpha_1 * Lf_h1 + Alpha_2 * (Lf_h1 + Alpha_1 * h1)
+    #c_h1 = lie(Lf_h1, f) + lie(Lf_h1, g) * u + Alpha_1 * Lf_h1 + Alpha_2 * (Lf_h1 + Alpha_1 * h1)
+    c_h1 = lie(h1, f) + lie(h1, g) * u + Alpha_1 * h1
     Lf_h2 = lie(h2, f)
-    c_h2 = lie(Lf_h2, f) + lie(Lf_h2, g) * u + Alpha_1 * Lf_h2 + Alpha_2 * (Lf_h2 + Alpha_1 * h2)
+    #c_h2 = lie(Lf_h2, f) + lie(Lf_h2, g) * u + Alpha_1 * Lf_h2 + Alpha_2 * (Lf_h2 + Alpha_1 * h2)
+    c_h2 = lie(h2, f) + lie(h2, g) * u + Alpha_1 * h1
 
     c_h3 = lie(h3, f) + lie(h3, g) * u + Alpha_3 * h3
     c_h4 = lie(h4, f) + lie(h4, g) * u + Alpha_3 * h4
@@ -131,7 +133,7 @@ def workplace(x, u, f, g, zeta, psi_max):
 
     # 4. Pilih constraint yang aktif di tiap mode gerak (urutan di dalam daftar bebas, isinya dari DAFTAR_C)
     C_MODE = {
-        MODE_BALANCING: [c_h1, c_h2],
+        MODE_BALANCING: [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6, c_h7, c_h8],
         MODE_NAVIGATE:  [c_h1, c_h2, c_h3, c_h4, c_h7, c_h8],      # tanpa h5, h6 (barrier jarak s)
     }
 

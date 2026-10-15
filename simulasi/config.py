@@ -103,12 +103,12 @@ BALANCE_DIRECTION_SIGN = -1.0
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 54.73 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 44.85 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 55.32 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 33.34 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
-Alpha_5 = 80.97 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
-Alpha_6 = 485.31 #84.67          # [1/s]  h7, h8 (dtheta, CBF orde 1)
+Alpha_1 = 52.05 #54.73 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 36.79 #44.85 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 41.08 #55.32 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
+Alpha_4 = 60.58 #33.34 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
+Alpha_5 = 42.65 #80.97 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
+Alpha_6 = 499.86 #485.31 #84.67          # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
