@@ -158,3 +158,12 @@ AttributeError: module 'model' has no attribute 'fg'
 2026-10-14 08:46:36,395 | ERROR | ddsm115 | motor kiri: port /dev/ttyACM0 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
 2026-10-14 08:46:36,395 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
 2026-10-14 08:46:36,591 | INFO | atera | Dihentikan dari keyboard
+2026-10-15 11:56:22,047 | ERROR | ddsm115 | motor kiri: port /dev/ttyACM0 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-15 11:56:22,047 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-15 11:56:22,093 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-15 11:56:22,596 | INFO | atera | Membuka plot realtime ...
+2026-10-15 11:56:26,265 | WARNING | atera | plot realtime gagal: proses plot berhenti (exit code -6)
+2026-10-15 11:56:26,266 | INFO | atera | Ada 3 masalah, lihat baris Masalah.
+2026-10-15 11:56:26,267 | ERROR | ddsm115 | motor kiri: port /dev/ttyACM0 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-15 11:56:26,267 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-15 11:56:27,389 | INFO | atera | Dihentikan dari keyboard

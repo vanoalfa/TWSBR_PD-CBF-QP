@@ -1,4 +1,4 @@
-"""joystick_mapping.py - mapping dan pembaca joystick Fantech WGP-13s (evdev, non-blocking).
+"""joystick_mapping.py - mapping dan pembaca joystick Fantech WGP-13s (evdev, non-blocking), dan keyboard terminal.
 
 Fungsi tombol (Konteks_ATERA.md, ditambah L3 / R3 untuk perekaman ISE):
     Tombol A : mode gerak Navigate (analog / D-Pad dipakai, Kp_theta = 0)
@@ -13,9 +13,15 @@ Fungsi tombol (Konteks_ATERA.md, ditambah L3 / R3 untuk perekaman ISE):
     L3       : mulai satu PENGUJIAN (direkam config.DURASI_PENGUJIAN detik; dorong robot dengan tangan)
     R3       : simpan PERCOBAAN sekarang, perekaman baru dimulai (robot tetap balancing)
 Perintah gerak (hanya mode Navigate): arah -1 / 0 / +1 dan belok -1 / 0 / +1, dari D-Pad atau analog kiri.
+
+Keyboard terminal (KeyboardTerminal, terminal SSH tempat GUI berjalan): aksi sama dengan joystick, lihat
+TOMBOL_KEYBOARD. Panah kiri / kanan = halaman GUI. W A S D = gerak (mode Navigate); karena terminal tidak memberi
+tahu saat tombol dilepas, "ditahan" ditebak dari pengulangan otomatis keyboard (config.KEYBOARD_TAHAN_*).
 """
 
+import os
 import select
+import sys
 import time
 
 import config
@@ -83,6 +89,30 @@ BANTUAN = (
     "R3       : simpan PERCOBAAN sekarang, rekaman baru dimulai",
     "LT / RT  : halaman GUI",
     "QUIT     : keluar (roda dimatikan, data disimpan)",
+)
+
+
+# Keyboard terminal: huruf (huruf kecil / besar sama) -> aksi (nama aksi sama dengan AKSI joystick)
+TOMBOL_KEYBOARD = {
+    "y": "KALIBRASI",
+    "m": "MULAI", "\r": "MULAI", "\n": "MULAI",          # m atau Enter
+    "x": "RODA_MATI", " ": "RODA_MATI",                   # x atau spasi
+    "b": "BALANCING",
+    "n": "NAVIGATE",
+    "1": "MODE_PD",
+    "2": "MODE_PD_CBF",
+    "t": "PENGUJIAN",
+    "e": "SIMPAN",
+    "q": "KELUAR",
+}
+PANAH = {"C": "HALAMAN_KANAN", "D": "HALAMAN_KIRI"}      # ESC [ C / ESC [ D (atau ESC O C / ESC O D)
+GERAK_KEYBOARD = {"w": ("arah", 1), "s": ("arah", -1), "a": ("belok", -1), "d": ("belok", 1)}
+
+BANTUAN_KEYBOARD = (
+    "Keyboard terminal: Y kalibrasi | M / Enter MULAI | X / Spasi roda mati | B Balancing | N Navigate",
+    "  1 / 2 mode PD / PD+CBF | T PENGUJIAN | E simpan PERCOBAAN | Q keluar | Panah kiri / kanan halaman GUI",
+    "  W / S maju / mundur, A / D belok (tahan; hanya mode Navigate, berhenti +-%.1f s setelah dilepas)"
+    % config.KEYBOARD_TAHAN_ULANG_S,
 )
 
 
@@ -183,3 +213,116 @@ class Joystick:
             except Exception:
                 pass
             self.device = None
+
+
+class KeyboardTerminal:
+    """Keyboard dari terminal tempat program berjalan (juga lewat SSH). Terminal dipasang ke mode cbreak (huruf langsung
+    terbaca tanpa Enter, tidak ditampilkan; Ctrl+C tetap menghentikan program). close() mengembalikan terminal.
+    fd: None = stdin; boleh fd lain (untuk uji)."""
+
+    def __init__(self, fd=None):
+        self.fd = fd
+        self.aktif = False
+        self.problem = "belum dibuka"
+        self.last_event = "belum ada tombol"
+        self._asli = None                  # pengaturan terminal sebelum cbreak (dikembalikan saat close)
+        self._sisa = ""                    # potongan urutan ESC yang belum lengkap
+        self._gerak = {"arah": [0, 0.0, 0], "belok": [0, 0.0, 0]}   # nilai, waktu huruf terakhir, jumlah huruf
+
+    def open(self):
+        if not config.KEYBOARD_AKTIF:
+            self.problem = "dimatikan (config.KEYBOARD_AKTIF = False)"
+            return False
+        if self.fd is None:
+            if not sys.stdin.isatty():
+                self.problem = "stdin bukan terminal (program dijalankan tanpa terminal)"
+                return False
+            self.fd = sys.stdin.fileno()
+            try:
+                import termios
+                import tty
+                self._asli = termios.tcgetattr(self.fd)
+                tty.setcbreak(self.fd)
+            except Exception as exc:
+                self.problem = "terminal tidak bisa dipasang ke mode cbreak: %s" % exc
+                return False
+        self.aktif = True
+        self.problem = ""
+        return True
+
+    def close(self):
+        if self._asli is not None:
+            try:
+                import termios
+                termios.tcsetattr(self.fd, termios.TCSADRAIN, self._asli)
+            except Exception:
+                pass
+            self._asli = None
+        self.aktif = False
+
+    def poll(self):
+        """Baca semua huruf yang menunggu (tanpa menunggu). Mengembalikan daftar aksi."""
+        if not self.aktif:
+            return []
+        teks = self._sisa
+        try:
+            while select.select([self.fd], [], [], 0)[0]:
+                data = os.read(self.fd, 256)
+                if not data:
+                    break
+                teks += data.decode("utf-8", "ignore")
+        except OSError as exc:
+            self.aktif = False
+            self.problem = "keyboard terminal gagal dibaca (%s)" % exc
+            return []
+        self._sisa = ""
+        aksi = []
+        sekarang = time.monotonic()
+        i = 0
+        while i < len(teks):
+            huruf = teks[i]
+            if huruf == "\x1b":                               # urutan ESC: panah dan tombol khusus lain
+                if i + 1 >= len(teks) or (teks[i + 1] in "[O" and i + 2 >= len(teks)):
+                    self._sisa = teks[i:]                      # belum lengkap, lanjut di poll berikutnya
+                    break
+                if teks[i + 1] in "[O":
+                    j = i + 2
+                    while j < len(teks) and not teks[j].isalpha() and teks[j] != "~":
+                        j += 1
+                    kode = teks[j] if j < len(teks) else ""
+                    if kode in PANAH:
+                        aksi.append(PANAH[kode])
+                        self.last_event = "panah %s -> %s" % ("kanan" if kode == "C" else "kiri", PANAH[kode])
+                    i = j + 1
+                else:
+                    i += 1                                     # ESC sendiri: diabaikan
+                continue
+            kecil = huruf.lower()
+            if kecil in GERAK_KEYBOARD:
+                nama, nilai = GERAK_KEYBOARD[kecil]
+                gerak = self._gerak[nama]
+                if gerak[0] != nilai:
+                    gerak[2] = 0                               # arah baru: hitung ulang tekanan
+                gerak[0], gerak[1], gerak[2] = nilai, sekarang, gerak[2] + 1
+                self.last_event = "%s -> %s %+d" % (kecil.upper(), nama, nilai)
+            elif kecil in TOMBOL_KEYBOARD:
+                aksi.append(TOMBOL_KEYBOARD[kecil])
+                if TOMBOL_KEYBOARD[kecil] == "RODA_MATI":      # roda mati: perintah gerak ikut berhenti
+                    for gerak in self._gerak.values():
+                        gerak[0] = 0
+                self.last_event = "%s -> %s" % (repr(huruf) if huruf in " \r\n" else huruf.upper(),
+                                                TOMBOL_KEYBOARD[kecil])
+            i += 1
+        return aksi
+
+    def perintah(self):
+        """(arah, belok) dari W A S D: dianggap ditahan selama pengulangan otomatis keyboard masih datang."""
+        sekarang = time.monotonic()
+        hasil = []
+        for nama in ("arah", "belok"):
+            gerak = self._gerak[nama]
+            tahan = config.KEYBOARD_TAHAN_AWAL_S if gerak[2] <= 1 else config.KEYBOARD_TAHAN_ULANG_S
+            if gerak[0] != 0 and sekarang - gerak[1] > tahan:
+                gerak[0], gerak[2] = 0, 0
+            hasil.append(gerak[0])
+        return hasil[0], hasil[1]

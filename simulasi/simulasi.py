@@ -101,6 +101,9 @@ def quaternion_dari_matriks(m):
     return [x, y, z, w]
 
 
+CENTANG_PER_BARIS = 4                   # kotak centang constraint CBF-QP per baris di jendela Kontrol
+
+
 def label_constraint():
     """Label kotak centang constraint CBF-QP: {nomor h: teks}, dari config.CBF_BARRIER_H."""
     label = {}
@@ -586,19 +589,21 @@ class JendelaKontrol:
 
         # Kotak centang constraint CBF-QP (h1 .. h8): yang dicentang = dipakai CBF-QP, di mode Balancing maupun
         # Navigate. Centang awal dikirim simulasi (C_MODE Balancing di WORKPLACE cbf_qp.py).
-        baris_centang = QtWidgets.QHBoxLayout()
+        # Dua baris: h1 h2 h3 h4 / h5 h6 h7 h8 (CENTANG_PER_BARIS kotak per baris).
+        kisi_centang = QtWidgets.QGridLayout()
+        kisi_centang.setHorizontalSpacing(14)
         label = QtWidgets.QLabel("Constraint CBF-QP:")
         label.setStyleSheet("font-weight: bold")
-        baris_centang.addWidget(label)
+        kisi_centang.addWidget(label, 0, 0)
         self.centang = {}
-        for nomor, teks in sorted(label_constraint().items()):
+        for urutan, (nomor, teks) in enumerate(sorted(label_constraint().items())):
             kotak = QtWidgets.QCheckBox(teks)
             kotak.setFocusPolicy(QtCore.Qt.NoFocus)
             kotak.toggled.connect(lambda dicentang=False: self.kirim_centang())
-            baris_centang.addWidget(kotak)
+            kisi_centang.addWidget(kotak, urutan // CENTANG_PER_BARIS, 1 + urutan % CENTANG_PER_BARIS)
             self.centang[nomor] = kotak
-        baris_centang.addStretch(1)
-        susunan.addLayout(baris_centang)
+        kisi_centang.setColumnStretch(1 + CENTANG_PER_BARIS, 1)
+        susunan.addLayout(kisi_centang)
         self.label_pembanding = QtWidgets.QLabel("")
         self.label_pembanding.setStyleSheet("color: gray")
         susunan.addWidget(self.label_pembanding)

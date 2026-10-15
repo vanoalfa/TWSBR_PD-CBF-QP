@@ -115,15 +115,17 @@ def workplace(x, u, f, g, zeta, psi_max):
     c_h1 = lie(h1, f) + lie(h1, g) * u + Alpha_1 * h1
     Lf_h2 = lie(h2, f)
     #c_h2 = lie(Lf_h2, f) + lie(Lf_h2, g) * u + Alpha_1 * Lf_h2 + Alpha_2 * (Lf_h2 + Alpha_1 * h2)
-    c_h2 = lie(h2, f) + lie(h2, g) * u + Alpha_1 * h1
+    c_h2 = lie(h2, f) + lie(h2, g) * u + Alpha_1 * h2
 
     c_h3 = lie(h3, f) + lie(h3, g) * u + Alpha_3 * h3
     c_h4 = lie(h4, f) + lie(h4, g) * u + Alpha_3 * h4
 
     Lf_h5 = lie(h5, f)
-    c_h5 = lie(Lf_h5, f) + lie(Lf_h5, g) * u + Alpha_4 * Lf_h5 + Alpha_5 * (Lf_h5 + Alpha_4 * h5)
+    #c_h5 = lie(Lf_h5, f) + lie(Lf_h5, g) * u + Alpha_4 * Lf_h5 + Alpha_5 * (Lf_h5 + Alpha_4 * h5)
+    c_h5 = lie(h5, f) + lie(h5, g) * u + Alpha_4 * h5
     Lf_h6 = lie(h6, f)
-    c_h6 = lie(Lf_h6, f) + lie(Lf_h6, g) * u + Alpha_4 * Lf_h6 + Alpha_5 * (Lf_h6 + Alpha_4 * h6)
+    #c_h6 = lie(Lf_h6, f) + lie(Lf_h6, g) * u + Alpha_4 * Lf_h6 + Alpha_5 * (Lf_h6 + Alpha_4 * h6)
+    c_h6 = lie(h6, f) + lie(h6, g) * u + Alpha_4 * h6
 
     c_h7 = lie(h7, f) + lie(h7, g) * u + Alpha_6 * h7
     c_h8 = lie(h8, f) + lie(h8, g) * u + Alpha_6 * h8

@@ -155,6 +155,13 @@ JOYSTICK_AMBANG_ANALOG = 0.5        # analog dianggap ditekan bila simpangannya 
 DPAD_MAJU_CODE = 17
 DPAD_BELOK_CODE = 16
 
+# Keyboard terminal (SSH / terminal tempat GUI berjalan), tombolnya lihat joystick_mapping.TOMBOL_KEYBOARD.
+# Terminal tidak memberi tahu saat tombol DILEPAS: W A S D dianggap masih ditahan selama pengulangan otomatis
+# keyboard terus datang. ASUMSI: jeda pengulangan pertama keyboard +-0.5 s, berikutnya +-30 ms.
+KEYBOARD_AKTIF = True
+KEYBOARD_TAHAN_AWAL_S = 0.6         # [s] tekanan pertama W A S D dianggap ditahan selama ini
+KEYBOARD_TAHAN_ULANG_S = 0.15       # [s] setelah pengulangan otomatis mulai: lepas bila tidak ada huruf baru selama ini
+
 # =============================================================================
 #                              9. RUNTIME, GUI, DAN ISE
 # =============================================================================
@@ -187,6 +194,12 @@ CBF_BARRIER_H = {"psi": (1, 2), "dpsi": (3, 4), "s": (5, 6), "dtheta": (7, 8)}
 PLOT_NONAKTIF_WARNA = "0.6"
 PLOT_WARNA_PD = "tab:purple"        # kurva mode PD (ungu)
 PLOT_WARNA_PD_CBF = "tab:blue"      # kurva mode PD + CBF-QP (biru)
+
+# Plot realtime (python3 atera_main.py --plot): jendela matplotlib di layar Raspberry Pi (monitor, VNC, atau ssh -X)
+PLOT_RENTANG = 10.0                 # [s] lebar jendela waktu yang ditampilkan
+PLOT_KIRIM_SETIAP = 2               # satu titik plot tiap sekian siklus kontrol (200 Hz / 2 = 100 titik per detik)
+PLOT_HZ = 10.0                      # [Hz] kecepatan gambar ulang jendela plot
+PLOT_BACKEND = ["QtAgg", "Qt5Agg", "TkAgg"]   # dicoba berurutan (pip install PyQt5, atau sudo apt install python3-tk)
 
 # =============================================================================
 # Turunan (jangan diubah)

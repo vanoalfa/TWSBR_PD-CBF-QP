@@ -32,6 +32,9 @@ Perintah (tambahkan --pengujian untuk hasil PENGUJIAN):
     python3 ise.py --bandingkan                                     PD terbaru vs PD+CBF terbaru
     python3 ise.py --bandingkan --pd 3 --cbf 5 [--tanggal YYYYMMDD] PD KE-03 vs PD+CBF KE-05
     python3 ise.py --gambar-ulang                                   buat ulang PNG + EPS semua CSV (format terbaru)
+
+Plot realtime (python3 atera_main.py --plot): proses_plot() di bawah, berjalan di proses terpisah. Isinya sama dengan
+plot realtime simulasi: Gambar 1 psi - dpsi, Gambar 2 theta - dtheta, Gambar 3 s, dan arus terhadap waktu.
 """
 
 import argparse
@@ -566,6 +569,154 @@ def gambar_percobaan(data, nama, path_png):
     fig.tight_layout(rect=(0, 0, 1, 0.97))
     simpan_gambar(fig, path_png)
     plt.close(fig)
+
+
+# =============================================================================
+# Plot realtime (atera_main.py --plot), dijalankan di proses terpisah
+# =============================================================================
+def _gambar_barrier(gambar1, gambar2, gambar3, mask):
+    """Semua garis batas plot realtime (barrier, penanda |psi|, KOMET). Mengembalikan garis yang dibuat, supaya bisa
+    dihapus dan digambar ulang bila constraint aktif berubah (ganti mode kontrol / mode gerak)."""
+    sebelum = {ax: set(ax.lines) for ax in (gambar1, gambar2, gambar3)}
+    _kotak(gambar1, config.psi_max, config.dpsi_max, config.PLOT_BATAS["psi"], config.PLOT_BATAS["dpsi"],
+           _aktif(mask, "psi"), _aktif(mask, "dpsi"))
+    _penanda_psi(gambar1, "x")
+    _komet(gambar1, math.radians(config.SAFE_TILT_DEG), "KOMET |psi| = %g deg" % config.SAFE_TILT_DEG, "x")
+    _batas(gambar2, config.dtheta_max, _aktif(mask, "dtheta"), tebal=True)
+    gambar2.set_xlim(-config.PLOT_BATAS["theta"], config.PLOT_BATAS["theta"])
+    gambar2.set_ylim(-config.PLOT_BATAS["dtheta"], config.PLOT_BATAS["dtheta"])
+    _batas(gambar3, config.s_max, _aktif(mask, "s"), tebal=True, sumbu="x")
+    _komet(gambar3, config.S_KOMET, "KOMET |s| = %g m" % config.S_KOMET, "x")
+    gambar3.set_xlim(-config.PLOT_BATAS["s"], config.PLOT_BATAS["s"])
+    return [g for ax in sebelum for g in ax.lines if g not in sebelum[ax]]
+
+
+def proses_plot(antrean, jawaban, berhenti, daftar_backend):
+    """Isi proses jendela plot realtime robot fisik. Kiriman dari atera_main.py (list per kiriman):
+        (t, theta, dtheta, psi, dpsi, arus)   satu titik data (NaN = garis diputus)
+        ("RESET",)                            data dikosongkan (MULAI)
+        ("MODE", mode_kontrol, mode_gerak)    warna kurva (PD ungu, PD+CBF biru) dan judul
+        ("MASK", mask atau None)              constraint CBF aktif: barrier merah, lainnya abu-abu
+    Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang."""
+    import time
+    import numpy as np
+    try:
+        berhasil = ""
+        for backend in daftar_backend:
+            try:
+                plt.switch_backend(backend)
+                berhasil = backend
+                break
+            except Exception:
+                pass
+        if not berhasil:
+            jawaban.put(("gagal", "matplotlib tidak punya backend jendela (pip install PyQt5 / sudo apt install "
+                                  "python3-tk)"))
+            return
+        fig = plt.figure(figsize=(10.0, 9.0))
+        kisi = fig.add_gridspec(3, 2, height_ratios=[1.6, 0.5, 0.9])
+        gambar1 = fig.add_subplot(kisi[0, 0])
+        gambar2 = fig.add_subplot(kisi[0, 1])
+        gambar3 = fig.add_subplot(kisi[1, :])
+        ax_arus = fig.add_subplot(kisi[2, :])
+        warna = {MODE_PD: config.PLOT_WARNA_PD, MODE_PD_CBF: config.PLOT_WARNA_PD_CBF}
+        keadaan = {"mode": MODE_PD, "gerak": "", "mask": None}
+
+        garis_psi, = gambar1.plot([], [], color=warna[MODE_PD], linewidth=1.4, zorder=2)
+        titik_psi, = gambar1.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
+        garis_theta, = gambar2.plot([], [], color=warna[MODE_PD], linewidth=1.4, zorder=2)
+        titik_theta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
+        garis_s, = gambar3.plot([], [], color=warna[MODE_PD], linewidth=2.0, zorder=2)
+        titik_s, = gambar3.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
+        garis_arus, = ax_arus.plot([], [], color="tab:green")
+        ax_arus.axhline(config.MAX_CURRENT_A, color="black", linewidth=1.0, linestyle=":")
+        ax_arus.axhline(-config.MAX_CURRENT_A, color="black", linewidth=1.0, linestyle=":")
+        ax_arus.set_ylim(-1.2 * config.MAX_CURRENT_A, 1.2 * config.MAX_CURRENT_A)
+        ax_arus.set(xlabel="waktu [s]", ylabel="arus per motor [A]")
+        gambar1.set(xlabel="psi [rad]", ylabel="dpsi [rad/s]")
+        gambar2.set(xlabel="theta [rad]   (s = R*theta)", ylabel="dtheta [rad/s]")
+        gambar2.set_title("Gambar 2", fontsize=10)
+        gambar3.axhline(0.0, color="gray", linewidth=0.6, zorder=1.0)
+        gambar3.set_ylim(-1.0, 1.0)
+        gambar3.set_yticks([0.0])
+        gambar3.set_xlabel("s = R*theta [m]   (dari titik nol Y / B)")
+        gambar3.set_title("Gambar 3", fontsize=10)
+        for ax in (gambar1, gambar2, ax_arus):
+            ax.grid(True, color="0.85")
+        gambar3.grid(True, axis="x", color="0.85")
+        batas = _gambar_barrier(gambar1, gambar2, gambar3, None)
+
+        def tulisan():
+            gambar1.set_title("Gambar 1   (psi_max = %g deg)%s" % (config.psi_max_DEG, (
+                "   CBF aktif: " + teks_mask(keadaan["mask"])) if keadaan["mask"] is not None else ""), fontsize=10)
+            fig.suptitle("ATERA robot fisik | kontrol %s | %s | data %.0f s terakhir"
+                         % (keadaan["mode"], keadaan["gerak"] or "-", config.PLOT_RENTANG), fontsize=9, color="gray")
+            for ax in (gambar1, gambar2, gambar3):
+                _legenda(ax)
+            try:
+                fig.canvas.manager.set_window_title("ATERA - plot realtime robot (%s)" % keadaan["mode"])
+            except Exception:
+                pass
+
+        tulisan()
+        fig.tight_layout()
+        fig.show()
+        jawaban.put(("siap", berhasil))
+
+        data = {k: [] for k in ("t", "theta", "dtheta", "psi", "dpsi", "arus")}
+        while not berhenti.is_set() and plt.fignum_exists(fig.number):
+            ada_baru = False
+            while True:
+                try:
+                    kiriman = antrean.get_nowait()
+                except Exception:
+                    break
+                ada_baru = True
+                for isi in kiriman:
+                    if isi[0] == "RESET":
+                        data = {k: [] for k in data}
+                    elif isi[0] == "MODE":
+                        keadaan["mode"], keadaan["gerak"] = isi[1], isi[2]
+                        for garis in (garis_psi, garis_theta, garis_s):
+                            garis.set_color(warna.get(isi[1], config.PLOT_WARNA_PD))
+                        tulisan()
+                    elif isi[0] == "MASK":
+                        keadaan["mask"] = isi[1]
+                        for garis in batas:
+                            garis.remove()
+                        batas = _gambar_barrier(gambar1, gambar2, gambar3, isi[1])
+                        tulisan()
+                    else:
+                        for k, v in zip(("t", "theta", "dtheta", "psi", "dpsi", "arus"), isi):
+                            data[k].append(v)
+            if ada_baru:
+                t = data["t"]
+                buang = 0
+                while buang < len(t) and t[buang] < t[-1] - config.PLOT_RENTANG:
+                    buang += 1
+                if buang:
+                    data = {k: v[buang:] for k, v in data.items()}
+                theta = np.array(data["theta"], dtype=float)
+                garis_psi.set_data(data["psi"], data["dpsi"])
+                garis_theta.set_data(theta, data["dtheta"])
+                garis_s.set_data(config.R * theta, np.zeros(len(theta)))
+                garis_arus.set_data(data["t"], data["arus"])
+                if data["t"] and math.isfinite(data["psi"][-1]):
+                    titik_psi.set_data([data["psi"][-1]], [data["dpsi"][-1]])
+                    titik_theta.set_data([data["theta"][-1]], [data["dtheta"][-1]])
+                    titik_s.set_data([config.R * data["theta"][-1]], [0.0])
+                akhir = data["t"][-1] if data["t"] else 0.0
+                ax_arus.set_xlim(max(0.0, akhir - config.PLOT_RENTANG), max(config.PLOT_RENTANG, akhir))
+                fig.canvas.draw_idle()
+            fig.canvas.flush_events()
+            time.sleep(1.0 / config.PLOT_HZ)
+    except KeyboardInterrupt:
+        pass
+    except Exception as exc:
+        try:
+            jawaban.put(("gagal", "%s: %s" % (type(exc).__name__, exc)))
+        except Exception:
+            pass
 
 
 # =============================================================================

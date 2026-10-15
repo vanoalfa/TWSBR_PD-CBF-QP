@@ -1,6 +1,8 @@
 """atera_main.py - program utama ATERA (robot fisik) + GUI terminal.
 
 Jalankan di Raspberry Pi 5, dari folder atera_program:   python3 atera_main.py
+    tambahkan --plot untuk jendela plot realtime (sama dengan simulasi). Butuh layar di Pi: monitor, VNC, atau
+    ssh -X. Tanpa layar, plot dilewati dan robot tetap jalan.
 
 Kontrolnya sama dengan simulasi (simulasi/atera_main.py), hanya sumber state dan tujuan torsinya yang berbeda:
     IMU (psi, dpsi) + encoder DDSM115 -> x = [theta, dtheta, psi, dpsi]
@@ -16,11 +18,13 @@ State: DIAM -(Y)-> SIAP -(MULAI)-> BALANCING -(X)-> SIAP
        Di KOMET / GANGGUAN roda mati dan data tersimpan; tegakkan robot lalu tekan MULAI lagi.
 Titik nol s (s = R*theta = 0) dipasang oleh Tombol Y (bersama kalibrasi IMU) dan Tombol B (kapan saja), bukan oleh
 MULAI. MULAI ditolak bila robot lebih dari s_max dari titik nol: kembalikan robot ke dekatnya, atau tekan B di sini.
-Tombol: lihat joystick_mapping.py (halaman BANTUAN di GUI). Log: config.LOG_FILE.
+Tombol: joystick, atau keyboard di terminal ini (juga lewat SSH). Lihat joystick_mapping.py / halaman BANTUAN di GUI.
+Log: config.LOG_FILE.
 """
 
 import logging
 import math
+import multiprocessing
 import os
 import shutil
 import signal
@@ -63,10 +67,11 @@ def jepit(u):
 
 
 class Atera:
-    def __init__(self):
+    def __init__(self, plot=False):
         self.motors = DualDDSM115()
         self.imu = MPU6050()
         self.joystick = jm.Joystick()
+        self.keyboard = jm.KeyboardTerminal()          # keyboard terminal (cadangan / pengganti joystick)
         self.pd = PDControl()
         self.cbf = None
         self.cbf_alasan = "belum disiapkan"
@@ -95,6 +100,16 @@ class Atera:
         self.lama_jenuh = 0.0
         self.jumlah_cbf = {}
 
+        # Plot realtime (--plot): proses terpisah (ise.proses_plot), data dikirim lewat antrean
+        self.pakai_plot = plot
+        self.plot = None
+        self.plot_antrean = self.plot_berhenti = None
+        self.plot_kiriman = []
+        self.plot_status = "mati (jalankan dengan --plot)" if not plot else "belum dibuka"
+        self.plot_t0 = time.monotonic()
+        self.plot_siklus = 0
+        self.plot_mask = "belum"
+
         self.loop_hz = float(config.CONTROL_HZ)
         self.kerja_ms = 0.0
         self.overrun = 0
@@ -106,6 +121,7 @@ class Atera:
         self.imu.open()
         self.motors.initialize()
         self.joystick.open()
+        self.keyboard.open()
         self.atur_pesan("Menyiapkan CBF-QP (CasADi) ...")
         self.render()
         try:
@@ -116,6 +132,10 @@ class Atera:
         except Exception as exc:
             LOGGER.exception("CBF-QP")
             self.cbf_alasan = "%s: %s" % (type(exc).__name__, exc)
+        if self.pakai_plot:
+            self.atur_pesan("Membuka plot realtime ...")
+            self.render()
+            self.buat_plot()
         error = [m for m in self.masalah() if m[0] == ERROR]
         self.atur_pesan("Ada %d masalah, lihat baris Masalah." % len(error) if error
                         else "Hardware siap. Tekan Tombol Y untuk kalibrasi.")
@@ -125,8 +145,76 @@ class Atera:
         if self.state == BALANCING:
             self.simpan_semua("program keluar")
         ise.tunggu_simpan()
-        for alat in (self.motors, self.joystick, self.imu):
+        for alat in (self.motors, self.joystick, self.keyboard, self.imu):
             alat.close()
+        if self.plot is not None:
+            self.plot_berhenti.set()
+            self.plot.join(timeout=2.0)
+
+    # --------------------------------------------------------- plot realtime
+    def buat_plot(self):
+        """Nyalakan proses jendela plot realtime (ise.proses_plot). Gagal -> robot tetap jalan tanpa plot."""
+        if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+            self.plot_status = "tidak ada layar (DISPLAY kosong): pakai monitor / VNC / ssh -X"
+            LOGGER.warning("plot realtime: %s", self.plot_status)
+            return
+        konteks = multiprocessing.get_context("spawn")
+        self.plot_antrean = konteks.Queue()
+        jawaban = konteks.Queue()
+        self.plot_berhenti = konteks.Event()
+        self.plot = konteks.Process(target=ise.proses_plot, daemon=True,
+                                    args=(self.plot_antrean, jawaban, self.plot_berhenti, config.PLOT_BACKEND))
+        self.plot.start()
+        hasil = ("gagal", "proses plot tidak menjawab")
+        batas_waktu = time.monotonic() + 30.0
+        while time.monotonic() < batas_waktu:
+            try:
+                hasil = jawaban.get(timeout=0.3)
+                break
+            except Exception:
+                if not self.plot.is_alive():
+                    hasil = ("gagal", "proses plot berhenti (exit code %s)" % self.plot.exitcode)
+                    break
+        if hasil[0] != "siap":
+            self.plot_berhenti.set()
+            self.plot.join(timeout=1.0)
+            self.plot = None
+            self.plot_status = "gagal: %s" % hasil[1]
+            LOGGER.warning("plot realtime %s", self.plot_status)
+            return
+        self.plot_status = "aktif (%s)" % hasil[1]
+        self.kirim_plot(("MODE", self.mode_kontrol, self.mode_gerak))
+        self.perbarui_mask_plot()
+
+    def kirim_plot(self, isi):
+        if self.plot is not None:
+            self.plot_kiriman.append(isi)
+
+    def putus_plot(self):
+        """Garis plot diputus (titik nol s pindah), supaya tidak ada garis lurus yang melompat."""
+        nan = float("nan")
+        self.kirim_plot((time.monotonic() - self.plot_t0, nan, nan, nan, nan, nan))
+
+    def perbarui_mask_plot(self):
+        """Barrier merah di plot = constraint CBF-QP mode gerak sekarang (C_MODE di WORKPLACE cbf_qp.py), juga di
+        mode PD supaya safety set yang sama terlihat untuk dibandingkan (sama seperti simulasi)."""
+        if self.plot is None:
+            return
+        mask = None if self.cbf is None else [bool(m) for m in self.cbf.mask_mode[self.mode_gerak]]
+        if mask != self.plot_mask:
+            self.plot_mask = mask
+            self.kirim_plot(("MASK", mask))
+
+    def gambar_plot(self):
+        """Kirim data yang terkumpul ke proses plot (dipanggil dengan kecepatan GUI)."""
+        if self.plot is None or not self.plot_kiriman:
+            return
+        if not self.plot.is_alive():
+            self.plot = None
+            self.plot_status = "jendela plot ditutup"
+            return
+        self.plot_antrean.put(self.plot_kiriman)
+        self.plot_kiriman = []
 
     def atur_pesan(self, teks):
         self.pesan = teks
@@ -197,6 +285,7 @@ class Atera:
         self.motors.reset_wheel_angles()
         self.theta_nol = 0.0
         self.theta_nol = self.baca_state()[0]
+        self.putus_plot()
 
     def mulai(self):
         if self.state == BALANCING:
@@ -226,6 +315,10 @@ class Atera:
         self.perekam.mulai(self.mode_kontrol, ise.JENIS_PERCOBAAN)
         self.t0 = time.monotonic()
         self.state = BALANCING
+        self.plot_t0 = self.t0                            # plot realtime mulai dari 0 setiap MULAI
+        self.kirim_plot(("RESET",))
+        self.kirim_plot(("MODE", self.mode_kontrol, self.mode_gerak))
+        self.perbarui_mask_plot()
         self.atur_pesan("Balancing, mode %s. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati." % self.mode_kontrol)
 
     def simpan(self, perekam):
@@ -255,6 +348,8 @@ class Atera:
         if mode == self.mode_kontrol:
             return
         self.mode_kontrol = mode
+        self.kirim_plot(("MODE", self.mode_kontrol, self.mode_gerak))
+        self.perbarui_mask_plot()
         if self.state == BALANCING:            # satu rekaman = satu mode kontrol
             teks = self.simpan_semua("ganti mode")
             self.perekam.mulai(mode, ise.JENIS_PERCOBAAN)
@@ -277,7 +372,9 @@ class Atera:
             self.atur_pesan("Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.")
         else:
             self.mode_gerak = MODE_NAVIGATE
-            self.atur_pesan("Mode Navigate: D-Pad / analog kiri untuk maju-mundur dan belok.")
+            self.atur_pesan("Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.")
+        self.kirim_plot(("MODE", self.mode_kontrol, self.mode_gerak))
+        self.perbarui_mask_plot()
 
     def mulai_pengujian(self):
         if self.state != BALANCING:
@@ -314,7 +411,23 @@ class Atera:
                 self.atur_pesan("Kedua motor siap.")
         self.motors.command_currents(0.0, 0.0)
 
+    def perintah_gerak(self):
+        """(arah, belok): keyboard (W A S D) didahulukan bila sedang ditekan, selain itu joystick."""
+        arah_k, belok_k = self.keyboard.perintah()
+        arah_j, belok_j = self.joystick.perintah()
+        return (arah_k if arah_k != 0 else arah_j), (belok_k if belok_k != 0 else belok_j)
+
     def langkah_kontrol(self, dt):
+        self.langkah_kontrol_inti(dt)
+        if self.plot is not None:                          # satu titik plot tiap PLOT_KIRIM_SETIAP siklus
+            self.plot_siklus += 1
+            if self.plot_siklus >= config.PLOT_KIRIM_SETIAP:
+                self.plot_siklus = 0
+                x = self.x
+                self.kirim_plot((time.monotonic() - self.plot_t0, float(x[0]), float(x[1]), float(x[2]),
+                                 float(x[3]), self.u / config.MOTOR_KT))
+
+    def langkah_kontrol_inti(self, dt):
         imu_ok = False
         if self.imu.ready:
             try:
@@ -340,7 +453,7 @@ class Atera:
             self.berhenti(KOMET, "s = %.2f m (> %g m, mode Balancing)" % (s, config.S_KOMET))
             return
 
-        self.arah, self.belok = self.joystick.perintah() if self.mode_gerak == MODE_NAVIGATE else (0, 0)
+        self.arah, self.belok = self.perintah_gerak() if self.mode_gerak == MODE_NAVIGATE else (0, 0)
         self.pd.set_command(self.arah, self.mode_gerak)
         self.u_PD = self.pd.compute(x)
         nilai_c = None
@@ -384,7 +497,7 @@ class Atera:
             self.loop_hz += 0.05 * (1.0 / dt - self.loop_hz)
 
             try:
-                for aksi in self.joystick.poll():
+                for aksi in self.joystick.poll() + self.keyboard.poll():
                     self.proses_aksi(aksi)
                 self.langkah_kontrol(dt)
             except DDSM115Error as exc:
@@ -400,6 +513,7 @@ class Atera:
             self.kerja_ms += 0.05 * ((sekarang - mulai) * 1000.0 - self.kerja_ms)
             if sekarang - ui_lalu >= 1.0 / config.UI_HZ:
                 self.render()
+                self.gambar_plot()
                 ui_lalu = sekarang
             berikut += periode
             jeda = berikut - time.monotonic()
@@ -427,7 +541,11 @@ class Atera:
             elif motor.comm_errors > 0:
                 hasil.append((AWAS, nama, "%d balasan terakhir gagal: %s" % (motor.comm_errors, motor.last_error)))
         if not self.joystick.connected:
-            hasil.append((AWAS, "Joystick", self.joystick.problem))
+            hasil.append((AWAS if not self.keyboard.aktif else INFO, "Joystick",
+                          self.joystick.problem + (" (keyboard terminal tetap bisa dipakai)" if self.keyboard.aktif
+                                                   else "")))
+        if not self.keyboard.aktif:
+            hasil.append((INFO, "Keyboard", self.keyboard.problem))
         if self.imu.ready and not self.kalibrasi_hasil:
             hasil.append((INFO, "Kalibrasi", "belum dikalibrasi -> Tombol Y (wajib sebelum MULAI)"))
         if self.cbf is None:
@@ -459,10 +577,12 @@ class Atera:
                        for i, n in enumerate(HALAMAN))
         baris = ["ATERA robot fisik | state %s | kontrol %s | gerak %s" % (self.state, self.mode_kontrol, self.mode_gerak),
                  "=" * self.lebar,
-                 "Loop %.1f Hz (target %g) | kerja %.1f ms | overrun %d | simpan latar %d | joystick %s"
+                 "Loop %.1f Hz (target %g) | kerja %.1f ms | overrun %d | simpan latar %d | joystick %s | keyboard %s"
                  % (self.loop_hz, config.CONTROL_HZ, self.kerja_ms, self.overrun, ise.simpan_berjalan(),
-                    self.joystick.name if self.joystick.connected else "TIDAK ADA")]
+                    self.joystick.name if self.joystick.connected else "TIDAK ADA",
+                    "aktif" if self.keyboard.aktif else "tidak")]
         baris += self.bungkus("Pesan: ", self.pesan)
+        baris += self.bungkus("Plot realtime: ", self.plot_status, 1)
         masalah = [m for m in self.masalah() if m[0] != INFO]
         if masalah:
             for tingkat, sumber, teks in masalah[:3]:
@@ -472,7 +592,9 @@ class Atera:
         baris += ["-" * self.lebar, tab, "-" * self.lebar]
         baris += (self.hal_status, self.hal_kontrol, self.hal_hardware, self.hal_bantuan)[self.halaman]()
         baris += ["-" * self.lebar,
-                  "Y kalibrasi | MULAI | X mati | LB PD | RB PD+CBF | B diam | A gerak | L3 uji | R3 simpan"]
+                  "Joystick: Y kalibrasi | MULAI | X mati | LB PD | RB PD+CBF | B diam | A gerak | L3 uji | R3 simpan",
+                  "Keyboard: Y kalibrasi | M/Enter MULAI | X/Spasi mati | 1 PD | 2 PD+CBF | B diam | N gerak (WASD) | "
+                  "T uji | E simpan | Q keluar | <- -> halaman"]
         sys.stdout.write("\x1b[H" + "".join(b[:self.lebar] + "\x1b[K\n" for b in baris) + "\x1b[J")
         sys.stdout.flush()
 
@@ -488,7 +610,7 @@ class Atera:
                  "",
                  "  u_PD %+.3f N m -> u %+.3f N m | belok %+.3f | arus kiri %+.2f A, kanan %+.2f A (batas %.1f A)"
                  % (self.u_PD, self.u, self.u_belok, kiri.command_a, kanan.command_a, config.MAX_CURRENT_A),
-                 "  perintah joystick: arah %+d, belok %+d (hanya mode Navigate) | status CBF: %s"
+                 "  perintah gerak (joystick / keyboard): arah %+d, belok %+d (hanya mode Navigate) | status CBF: %s"
                  % (self.arah, self.belok, self.status_cbf)]
         if self.state == BALANCING:
             baris.append("  PERCOBAAN %.1f s | ISE psi %.6f rad^2 s" % (time.monotonic() - self.t0, self.perekam.ise_psi))
@@ -551,6 +673,8 @@ class Atera:
                             m.count_ok, m.count_timeout, m.count_bad_frame, decode_error(fb.error_code)))
         baris += ["", "Joystick: " + (self.joystick.name if self.joystick.connected else self.joystick.problem),
                   "  event terakhir: " + self.joystick.last_event,
+                  "Keyboard terminal: " + ("aktif" if self.keyboard.aktif else self.keyboard.problem),
+                  "  tombol terakhir: " + self.keyboard.last_event,
                   "", "Cek arah sebelum balancing (roda mati):",
                   "  badan miring ke DEPAN -> psi POSITIF (salah: IMU_SIGN)",
                   "  dorong robot ke DEPAN di lantai -> theta / s NAIK (salah: ENCODER_DIRECTION)",
@@ -559,11 +683,14 @@ class Atera:
         return baris
 
     def hal_bantuan(self):
-        return (["Joystick:"] + ["  " + teks for teks in jm.BANTUAN]
+        return (["Joystick:"] + ["  " + teks for teks in jm.BANTUAN] + [""] + list(jm.BANTUAN_KEYBOARD)
                 + ["", "Hasil: %s/<PERCOBAAN atau PENGUJIAN>/<PD atau CBFQP>" % config.ISE_PLOT_DIR,
                    "  python3 ise.py --daftar                     daftar dan metrik percobaan",
                    "  python3 ise.py --bandingkan --pd 3 --cbf 5   PD KE-03 vs PD+CBF KE-05 (folder BANDING)",
-                   "  tambahkan --pengujian untuk hasil PENGUJIAN (L3)"])
+                   "  tambahkan --pengujian untuk hasil PENGUJIAN (L3)",
+                   "", "Plot realtime: python3 atera_main.py --plot  (butuh layar Pi: monitor / VNC / ssh -X)",
+                   "  merah = barrier CBF mode gerak ini, abu-abu = tidak dipakai, hitam = KOMET, "
+                   "kuning / oranye = |psi| 5 / 10 deg"])
 
 
 def _sigterm(*_):
@@ -575,7 +702,7 @@ def main():
     logging.basicConfig(filename=path_log, level=logging.INFO,
                         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     signal.signal(signal.SIGTERM, _sigterm)
-    app = Atera()
+    app = Atera(plot="--plot" in sys.argv[1:])
     sys.stdout.write("\x1b[?1049h\x1b[?25l\x1b[2J")          # layar alternatif, kursor disembunyikan
     error = ""
     try:
