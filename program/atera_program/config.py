@@ -87,8 +87,8 @@ NAMA_ALPHA = []
 while ("Alpha_%d" % (len(NAMA_ALPHA) + 1)) in globals():
     NAMA_ALPHA.append("Alpha_%d" % (len(NAMA_ALPHA) + 1))
 
-CBF_N_HORIZON = 1                   # N pada HPIPM (acados)
-CBF_INFTY = 1.0e9                   # batas atas "tak hingga" constraint h di acados
+CBF_QP_SOLVER = "qpoases"           # QP solver CBF-QP (plugin ca.conic CasADi), sudah ikut di paket pip casadi
+CBF_INFTY = 1.0e9                   # batas atas "tak hingga" constraint c di QP
 CBF_TOL_CONSTRAINT = 1.0e-6         # pelanggaran constraint yang masih diterima saat memeriksa hasil solver
 CBF_TOL_BATAS_U = 1.0e-6            # [N m]
 CBF_TOL_AKTIF = 1.0e-4              # [N m] |u* - u_PD| di atas ini -> filter dianggap mengoreksi
@@ -169,13 +169,20 @@ DURASI_PENGUJIAN = 30.0             # [s] lama satu PENGUJIAN (L3), sama dengan 
 EVAL_PSI_PULIH_DEG = 2.0            # [deg]
 EVAL_PULIH_LAMA_S = 1.0             # [s]
 
-PLOT_SAFETY_WARNA = "black"         # kotak / garis safety set CBF (psi_max, dpsi_max, ...)
-PLOT_SAFETY_TEBAL = 2.2
-PLOT_SAFETY_TIPIS = 1.0
-PLOT_PENANDA_PSI = [(5.0, "orange"), (10.0, "red")]   # garis penanda |psi| (derajat, warna), hanya gambar
-PLOT_BATAS = {"psi": 1.0, "dpsi": 10.0, "theta": 30.0, "dtheta": 30.0}   # batas sumbu tetap [rad, rad/s]
-PLOT_WARNA_PD = "tab:blue"
-PLOT_WARNA_PD_CBF = "tab:orange"
+# Warna garis batas di gambar ise.py dan plot realtime:
+#   merah  = constraint barrier CBF-QP (psi_max, dpsi_max, dtheta_max, s_max)
+#   hitam  = batas KOMET (SAFE_TILT_DEG dan S_KOMET)
+#   kuning / oranye = penanda |psi| 5 deg / 10 deg (hanya gambar, tidak dipakai kontrol)
+PLOT_SAFETY_WARNA = "red"
+PLOT_KOMET_WARNA = "black"
+PLOT_PENANDA_PSI = [(5.0, "gold"), (10.0, "darkorange")]  # (derajat, warna); "gold" = kuning yang terbaca di latar putih
+# Batas sumbu tetap semua gambar: psi [rad], dpsi [rad/s], theta [rad], dtheta [rad/s], s [m]  (theta 60 rad = s 3 m)
+PLOT_BATAS = {"psi": 1.0, "dpsi": 10.0, "theta": 60.0, "dtheta": 30.0, "s": 3.0}
+PLOT_SAFETY_TEBAL = 2.2             # garis yang membentuk kotak barrier (menyambung)
+PLOT_SAFETY_TIPIS = 1.0             # perpanjangan garis di luar kotak (putus-putus)
+PLOT_KOMET_TEBAL = 1.6
+PLOT_WARNA_PD = "tab:purple"        # kurva mode PD (ungu)
+PLOT_WARNA_PD_CBF = "tab:blue"      # kurva mode PD + CBF-QP (biru)
 
 # =============================================================================
 # Turunan (jangan diubah)

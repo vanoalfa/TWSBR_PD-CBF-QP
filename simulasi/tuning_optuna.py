@@ -258,13 +258,13 @@ def gabung_diag(daftar):
 # =============================================================================
 class Penguji:
     def __init__(self, profil, pakai_cbf):
-        """pakai_cbf: True bila ada tahap CBFQP_* yang akan dijalankan (membangun solver acados, butuh beberapa detik)."""
+        """pakai_cbf: True bila ada tahap CBFQP_* yang akan dijalankan (menyiapkan QP solver CasADi)."""
         # PyBullet hanya boleh satu dunia per program, jadi Penguji cukup dibuat SATU kali.
         self.sim = simulasi.Simulasi(gui=False)
         self.pd = PDControl()
         self.cbf = None
         if pakai_cbf:
-            print("Menyiapkan CBF-QP (acados), tunggu beberapa detik ...")
+            print("Menyiapkan CBF-QP (CasADi) ...")
             from cbf_qp import CBFQP
             self.cbf = CBFQP()
         # Nilai config.py saat program mulai: dasar semua variabel yang tidak dituning (nilai terkunci).

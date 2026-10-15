@@ -1,4 +1,5 @@
-"""cbf_qp.py - safety filter CBF-QP ATERA, diselesaikan acados (HPIPM, N = 1). Sama dengan simulasi/cbf_qp.py.
+"""cbf_qp.py - safety filter CBF-QP ATERA, diselesaikan CasADi (ca.conic, QP solver config.CBF_QP_SOLVER).
+File ini sama persis di simulasi/ dan program/atera_program/.
 
     u* = argmin_u  || u - u_PD ||^2
     s.t.  c_k(x, u) >= 0      untuk setiap c_k di DAFTAR_C yang aktif di mode gerak sekarang
@@ -10,39 +11,35 @@
     zeta (kemiringan bidang) dan psi_max (batas h1, h2) juga parameter: nilainya dibaca dari config.zeta dan
     config.psi_max tiap siklus, jadi bisa diubah saat program berjalan tanpa membangun ulang solver.
 
-Mode gerak (mode_cbf): Balancing dan Navigate memakai SATU solver acados yang sama. Setiap constraint diberi
+Mode gerak (mode_cbf): Balancing dan Navigate memakai SATU solver yang sama. Setiap constraint diberi
 parameter mask m_k (1 = aktif, 0 = dilewati): c_k dipakai sebagai  m_k*c_k + (1 - m_k),  jadi constraint dengan
 m_k = 0 selalu terpenuhi dan tidak ikut membatasi u. Yang berganti saat mode berganti hanya mask, bukan solver.
 
 Model torsi: u adalah torsi PERINTAH (arus perintah x K_t datasheet). Torsi yang benar-benar bekerja di roda adalah
 rasio_torsi * u, dengan rasio_torsi = K_t efektif / K_t datasheet (config.RASIO_TORSI).
 g(x) di model CBF-QP dikalikan rasio_torsi, jadi CBF-QP menghitung dengan tenaga roda yang sungguh ada. Tanpa ini
-CBF-QP menganggap roda 1 / rasio_torsi kali (sekitar 3x) lebih kuat dari kenyataan: koreksi torsinya terlalu kecil,
+CBF-QP menganggap roda 1 / rasio_torsi kali lebih kuat dari kenyataan: koreksi torsinya terlalu kecil,
 dan constraint yang dikira terpenuhi ternyata dilanggar. rasio_torsi adalah parameter solver, jadi bisa diganti
-saat berjalan (cbf.rasio_torsi = nilai) tanpa membangun ulang solver. Batas arus lbu/ubu tetap dalam torsi perintah.
+saat berjalan (cbf.rasio_torsi = nilai) tanpa membangun ulang solver. Batas arus tetap dalam torsi perintah.
 
-Susunan di acados (OCP dengan N = 1):
-    stage 0 : state x dikunci ke state terukur (lbx_0 = ubx_0 = x), variabel keputusan u,
-              cost LINEAR_LS (u - u_PD)^2, semua constraint DAFTAR_C di con_h_expr_0, batas arus di lbu/ubu.
-    stage 1 : x1 = x + DT*(f(x) + g(x)*u) (prediksi satu langkah), tanpa cost dan tanpa constraint.
-    Solver  : SQP_RTI (satu QP per panggilan) + PARTIAL_CONDENSING_HPIPM. Karena x dikunci dan
-              constraint affine terhadap u, QP yang diselesaikan HPIPM persis CBF-QP di atas.
+Tuning bertahap (simulasi/tuning_optuna.py): pilih_barrier(nomor) mengaktifkan hanya constraint bernomor itu
+(1 = h1, dst), tanpa membangun ulang solver, dengan cara yang sama seperti mask mode gerak.
 
-Kebutuhan: acados sudah di-build (ada <folder acados>/lib/libacados.so) dan casadi terpasang.
-Folder acados dicari otomatis (lihat siapkan_acados): variabel ACADOS_SOURCE_DIR, lalu folder "acados"
-di sebelah folder program ini atau di atasnya, lalu ~/acados, lalu lokasi acados_template hasil pip install -e.
-Jadi tidak perlu export apa pun.
+Susunan QP di CasADi (satu variabel keputusan u). Setiap c_k affine terhadap u: c(x, u, p) = a(x, p)*u + b(x, p).
+    min_u  1/2 * H * u^2 + G * u          H = 2, G = -2*u_PD      (= (u - u_PD)^2 dikurangi konstanta u_PD^2)
+    s.t.   -b(x, p) <= a(x, p) * u <= CBF_INFTY                    (c >= 0)
+           u_min <= u <= u_max                                     (batas arus)
+    a(x, p) dan b(x, p) dihitung dari ekspresi CasADi WORKPLACE (ca.Function), lalu QP diselesaikan ca.conic
+    dengan plugin config.CBF_QP_SOLVER ("qpoases" = active-set, solusi eksak untuk QP kecil ini).
+    Tidak ada kode C yang di-generate / di-build: solver langsung siap saat CBFQP() dibuat.
+
+Kebutuhan: pip install casadi   (plugin qpoases sudah ikut di paket pip casadi).
 
 Semua nilai fisik dan gain dibaca dari config.py; f(x) dan g(x) dari model.py.
 """
 
 from __future__ import annotations
 
-import ctypes
-import glob
-import importlib.util
-import os
-import sys
 import time
 
 import casadi as ca
@@ -52,71 +49,9 @@ import config
 import model
 from pd_control import MODE_BALANCING, MODE_NAVIGATE
 
-STATUS_AMAN = "AMAN"                # u = u* dari acados
-STATUS_GAGAL = "GAGAL"              # tidak ada u yang memenuhi semua constraint, atau acados gagal secara numerik
+STATUS_AMAN = "AMAN"                # u = u* dari QP solver
+STATUS_GAGAL = "GAGAL"              # tidak ada u yang memenuhi semua constraint, atau QP solver gagal secara numerik
 STATUS_ALPHA = "ALPHA_NOL"          # ada Alpha <= 0, CBF-QP tidak dijalankan
-
-
-def cari_folder_acados():
-    """Folder acados (yang berisi interfaces/acados_template), atau "" bila tidak ditemukan."""
-    calon = []
-    if os.environ.get("ACADOS_SOURCE_DIR"):
-        calon.append(os.environ["ACADOS_SOURCE_DIR"])
-    folder = os.path.dirname(os.path.abspath(__file__))
-    for _ in range(4):
-        calon.append(os.path.join(folder, "acados"))
-        folder = os.path.dirname(folder)
-    calon.append(os.path.join(os.path.expanduser("~"), "acados"))
-    try:                                            # acados_template yang sudah di-install pip -e
-        spec = importlib.util.find_spec("acados_template")
-        if spec is not None and spec.origin:
-            calon.append(os.path.join(os.path.dirname(spec.origin), "..", "..", ".."))
-    except (ImportError, ValueError):
-        pass
-    for path in calon:
-        if os.path.isdir(os.path.join(path, "interfaces", "acados_template")):
-            return os.path.abspath(path)
-    return ""
-
-
-def siapkan_acados():
-    """Siapkan acados supaya bisa di-import tanpa export manual. Mengembalikan folder acados."""
-    folder = cari_folder_acados()
-    if folder == "":
-        raise RuntimeError("folder acados tidak ditemukan. Taruh folder 'acados' di sebelah folder program ini, "
-                           "atau isi variabel ACADOS_SOURCE_DIR.")
-
-    lib = os.path.join(folder, "lib")
-    if len(glob.glob(os.path.join(lib, "libacados.*"))) == 0:
-        raise RuntimeError("acados belum di-build (tidak ada %s/libacados.so). Jalankan:\n"
-                           "    cd %s && git submodule update --recursive --init\n"
-                           "    mkdir -p build && cd build && cmake -DACADOS_WITH_QPOASES=OFF .. && make install -j4"
-                           % (lib, folder))
-
-    os.environ["ACADOS_SOURCE_DIR"] = folder
-    os.environ["LD_LIBRARY_PATH"] = lib + os.pathsep + os.environ.get("LD_LIBRARY_PATH", "")
-
-    # Muat library acados lebih dulu, supaya solver hasil generate menemukannya walaupun
-    # LD_LIBRARY_PATH tidak diatur sebelum Python dijalankan.
-    for nama in ("libblasfeo.so", "libhpipm.so", "libacados.so"):
-        path = os.path.join(lib, nama)
-        if os.path.exists(path):
-            ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
-
-    # Pakai acados_template dari folder acados bila belum di-install dengan pip.
-    try:
-        import acados_template  # noqa: F401
-    except ImportError as kesalahan:
-        if kesalahan.name != "acados_template":
-            raise RuntimeError("acados_template butuh modul '%s'. Jalankan: pip install -e %s"
-                               % (kesalahan.name, os.path.join(folder, "interfaces", "acados_template")))
-        sys.path.insert(0, os.path.join(folder, "interfaces", "acados_template"))
-        try:
-            import acados_template  # noqa: F401
-        except ImportError as kesalahan2:
-            raise RuntimeError("acados_template butuh modul '%s'. Jalankan: pip install -e %s"
-                               % (kesalahan2.name, os.path.join(folder, "interfaces", "acados_template")))
-    return folder
 
 
 def workplace(x, u, f, g, zeta, psi_max):
@@ -130,7 +65,7 @@ def workplace(x, u, f, g, zeta, psi_max):
         zeta                      : kemiringan bidang [rad] (simbol, nilainya dari config.zeta)
         psi_max                   : batas psi [rad] (simbol, nilainya dari config.psi_max tiap siklus)
         lie(h, v)                 : turunan Lie, L_v h = (dh/dx) * v
-        Alpha_1, Alpha_2, ...     : semua Alpha_<nomor> di config.py (otomatis)
+        Alpha_1, Alpha_2, ...     : semua Alpha_<nomor> di config.py (otomatis, nilainya bisa diubah di jendela Kontrol)
         MODE_BALANCING, MODE_NAVIGATE : nama mode gerak (kunci C_MODE)
         config.<nama>             : nilai lain dari config.py (dpsi_max, dtheta_max, s_max, MAX_CURRENT_A, ...)
     """
@@ -196,7 +131,7 @@ def workplace(x, u, f, g, zeta, psi_max):
 
     # 4. Pilih constraint yang aktif di tiap mode gerak (urutan di dalam daftar bebas, isinya dari DAFTAR_C)
     C_MODE = {
-        MODE_BALANCING: [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6, c_h7, c_h8],
+        MODE_BALANCING: [c_h1, c_h2],
         MODE_NAVIGATE:  [c_h1, c_h2, c_h3, c_h4, c_h7, c_h8],      # tanpa h5, h6 (barrier jarak s)
     }
 
@@ -257,19 +192,24 @@ def _mask_tiap_mode(daftar_c, c_mode):
     return mask
 
 
-class CBFQP:
-    def __init__(self, zeta=None, build: bool = True) -> None:
-        """zeta: kemiringan bidang [rad] yang dipakai terus. None = baca config.zeta tiap siklus (bisa berubah).
-        build=False memakai kode C yang sudah di-generate sebelumnya (config.py tidak boleh berubah)."""
-        self.zeta_tetap = zeta
-        self.folder_acados = siapkan_acados()
-        from acados_template import AcadosModel, AcadosOcp, AcadosOcpSolver
+def _opsi_solver(plugin):
+    """Opsi ca.conic tiap plugin: tanpa cetakan di terminal, dan tidak melempar error saat QP tidak punya solusi
+    (hasilnya diperiksa sendiri di compute())."""
+    if plugin == "qpoases":
+        return {"printLevel": "none", "error_on_fail": False}
+    if plugin == "osqp":
+        return {"osqp": {"verbose": False, "eps_abs": 1e-9, "eps_rel": 1e-9, "polish": True}, "error_on_fail": False}
+    return {"error_on_fail": False}
 
-        self.N = int(config.CBF_N_HORIZON)
+
+class CBFQP:
+    def __init__(self, zeta=None) -> None:
+        """zeta: kemiringan bidang [rad] yang dipakai terus. None = baca config.zeta tiap siklus (bisa berubah)."""
+        self.zeta_tetap = zeta
         x, u, p, f, g, daftar_c, c_mode, self.nama_alpha = _cbf_expressions()
         self.NH = len(daftar_c)                         # jumlah constraint di DAFTAR_C
 
-        # Mask tiap mode sebagai parameter solver: c_efektif = m*c + (1 - m)  (m = 0 -> selalu terpenuhi, a = 0)
+        # Mask tiap mode sebagai parameter: c_efektif = m*c + (1 - m)  (m = 0 -> selalu terpenuhi, a = 0)
         m = ca.SX.sym("m", self.NH)
         c = ca.vertcat(*[m[k] * daftar_c[k] + (1.0 - m[k]) for k in range(self.NH)])
         p_semua = ca.vertcat(p, m)                      # p_semua = [Alpha..., zeta, rasio_torsi, psi_max, mask...]
@@ -280,72 +220,30 @@ class CBFQP:
         self.mask_mode = _mask_tiap_mode(daftar_c, c_mode)
         self.alpha_mode = {mode: self._alpha_dipakai(self.mask_mode[mode]) for mode in self.mask_mode}
 
-        # c(x, u, p) = a(x, p)*u + b(x, p): dipakai untuk memeriksa hasil solver dan untuk diagnosa
+        # c(x, u, p) = a(x, p)*u + b(x, p): koefisien QP tiap siklus
         a = ca.jacobian(c, u)
         b = ca.substitute(c, u, 0.0)
+        if ca.depends_on(a, u):
+            raise RuntimeError("constraint di WORKPLACE PROGRAM tidak affine terhadap u (ada u^2, sin(u), ...). "
+                               "CBF-QP butuh c = a(x)*u + b(x).")
         self._coeff = ca.Function("cbf_coeff", [x, p_semua], [a, b])
 
-        acados_model = AcadosModel()
-        acados_model.name = "atera_cbf_qp"
-        acados_model.x = x
-        acados_model.u = u
-        acados_model.p = p_semua
-        acados_model.disc_dyn_expr = x + config.DT * (f + g * u)
-        acados_model.con_h_expr_0 = c
+        # QP solver CasADi: H (NU x NU) dan A (NH x NU) padat
+        self.plugin = str(config.CBF_QP_SOLVER)
+        struktur = {"h": ca.Sparsity.dense(config.NU, config.NU), "a": ca.Sparsity.dense(self.NH, config.NU)}
+        try:
+            self.solver = ca.conic("atera_cbf_qp", self.plugin, struktur, _opsi_solver(self.plugin))
+        except RuntimeError:
+            # casadi lama tidak mengenal sebagian opsi: buat tanpa opsi tambahan (kegagalan tetap ditangkap di compute)
+            try:
+                self.solver = ca.conic("atera_cbf_qp", self.plugin, struktur)
+            except RuntimeError as kesalahan:
+                raise RuntimeError("QP solver '%s' tidak tersedia di casadi (cek config.CBF_QP_SOLVER, misalnya "
+                                   "'qpoases'): %s" % (self.plugin, str(kesalahan).strip().splitlines()[-1]))
+        self._uba = np.full(self.NH, float(config.CBF_INFTY))          # c <= CBF_INFTY ("tak hingga")
 
-        ocp = AcadosOcp()
-        ocp.model = acados_model
-        if hasattr(ocp.solver_options, "N_horizon"):
-            ocp.solver_options.N_horizon = self.N
-        else:                                          # acados < 0.4
-            ocp.dims.N = self.N
-        ocp.solver_options.tf = float(self.N)          # langkah waktu 1 -> cost tidak diskalakan
-        ocp.parameter_values = np.ones(len(self.nama_alpha) + 3 + self.NH)
-
-        # cost stage 0: 1/2*(u - yref)' W (u - yref), W = 2  ->  (u - u_PD)^2 ; yref = u_PD diisi tiap siklus
-        ocp.cost.cost_type_0 = "LINEAR_LS"
-        ocp.cost.Vx_0 = np.zeros((config.NU, config.NX))
-        ocp.cost.Vu_0 = np.eye(config.NU)
-        ocp.cost.W_0 = 2.0 * np.eye(config.NU)
-        ocp.cost.yref_0 = np.zeros(config.NU)
-        # tanpa cost di stage antara dan stage akhir
-        ocp.cost.cost_type = "LINEAR_LS"
-        ocp.cost.Vx = np.zeros((0, config.NX))
-        ocp.cost.Vu = np.zeros((0, config.NU))
-        ocp.cost.W = np.zeros((0, 0))
-        ocp.cost.yref = np.zeros(0)
-        ocp.cost.cost_type_e = "LINEAR_LS"
-        ocp.cost.Vx_e = np.zeros((0, config.NX))
-        ocp.cost.W_e = np.zeros((0, 0))
-        ocp.cost.yref_e = np.zeros(0)
-
-        # constraint
-        ocp.constraints.x0 = np.zeros(config.NX)                     # diganti state terukur tiap siklus
-        ocp.constraints.lh_0 = np.zeros(self.NH)                     # c(x, u, p) >= 0
-        ocp.constraints.uh_0 = config.CBF_INFTY * np.ones(self.NH)
-        ocp.constraints.idxbu = np.arange(config.NU)                 # batas arus: u_min <= u <= u_max
-        ocp.constraints.lbu = np.array([config.MIN_CURRENT_A * config.MOTOR_KT])
-        ocp.constraints.ubu = np.array([config.MAX_CURRENT_A * config.MOTOR_KT])
-
-        ocp.solver_options.integrator_type = "DISCRETE"
-        ocp.solver_options.nlp_solver_type = "SQP_RTI"
-        ocp.solver_options.qp_solver = "PARTIAL_CONDENSING_HPIPM"
-        ocp.solver_options.hessian_approx = "GAUSS_NEWTON"
-        ocp.solver_options.print_level = 0
-
-        code_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "c_generated_code")
-        json_name = "acados_ocp_atera_cbf_qp.json"
-        if hasattr(ocp, "code_gen_options"):           # acados >= 0.5.4
-            ocp.code_gen_options.code_export_directory = code_dir
-            ocp.code_gen_options.json_file = json_name
-            self.solver = AcadosOcpSolver(ocp, build=build, generate=build, verbose=False)
-        else:
-            ocp.code_export_directory = code_dir
-            self.solver = AcadosOcpSolver(ocp, json_file=os.path.join(code_dir, json_name),
-                                          build=build, generate=build, verbose=False)
-
-        self.u_lb = float(ocp.constraints.lbu[0])
-        self.u_ub = float(ocp.constraints.ubu[0])
+        self.u_lb = float(config.MIN_CURRENT_A * config.MOTOR_KT)       # batas arus: u_min <= u <= u_max
+        self.u_ub = float(config.MAX_CURRENT_A * config.MOTOR_KT)
 
         # torsi nyata / torsi perintah yang dipakai g(x) (lihat docstring modul); boleh diganti saat berjalan
         self.rasio_torsi = float(config.RASIO_TORSI)
@@ -357,7 +255,8 @@ class CBFQP:
 
         # hasil siklus terakhir
         self.status = STATUS_AMAN
-        self.acados_status = 0
+        self.solver_ok = True                          # hasil QP solver (sebelum diperiksa ulang)
+        self.solver_status = ""                        # teks status dari QP solver
         self.feasible = True
         self.active = False
         self.c = np.zeros(self.NH)                     # nilai tiap constraint pada u terakhir (>= 0 = terpenuhi)
@@ -370,9 +269,9 @@ class CBFQP:
     def mode_cbf(self, mode: str) -> None:
         """Pilih constraint CBF sesuai mode gerak (MODE_BALANCING atau MODE_NAVIGATE).
 
-        Balancing : semua constraint di C_MODE[MODE_BALANCING] (h1 .. h8)
+        Balancing : constraint di C_MODE[MODE_BALANCING]
         Navigate  : constraint di C_MODE[MODE_NAVIGATE] (tanpa h5, h6, supaya robot boleh berjalan jauh)
-        Solver acados tidak dibangun ulang: hanya mask-nya yang berganti. Aman dipanggil tiap siklus.
+        Solver tidak dibangun ulang: hanya mask-nya yang berganti. Aman dipanggil tiap siklus.
         """
         if mode == self.mode:
             return
@@ -381,6 +280,21 @@ class CBFQP:
         self.mode = mode
         self.mask = self.mask_mode[mode]
         self.alpha_dipakai = self.alpha_mode[mode]
+
+    def pilih_barrier(self, nomor) -> None:
+        """Aktifkan HANYA constraint bernomor `nomor` (1 = constraint pertama di DAFTAR_C, yaitu h1, dst).
+
+        Dipakai tuning bertahap (tuning_optuna.py), mode gerak diabaikan sampai mode_cbf() dipanggil lagi.
+        Solver tidak dibangun ulang: hanya mask-nya yang berganti.
+        """
+        mask = np.zeros(self.NH)
+        for n in nomor:
+            if not 1 <= n <= self.NH:
+                raise ValueError("nomor constraint %s di luar 1 .. %d" % (n, self.NH))
+            mask[n - 1] = 1.0
+        self.mode = None
+        self.mask = mask
+        self.alpha_dipakai = self._alpha_dipakai(mask)
 
     def _alpha_dipakai(self, mask) -> list:
         """Indeks Alpha yang muncul di constraint dengan mask 1 (hanya Alpha ini yang wajib > 0)."""
@@ -399,7 +313,7 @@ class CBFQP:
         return float(config.zeta)
 
     def _alphas(self) -> np.ndarray:
-        """Nilai Alpha_1, Alpha_2, ... dari config (dibaca tiap siklus)."""
+        """Nilai Alpha_1, Alpha_2, ... dari config (dibaca tiap siklus, jadi perubahan di jendela Kontrol langsung dipakai)."""
         nilai = []
         for nama in self.nama_alpha:
             nilai.append(float(getattr(config, nama)))
@@ -455,7 +369,8 @@ class CBFQP:
             if p[i] <= 0.0:
                 alpha_nol = True
         if alpha_nol:
-            self.acados_status = -1
+            self.solver_ok = False
+            self.solver_status = "tidak dijalankan (Alpha = 0)"
             self.u_interval = (self.u_lb, self.u_ub)
             self.solve_ms = 0.0
             self.c = np.full(self.NH, np.nan)          # CBF-QP tidak dijalankan: nilai constraint tidak diketahui
@@ -464,23 +379,23 @@ class CBFQP:
         a, b = self.constraint_coefficients(x, p[:len(self.nama_alpha)])
         self.u_interval = self.allowed_interval(x, p[:len(self.nama_alpha)])
 
+        # QP: min (u - u_PD)^2  s.t.  -b <= a*u <= CBF_INFTY,  u_lb <= u <= u_ub
         t0 = time.perf_counter()
-        solver = self.solver
-        solver.set(0, "lbx", x)
-        solver.set(0, "ubx", x)
-        solver.set(0, "x", x)
-        solver.set(0, "u", np.array([min(max(self.u_pd, self.u_lb), self.u_ub)]))
-        for stage in range(1, self.N + 1):
-            solver.set(stage, "x", x)
-        for stage in range(self.N + 1):
-            solver.set(stage, "p", p)
-        solver.cost_set(0, "yref", np.array([self.u_pd]))
-        self.acados_status = int(solver.solve())
-        u = float(solver.get(0, "u")[0])
+        try:
+            hasil = self.solver(h=np.array([[2.0]]), g=np.array([-2.0 * self.u_pd]), a=a.reshape(self.NH, 1),
+                                lba=-b, uba=self._uba, lbx=np.array([self.u_lb]), ubx=np.array([self.u_ub]))
+            u = float(np.asarray(hasil["x"], dtype=float).ravel()[0])
+            statistik = self.solver.stats()
+            self.solver_ok = bool(statistik.get("success", True))
+            self.solver_status = str(statistik.get("return_status", "OK" if self.solver_ok else "gagal"))
+        except RuntimeError as kesalahan:               # QP tidak punya solusi / gagal numerik
+            u = float("nan")
+            self.solver_ok = False
+            self.solver_status = str(kesalahan).strip().splitlines()[-1][:80] if str(kesalahan).strip() else "error"
         self.solve_ms = (time.perf_counter() - t0) * 1000.0
 
         scale = np.maximum(1.0, np.abs(a) + np.abs(b))
-        solved = (self.acados_status == 0 and np.isfinite(u)
+        solved = (self.solver_ok and np.isfinite(u)
                   and self.u_lb - config.CBF_TOL_BATAS_U <= u <= self.u_ub + config.CBF_TOL_BATAS_U
                   and bool(np.all(a * u + b >= -config.CBF_TOL_CONSTRAINT * scale)))
         if not solved:
@@ -504,19 +419,23 @@ if __name__ == "__main__":
             print("%s di config.py masih 0; uji ini memakai nilai sementara 20." % nama)
             setattr(config, nama, 20.0)
     cbf = CBFQP()
+    print("QP solver CasADi: %s" % cbf.plugin)
     rng = np.random.default_rng(0)
     for mode in (MODE_BALANCING, MODE_NAVIGATE):
         cbf.mode_cbf(mode)
         print("mode %s | constraint aktif: %d dari %d | Alpha yang dipakai: %s"
               % (mode, int(cbf.mask.sum()), cbf.NH, [cbf.nama_alpha[i] for i in cbf.alpha_dipakai]))
         worst = 0.0
+        waktu = []
         for _ in range(2000):
             x = rng.uniform(-1.0, 1.0, config.NX) * np.array([5.0, config.dtheta_max, config.psi_max, config.dpsi_max])
             u_pd = rng.uniform(2.0 * config.u_min, 2.0 * config.u_max)
             u = cbf.compute(x, u_pd)
+            waktu.append(cbf.solve_ms)
             lo, hi = cbf.u_interval
             if lo <= hi:
                 worst = max(worst, abs(u - min(max(u_pd, lo), hi)))
         print("  jumlah per status:", cbf.count)
-        print(f"  selisih maksimum u* acados terhadap solusi eksak (kasus feasible): {worst:.2e} N m")
-    print(f"waktu solve terakhir: {cbf.solve_ms:.3f} ms")
+        print(f"  selisih maksimum u* QP solver terhadap solusi eksak (kasus feasible): {worst:.2e} N m")
+        print(f"  waktu solve rata-rata {np.mean(waktu):.3f} ms, maksimum {np.max(waktu):.3f} ms "
+              f"(batas waktu satu siklus kontrol {1000.0 * config.DT:.1f} ms)")

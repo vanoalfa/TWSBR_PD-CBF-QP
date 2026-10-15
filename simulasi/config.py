@@ -116,10 +116,11 @@ NAMA_ALPHA = []
 while ("Alpha_%d" % (len(NAMA_ALPHA) + 1)) in globals():
     NAMA_ALPHA.append("Alpha_%d" % (len(NAMA_ALPHA) + 1))
 
-CBF_N_HORIZON = 1      # N pada HPIPM (acados)
+# QP solver CBF-QP (plugin ca.conic CasADi). "qpoases" = active-set, sudah ikut di paket pip casadi.
+CBF_QP_SOLVER = "qpoases"
 
 # Toleransi numerik (bukan besaran fisik)
-CBF_INFTY = 1.0e9                   # batas atas "tak hingga" constraint h di acados
+CBF_INFTY = 1.0e9                   # batas atas "tak hingga" constraint c di QP
 CBF_TOL_CONSTRAINT = 1.0e-6         # pelanggaran constraint yang masih diterima saat memeriksa hasil solver
 CBF_TOL_BATAS_U = 1.0e-6            # [N m] pelanggaran batas u yang masih diterima
 CBF_TOL_AKTIF = 1.0e-4              # [N m] |u* - u_PD| di atas ini -> filter dianggap mengoreksi

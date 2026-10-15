@@ -9,8 +9,10 @@ Nomor KE-XX naik otomatis per tanggal, mode, dan jenis. Kolom CSV sama dengan si
 Penyimpanan saat robot masih balancing berjalan di PROSES TERPISAH (simpan(latar=True)) supaya loop kontrol tidak
 tertahan matplotlib.
 Gambar: .png dan .eps (vektor, untuk LaTeX). Batas sumbu tetap (config.PLOT_BATAS): psi +-1 rad, dpsi +-10 rad/s,
-theta dan dtheta +-30. Garis penanda |psi| = 5 deg (oranye) dan 10 deg (merah) dari config.PLOT_PENANDA_PSI.
-Batas safety set CBF (hitam) memakai psi_max yang tercatat di CSV (kolom psi_max_DEG).
+theta +-60 rad, dtheta +-30 rad/s, s +-3 m. Warna garis:
+    merah          : constraint barrier CBF-QP (psi_max dari CSV kolom psi_max_DEG, dpsi_max, dtheta_max, s_max)
+    hitam          : batas KOMET (|psi| = SAFE_TILT_DEG, |s| = S_KOMET)
+    kuning, oranye : penanda |psi| = 5 deg dan 10 deg (config.PLOT_PENANDA_PSI), hanya gambar
 
 Evaluasi (sesuai rumusan masalah skripsi):
     1. kestabilan pitch  : psi(t), dpsi(t), ISE psi dan dpsi, RMS psi, |psi| maks
@@ -223,6 +225,7 @@ def baca_csv(path):
     data["nama_alpha"] = nama_alpha
     data["zeta_deg"] = data["zeta_DEG"][0] if data["zeta_DEG"] else 0.0
     data["psi_max_deg"] = psi_max_deg
+    data["s_m"] = [config.R * v for v in data["theta_rad"]]
     return data
 
 
@@ -350,8 +353,16 @@ def simpan_gambar(fig, path_png):
     fig.savefig(path_png[:-4] + ".eps", format="eps")
 
 
+def _komet(ax, batas, label, sumbu="y"):
+    """Garis hitam batas KOMET di +-batas. sumbu = "y" (garis mendatar) atau "x" (garis tegak)."""
+    garis = ax.axhline if sumbu == "y" else ax.axvline
+    for tanda in (1, -1):
+        garis(tanda * batas, color=config.PLOT_KOMET_WARNA, linewidth=config.PLOT_KOMET_TEBAL, zorder=1.6,
+              label=label if tanda == 1 else None)
+
+
 def _penanda_psi(ax, sumbu="y"):
-    """Garis penanda |psi| (config.PLOT_PENANDA_PSI: 5 deg oranye, 10 deg merah). Hanya penanda, bukan batas CBF."""
+    """Garis penanda |psi| (config.PLOT_PENANDA_PSI: 5 deg kuning, 10 deg oranye). Hanya penanda, bukan batas CBF."""
     garis = ax.axhline if sumbu == "y" else ax.axvline
     for derajat, warna in config.PLOT_PENANDA_PSI:
         for tanda in (1, -1):
@@ -359,7 +370,7 @@ def _penanda_psi(ax, sumbu="y"):
                   label=("|psi| = %g deg" % derajat) if tanda == 1 else None)
 
 
-def _batas(ax, nilai, label="batas safety set"):
+def _batas(ax, nilai, label="batas safety set CBF"):
     for tanda in (1, -1):
         ax.axhline(tanda * nilai, color=config.PLOT_SAFETY_WARNA, linewidth=config.PLOT_SAFETY_TIPIS * 1.2,
                    linestyle="--", zorder=1.4, label=label if tanda == 1 else None)
@@ -387,7 +398,7 @@ def _rapikan(ax, judul, xlabel, ylabel, loc="upper right"):
     ax.legend(fontsize=7, loc=loc)
 
 
-def _grafik_waktu(ax, kumpulan, kolom, judul, satuan, batas, sumbu, label_batas="batas safety set"):
+def _grafik_waktu(ax, kumpulan, kolom, judul, satuan, batas, sumbu, label_batas="batas safety set CBF"):
     """kumpulan: list (label, warna, data). batas: garis safety set (None = tidak ada), sumbu: batas sumbu Y tetap."""
     for label, warna, data in kumpulan:
         ax.plot(data["t_s"], data[kolom], color=warna, linewidth=1.0, label=label, zorder=2)
@@ -399,18 +410,28 @@ def _grafik_waktu(ax, kumpulan, kolom, judul, satuan, batas, sumbu, label_batas=
 
 
 def _grafik_psi(ax, kumpulan, psi_max_deg, judul):
-    """psi(t) [rad], sumbu +-PLOT_BATAS psi, batas psi_max (hitam) dan penanda 5 / 10 deg."""
+    """psi(t) [rad], sumbu +-PLOT_BATAS psi: psi_max (merah), penanda 5 / 10 deg, KOMET (hitam)."""
     for label, warna, data in kumpulan:
         ax.plot(data["t_s"], data["psi_rad"], color=warna, linewidth=1.0, label=label, zorder=2)
     _batas(ax, math.radians(psi_max_deg), "psi_max = %g deg (CBF)" % psi_max_deg)
     _penanda_psi(ax, "y")
+    _komet(ax, math.radians(config.SAFE_TILT_DEG), "KOMET |psi| = %g deg" % config.SAFE_TILT_DEG)
     ax.set_ylim(-config.PLOT_BATAS["psi"], config.PLOT_BATAS["psi"])
     _rapikan(ax, judul, "t [s]", "psi [rad]")
+
+
+def _grafik_s(ax, kumpulan, judul):
+    """s(t) = R*theta [m], sumbu +-PLOT_BATAS s: s_max (merah) dan KOMET S_KOMET (hitam)."""
+    _grafik_waktu(ax, kumpulan, "s_m", judul, "s [m]", config.s_max, config.PLOT_BATAS["s"], "s_max = %g m (CBF)"
+                  % config.s_max)
+    _komet(ax, config.S_KOMET, "KOMET |s| = %g m" % config.S_KOMET)
+    ax.legend(fontsize=7, loc="upper right")
 
 
 def _fase_psi(ax, kumpulan, psi_max_deg):
     _kotak(ax, math.radians(psi_max_deg), config.dpsi_max, config.PLOT_BATAS["psi"], config.PLOT_BATAS["dpsi"])
     _penanda_psi(ax, "x")
+    _komet(ax, math.radians(config.SAFE_TILT_DEG), "KOMET |psi| = %g deg" % config.SAFE_TILT_DEG, "x")
     for label, warna, data in kumpulan:
         ax.plot(data["psi_rad"], data["dpsi_rad_s"], color=warna, linewidth=0.8, label=label, zorder=2)
     _rapikan(ax, "Bidang fase psi - dpsi  (psi_max = %g deg)" % psi_max_deg, "psi [rad]", "dpsi [rad/s]")
@@ -418,6 +439,7 @@ def _fase_psi(ax, kumpulan, psi_max_deg):
 
 def _fase_theta(ax, kumpulan):
     _kotak(ax, config.s_max / config.R, config.dtheta_max, config.PLOT_BATAS["theta"], config.PLOT_BATAS["dtheta"])
+    _komet(ax, config.S_KOMET / config.R, "KOMET |s| = %g m" % config.S_KOMET, "x")
     for label, warna, data in kumpulan:
         ax.plot(data["theta_rad"], data["dtheta_rad_s"], color=warna, linewidth=0.8, label=label, zorder=2)
     _rapikan(ax, "Bidang fase theta - dtheta  (batas theta = s_max / R)", "theta [rad]   (s = R*theta)",
@@ -451,8 +473,7 @@ def gambar_percobaan(data, nama, path_png):
                   config.dpsi_max, config.PLOT_BATAS["dpsi"])
     _grafik_waktu(fig.add_subplot(kisi[1, 0]), satu, "dtheta_rad_s", "Kecepatan roda dtheta(t)", "dtheta [rad/s]",
                   config.dtheta_max, config.PLOT_BATAS["dtheta"])
-    _grafik_waktu(fig.add_subplot(kisi[1, 1]), satu, "theta_rad", "Sudut roda theta(t)  (s = R*theta)", "theta [rad]",
-                  config.s_max / config.R, config.PLOT_BATAS["theta"], "batas |s| = s_max")
+    _grafik_s(fig.add_subplot(kisi[1, 1]), satu, "Jarak tempuh s(t) = R*theta")
 
     ax = fig.add_subplot(kisi[2, 0])
     if mode == MODE_PD_CBF:
@@ -476,7 +497,7 @@ def gambar_percobaan(data, nama, path_png):
     ax.set_ylabel("ISE psi [rad^2 s]")
     ax.grid(True, color="0.85")
     ax2 = ax.twinx()
-    ax2.plot(t, data["ISE_dpsi"], color="tab:purple", linewidth=0.9, label="ISE dpsi [(rad/s)^2 s]")
+    ax2.plot(t, data["ISE_dpsi"], color="tab:brown", linewidth=0.9, label="ISE dpsi [(rad/s)^2 s]")
     ax2.set_ylabel("ISE dpsi [(rad/s)^2 s]")
     garis = ax.get_lines() + ax2.get_lines()
     ax.legend(garis, [g.get_label() for g in garis], fontsize=7, loc="upper left")
@@ -572,8 +593,7 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis):
                   config.PLOT_BATAS["dpsi"])
     _grafik_waktu(fig.add_subplot(kisi[1, 0]), kumpulan, "dtheta_rad_s", "dtheta(t)", "dtheta [rad/s]",
                   config.dtheta_max, config.PLOT_BATAS["dtheta"])
-    _grafik_waktu(fig.add_subplot(kisi[1, 1]), kumpulan, "theta_rad", "theta(t)  (s = R*theta)", "theta [rad]",
-                  config.s_max / config.R, config.PLOT_BATAS["theta"], "batas |s| = s_max")
+    _grafik_s(fig.add_subplot(kisi[1, 1]), kumpulan, "s(t) = R*theta")
     ax = fig.add_subplot(kisi[2, 0])
     _grafik_waktu(ax, kumpulan, "u_Nm", "Torsi ke motor u(t)", "u [N m]", None, None)
     ax.axhline(config.u_max, color="black", linewidth=0.8, linestyle=":")
@@ -586,10 +606,10 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis):
     ax = fig.add_subplot(kisi[4, :])
     _tabel(ax, ["0 - %.1f s" % t_banding, label[MODE_PD], label[MODE_PD_CBF], "PD+CBF terhadap PD"], isi,
            [0.34, 0.22, 0.22, 0.18])
-    if catatan:
-        ax.text(0.5, 0.0, "PERHATIAN: " + "; ".join(catatan), ha="center", va="top", fontsize=9, color="tab:red",
-                transform=ax.transAxes)
-    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    fig.tight_layout(rect=(0, 0.02, 1, 0.95))
+    if catatan:                                     # di bawah gambar, tidak menimpa tabel
+        fig.text(0.5, 0.005, "PERHATIAN: " + "; ".join(catatan), ha="center", va="bottom", fontsize=9,
+                 color="tab:red")
     simpan_gambar(fig, path_png)
     plt.close(fig)
 

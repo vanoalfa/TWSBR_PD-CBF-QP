@@ -6,7 +6,7 @@ Kontrolnya sama dengan simulasi (simulasi/atera_main.py), hanya sumber state dan
     IMU (psi, dpsi) + encoder DDSM115 -> x = [theta, dtheta, psi, dpsi]
     -> u_PD = pd.compute(x)                      (pd_control.py, torsi SATU roda)
     -> mode PD     : u = u_PD dibatasi arus
-       mode PD+CBF : u = cbf.compute(x, u_PD)    (cbf_qp.py, acados HPIPM N = 1)
+       mode PD+CBF : u = cbf.compute(x, u_PD)    (cbf_qp.py, QP solver CasADi)
     -> roda kiri u + u_belok, roda kanan u - u_belok, arus = torsi / MOTOR_KT  (ddsm115.py)
     -> ise.py merekam (kolom CSV sama dengan simulasi) ke PLOT_EVALUASI/ATERA_RASPI
 
@@ -106,7 +106,7 @@ class Atera:
         self.imu.open()
         self.motors.initialize()
         self.joystick.open()
-        self.atur_pesan("Menyiapkan CBF-QP (acados) ...")
+        self.atur_pesan("Menyiapkan CBF-QP (CasADi) ...")
         self.render()
         try:
             from cbf_qp import CBFQP
@@ -512,9 +512,9 @@ class Atera:
             return baris + self.bungkus("CBF-QP: tidak tersedia, ", self.cbf_alasan)
         cbf = self.cbf
         lo, hi = cbf.u_interval
-        baris.append("CBF-QP (%s) | status %s | acados %d | solve %.3f ms | u diizinkan [%+.3f, %+.3f] N m"
+        baris.append("CBF-QP (%s) | status %s | %s %s | solve %.3f ms | u diizinkan [%+.3f, %+.3f] N m"
                      % ("dipakai" if self.mode_kontrol == ise.MODE_PD_CBF else "tidak dipakai, mode PD",
-                        cbf.status, cbf.acados_status, cbf.solve_ms, lo, hi))
+                        cbf.status, cbf.plugin, "OK" if cbf.solver_ok else "gagal", cbf.solve_ms, lo, hi))
         baris.append("  Alpha: " + "  ".join("%s=%g" % (n, getattr(config, n)) for n in cbf.nama_alpha)
                      + "  | psi_max=%g deg" % config.psi_max_DEG)
         baris.append("  sejak MULAI: " + (", ".join("%s %d" % kv for kv in self.jumlah_cbf.items()) or "-"))

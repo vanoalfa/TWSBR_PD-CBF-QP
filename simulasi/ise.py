@@ -69,7 +69,7 @@ def folder_jenis(jenis):
 
 MODE_PD = "PD"
 MODE_PD_CBF = "PD+CBF"
-STATUS_ALPHA_NOL = "ALPHA_NOL"      # sama dengan cbf_qp.STATUS_ALPHA (tidak di-import: mode PD tidak butuh acados)
+STATUS_ALPHA_NOL = "ALPHA_NOL"      # sama dengan cbf_qp.STATUS_ALPHA (tidak di-import: mode PD tidak butuh casadi)
 
 KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
 KOLOM_GAIN_CBF = config.NAMA_ALPHA + ["psi_max_DEG"]

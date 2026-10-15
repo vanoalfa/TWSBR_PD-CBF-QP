@@ -157,11 +157,11 @@ def main():
 
     pd = PDControl()
 
-    # CBF-QP memakai acados, selalu disiapkan sebelum jendela simulasi dibuka supaya tombol PD + CBF-QP bisa
+    # CBF-QP memakai CasADi, selalu disiapkan sebelum jendela simulasi dibuka supaya tombol PD + CBF-QP bisa
     # langsung dipakai. Bila gagal, simulasi tetap jalan dengan mode PD saja (tombol PD + CBF-QP dimatikan).
     # zeta tidak dikunci: CBF-QP membaca config.zeta tiap siklus, jadi ikut berubah bila zeta_DEG diubah.
     cbf = None
-    print("Menyiapkan CBF-QP (acados), tunggu beberapa detik ...")
+    print("Menyiapkan CBF-QP (CasADi) ...")
     try:
         from cbf_qp import CBFQP
         cbf = CBFQP()
