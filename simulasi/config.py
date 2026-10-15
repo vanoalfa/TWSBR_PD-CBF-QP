@@ -92,7 +92,7 @@ Kp_psi = 10.91       #33.15              # [N m/rad]    semua gain menghasilkan 
 Kd_psi = 02.31       #5.2                # [N m s/rad]
 Kp_theta = 0.10      #0.24             # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
 Kd_theta = 0.13      #0.41             # [N m s/rad]
-Kvel = -0.05                # [N m]       hanya aktif di mode Navigate (Tombol A / N)
+Kvel = -80.00               # [N m]       hanya aktif di mode Navigate (Tombol A / N)
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan apalah_bisa/tunning.py).
@@ -194,7 +194,7 @@ JOYSTICK_PORT = "/dev/input/event5"
 JOYSTICK_AMBANG_ANALOG = 0.5        # analog dianggap ditekan bila simpangannya di atas nilai ini (0..1)
 
 # ASUMSI: torsi tambahan untuk belok (N m). Roda kiri diberi u - TORSI_BELOK*belok, roda kanan u + TORSI_BELOK*belok.
-TORSI_BELOK = 0.02
+TORSI_BELOK = 1.00
 
 # =============================================================================
 #                              10. RUNTIME DAN EVALUASI ISE

@@ -131,7 +131,7 @@ def workplace(x, u, f, g, zeta, psi_max):
 
     # 4. Pilih constraint yang aktif di tiap mode gerak (urutan di dalam daftar bebas, isinya dari DAFTAR_C)
     C_MODE = {
-        MODE_BALANCING: [c_h1, c_h2],
+        MODE_BALANCING: [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6, c_h7, c_h8],
         MODE_NAVIGATE:  [c_h1, c_h2, c_h3, c_h4, c_h7, c_h8],      # tanpa h5, h6 (barrier jarak s)
     }
 
