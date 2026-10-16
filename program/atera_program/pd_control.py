@@ -15,7 +15,14 @@ Keluaran: u_PD = torsi untuk SATU roda (N m).
 
 Referensi dibuat oleh perbarui_referensi(x, dt) tiap siklus (gaya program dosen segway_cbf.py):
     Navigate  : v_target = arah * V_NAVIGATE                       (W / S, D-Pad, analog; 0 = berhenti)
-    Balancing : v_target = profil pulang ke titik nol s (s = 0):
+    Balancing : [REVISI 16-10b] config.REFERENSI_BALANCING
+                "tetap"  (bawaan): theta_ref = 0 (titik nol s), dtheta_ref = 0  = PERSIS rumus PD lama yang
+                         terbukti stabil di robot fisik (data 20261015 KE-04: psi std 0.28 deg).
+                "pulang" : profil pulang dosen di bawah. Di robot fisik 20261016 KE-09 ini membuat osilasi
+                         maju-mundur ~9 s yang membesar (psi std 3.8 deg, |dtheta| sampai 19 rad/s), karena
+                         penjepit E_S_MAKS menyeret s_ref ikut robot sehingga "pegas" Kp_theta ke titik nol
+                         hanya tersisa Kp_theta*E_S_MAKS/R = 0.2 N m. Hanya untuk percobaan.
+    Balancing "pulang": v_target = profil pulang ke titik nol s (s = 0):
                 v_target = sign(e) * min(V_PULANG_MAKS, sqrt(2*A_REM_PULANG*|e|), K_PULANG*|e|),   e = 0 - s
                 -> robot yang terdorong menjauh kembali pelan-pelan ke titik nol, dan tidak pernah diminta lebih
                    cepat dari yang masih bisa direm sebelum sampai.
@@ -120,18 +127,24 @@ class PDControl:
     def perbarui_referensi(self, x, dt):
         """[REVISI 16-10] Satu langkah generator referensi (lihat docstring modul). dt = periode siklus [s]."""
         s = config.R * float(x[config.IDX_THETA])
-        if self.mode_gerak == MODE_NAVIGATE:
+        if self.mode_gerak == MODE_BALANCING and str(config.REFERENSI_BALANCING).lower() != "pulang":
+            # [REVISI 16-10b] Balancing "tetap": setpoint 0 (titik nol s) seperti PD lama, tanpa penjepit E_S_MAKS
+            self.s_ref = self.v_ref = 0.0
+            self.theta_ref = self.dtheta_ref = 0.0
+            v_target = None
+        elif self.mode_gerak == MODE_NAVIGATE:
             v_target = self.arah * config.V_NAVIGATE
         else:
             e = 0.0 - s                                           # titik nol s = rumah
             v_target = math.copysign(min(config.V_PULANG_MAKS, math.sqrt(2.0 * config.A_REM_PULANG * abs(e)),
                                          config.K_PULANG * abs(e)), e)
-        langkah_v = config.A_REF_MAKS * dt
-        self.v_ref += _jepit(v_target - self.v_ref, -langkah_v, langkah_v)
-        self.s_ref += self.v_ref * dt
-        self.s_ref = _jepit(self.s_ref, s - config.E_S_MAKS, s + config.E_S_MAKS)
-        self.theta_ref = self.s_ref / config.R
-        self.dtheta_ref = self.v_ref / config.R
+        if v_target is not None:
+            langkah_v = config.A_REF_MAKS * dt
+            self.v_ref += _jepit(v_target - self.v_ref, -langkah_v, langkah_v)
+            self.s_ref += self.v_ref * dt
+            self.s_ref = _jepit(self.s_ref, s - config.E_S_MAKS, s + config.E_S_MAKS)
+            self.theta_ref = self.s_ref / config.R
+            self.dtheta_ref = self.v_ref / config.R
 
         # heading: belok +1 (kanan) = berputar searah jarum jam dilihat dari atas = yaw turun
         dyaw_target = -self.belok * config.YAW_RATE_NAVIGATE if self.mode_gerak == MODE_NAVIGATE else 0.0

@@ -116,6 +116,16 @@ BANTUAN_KEYBOARD = (
 )
 
 
+def _dari_nama(code, nilai, kata_positif, kata_negatif):
+    """[REVISI 16-10b] +1 / -1 / 0 dari nama tombol D-Pad di DPAD_MAP: nama memuat kata_positif -> +1, kata_negatif -> -1."""
+    nama = DPAD_MAP.get(code, {}).get(nilai, "")
+    if kata_positif in nama:
+        return 1
+    if kata_negatif in nama:
+        return -1
+    return 0
+
+
 def _arah(nilai):
     ambang = float(config.JOYSTICK_AMBANG_ANALOG)
     return 1 if nilai > ambang else (-1 if nilai < -ambang else 0)
@@ -197,13 +207,18 @@ class Joystick:
         return aksi
 
     def perintah(self):
-        """(arah, belok): arah +1 maju / -1 mundur, belok +1 kanan / -1 kiri, 0 = lepas. D-Pad didahulukan."""
-        arah = -self._dpad.get(config.DPAD_MAJU_CODE, 0)          # PAD Atas = -1 = maju
+        """(arah, belok): arah +1 maju / -1 mundur, belok +1 kanan / -1 kiri, 0 = lepas. D-Pad didahulukan.
+
+        [REVISI 16-10b] Arah D-Pad sekarang dibaca dari NAMA di DPAD_MAP (bukan angka mentah): "Atas" = maju,
+        "Bawah" = mundur, "Kanan" = belok kanan, "Kiri" = belok kiri. Dulu belok = nilai mentah code 16 (+1 dianggap
+        kanan), padahal di joystick ini +1 = PAD Kiri (DPAD_MAP sudah dibetulkan pengguna 20261016), jadi belok
+        terbalik. Sekarang cukup DPAD_MAP yang benar. Analog: JOYSTICK_ANALOG_BELOK_TANDA (-1 membalik)."""
+        arah = _dari_nama(config.DPAD_MAJU_CODE, self._dpad.get(config.DPAD_MAJU_CODE, 0), "Atas", "Bawah")
         if arah == 0:
             arah = _arah(-self._analog.get(ANALOG_MAJU, 0.0))
-        belok = self._dpad.get(config.DPAD_BELOK_CODE, 0)          # PAD Kanan = +1 = belok kanan
+        belok = _dari_nama(config.DPAD_BELOK_CODE, self._dpad.get(config.DPAD_BELOK_CODE, 0), "Kanan", "Kiri")
         if belok == 0:
-            belok = _arah(self._analog.get(ANALOG_BELOK, 0.0))
+            belok = _arah(float(config.JOYSTICK_ANALOG_BELOK_TANDA) * self._analog.get(ANALOG_BELOK, 0.0))
         return arah, belok
 
     def close(self):

@@ -117,6 +117,13 @@ A_REM_PULANG = 0.30                 # [m/s^2] perlambatan yang direncanakan saat
 K_PULANG = 1.0                      # [1/s]   dekat titik nol: v_target = K_PULANG * jarak
 E_S_MAKS = 0.10                     # [m]     selisih maksimum s_ref terhadap s robot (anti-windup)
 KP_THETA_SEMUA_MODE = True          # False = perilaku lama (Kp_theta hanya di mode Balancing)
+# [REVISI 16-10b] Setpoint di mode Balancing:
+#   "tetap"  : theta_ref = 0 (titik nol s), dtheta_ref = 0 = rumus PD lama (stabil di robot fisik, data 20261015 KE-04)
+#   "pulang" : profil pulang V_PULANG_MAKS / A_REM_PULANG / K_PULANG + penjepit E_S_MAKS (gaya dosen). Di robot fisik
+#              20261016 KE-09 ini membuat osilasi maju-mundur ~9 s yang membesar (psi std 3.8 deg, |dtheta| 19 rad/s):
+#              penjepit menyeret s_ref ikut robot, "pegas" ke titik nol tinggal Kp_theta*E_S_MAKS/R = 0.2 N m.
+# Mode Navigate tetap memakai setpoint bergerak (V_NAVIGATE).
+REFERENSI_BALANCING = "tetap"
 
 # =============================================================================
 #           [REVISI 16-10] 4c. PD HEADING (roda kiri dan kanan bergerak bersama)
@@ -236,6 +243,9 @@ JOYSTICK_AMBANG_ANALOG = 0.5        # analog dianggap ditekan bila simpangannya 
 # ASUMSI: PAD Atas/Bawah (code 17) = maju/mundur, PAD Kiri/Kanan (code 16) = belok. Tukar bila ingin sebaliknya.
 DPAD_MAJU_CODE = 17
 DPAD_BELOK_CODE = 16
+# [REVISI 16-10b] Arah D-Pad dibaca dari NAMA di joystick_mapping.DPAD_MAP ("Kiri"/"Kanan"/"Atas"/"Bawah"). Bila belok
+# lewat analog kiri masih terbalik, ganti ke -1.0 (D-Pad tidak terpengaruh). ASUMSI: 1.0 (belum diuji).
+JOYSTICK_ANALOG_BELOK_TANDA = 1.0
 
 # Keyboard terminal (SSH / terminal tempat GUI berjalan), tombolnya lihat joystick_mapping.TOMBOL_KEYBOARD.
 # Terminal tidak memberi tahu saat tombol DILEPAS: W A S D dianggap masih ditahan selama pengulangan otomatis

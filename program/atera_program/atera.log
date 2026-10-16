@@ -1960,3 +1960,314 @@ AttributeError: 'CBFQP' object has no attribute 'reset_dob'
 2026-10-16 13:07:09,749 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261016_130709_COBA PD+CBF_PERCOBAAN KE-02
 2026-10-16 13:07:09,750 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261016_130709_COBA PD+CBF_PERCOBAAN KE-02
 2026-10-16 13:07:16,368 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:18:40,473 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:18:40,528 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 14:18:40,530 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 14:18:40,584 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 14:18:40,609 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 14:18:40,665 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 14:18:44,631 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:18:49,553 | INFO | atera | Kalibrasi selesai (sudut nol -3.51 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:18:51,310 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:18:56,227 | INFO | atera | Kalibrasi selesai (sudut nol -2.88 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:19:05,943 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:19:06,586 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:19:35,226 | INFO | atera | psi = -40.6 deg (> 40 deg) -> tersimpan PERCOBAAN 20261016_141935_COBA PD_PERCOBAAN KE-13
+2026-10-16 14:19:35,227 | INFO | atera | KOMET: psi = -40.6 deg (> 40 deg) | tersimpan: PERCOBAAN 20261016_141935_COBA PD_PERCOBAAN KE-13
+2026-10-16 14:19:54,337 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:19:55,011 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:20:13,012 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261016_142013_COBA PD_PERCOBAAN KE-14
+2026-10-16 14:20:13,013 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261016_142013_COBA PD_PERCOBAAN KE-14
+2026-10-16 14:20:13,638 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:20:15,201 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261016_142015_COBA PD+CBF_PERCOBAAN KE-03
+2026-10-16 14:20:15,202 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261016_142015_COBA PD+CBF_PERCOBAAN KE-03
+2026-10-16 14:20:16,364 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:20:18,658 | INFO | atera | Balancing, mode PD+CBF. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:21:04,317 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:04,561 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:04,561 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 14:21:04,615 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 14:21:04,639 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 14:21:04,693 | INFO | atera | Ada 1 masalah, lihat baris Masalah.
+2026-10-16 14:21:04,698 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:04,941 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:06,701 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:06,945 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:08,706 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:08,949 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:09,840 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:21:14,755 | INFO | atera | Kalibrasi selesai (sudut nol -2.90 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:21:14,761 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:15,004 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:16,765 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:17,008 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:18,074 | INFO | atera | Roda sudah mati.
+2026-10-16 14:21:18,769 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:19,012 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:20,773 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:21,016 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:22,777 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:23,020 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:24,176 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:21:29,091 | INFO | atera | Kalibrasi selesai (sudut nol -2.36 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:21:29,097 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:29,340 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:31,101 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:31,344 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:33,105 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:33,348 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:35,109 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:35,352 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:37,113 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:37,356 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:37,487 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:21:38,512 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:21:38,927 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:21:39,117 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:39,360 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:39,361 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:21:39,791 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:21:40,131 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:21:40,466 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:21:41,121 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:41,364 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:41,365 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:21:41,880 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:21:42,560 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:21:43,125 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:43,369 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:45,099 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:21:45,130 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:45,373 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:45,648 | INFO | atera | MULAI ditolak: motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:47,134 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:47,377 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:49,138 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:49,381 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:51,142 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:51,385 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:53,146 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:53,389 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:55,150 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:55,394 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:57,155 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:57,398 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:21:59,159 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:21:59,214 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 14:21:59,214 | INFO | atera | Kedua motor siap.
+2026-10-16 14:22:00,731 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:22:03,705 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:22:04,490 | INFO | atera | berputar: yaw - yaw_ref = 90 deg (> 90 deg) -> tersimpan PERCOBAAN 20261016_142204_COBA PD_PERCOBAAN KE-15
+2026-10-16 14:22:04,490 | INFO | atera | KOMET: berputar: yaw - yaw_ref = 90 deg (> 90 deg) | tersimpan: PERCOBAAN 20261016_142204_COBA PD_PERCOBAAN KE-15
+2026-10-16 14:22:10,683 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:22:11,355 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:22:15,096 | INFO | atera | berputar: yaw - yaw_ref = 91 deg (> 90 deg) -> tersimpan PERCOBAAN 20261016_142215_COBA PD_PERCOBAAN KE-16
+2026-10-16 14:22:15,097 | INFO | atera | KOMET: berputar: yaw - yaw_ref = 91 deg (> 90 deg) | tersimpan: PERCOBAAN 20261016_142215_COBA PD_PERCOBAAN KE-16
+2026-10-16 14:22:17,203 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:22:19,178 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:22:20,066 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:22:28,726 | INFO | atera | berputar: yaw - yaw_ref = -91 deg (> 90 deg) -> tersimpan PERCOBAAN 20261016_142228_COBA PD_PERCOBAAN KE-17
+2026-10-16 14:22:28,726 | INFO | atera | KOMET: berputar: yaw - yaw_ref = -91 deg (> 90 deg) | tersimpan: PERCOBAAN 20261016_142228_COBA PD_PERCOBAAN KE-17
+2026-10-16 14:22:38,213 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:22:39,150 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:22:41,520 | INFO | atera | berputar: yaw - yaw_ref = 90 deg (> 90 deg) -> tersimpan PERCOBAAN 20261016_142241_COBA PD_PERCOBAAN KE-18
+2026-10-16 14:22:41,520 | INFO | atera | KOMET: berputar: yaw - yaw_ref = 90 deg (> 90 deg) | tersimpan: PERCOBAAN 20261016_142241_COBA PD_PERCOBAAN KE-18
+2026-10-16 14:22:58,404 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:22:58,795 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:23:03,444 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:23:10,705 | INFO | atera | berputar: yaw - yaw_ref = -90 deg (> 90 deg) -> tersimpan PERCOBAAN 20261016_142310_COBA PD_PERCOBAAN KE-19
+2026-10-16 14:23:10,706 | INFO | atera | KOMET: berputar: yaw - yaw_ref = -90 deg (> 90 deg) | tersimpan: PERCOBAAN 20261016_142310_COBA PD_PERCOBAAN KE-19
+2026-10-16 14:23:17,624 | INFO | atera | Tombol A (Navigate) berlaku saat balancing. MULAI selalu dimulai di mode Balancing.
+2026-10-16 14:23:18,278 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:23:30,912 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:23:34,703 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:23:37,517 | INFO | atera | berputar: yaw - yaw_ref = -92 deg (> 90 deg) -> tersimpan PERCOBAAN 20261016_142337_COBA PD_PERCOBAAN KE-20
+2026-10-16 14:23:37,517 | INFO | atera | KOMET: berputar: yaw - yaw_ref = -92 deg (> 90 deg) | tersimpan: PERCOBAAN 20261016_142337_COBA PD_PERCOBAAN KE-20
+2026-10-16 14:23:41,824 | INFO | atera | Roda sudah mati.
+2026-10-16 14:23:42,369 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:23:42,967 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:23:45,551 | INFO | atera | berputar: yaw - yaw_ref = 91 deg (> 90 deg) -> tersimpan PERCOBAAN 20261016_142345_COBA PD_PERCOBAAN KE-21
+2026-10-16 14:23:45,552 | INFO | atera | KOMET: berputar: yaw - yaw_ref = 91 deg (> 90 deg) | tersimpan: PERCOBAAN 20261016_142345_COBA PD_PERCOBAAN KE-21
+2026-10-16 14:23:50,160 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:23:51,342 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:23:53,865 | INFO | atera | berputar: yaw - yaw_ref = 90 deg (> 90 deg) -> tersimpan PERCOBAAN 20261016_142353_COBA PD_PERCOBAAN KE-22
+2026-10-16 14:23:53,865 | INFO | atera | KOMET: berputar: yaw - yaw_ref = 90 deg (> 90 deg) | tersimpan: PERCOBAAN 20261016_142353_COBA PD_PERCOBAAN KE-22
+2026-10-16 14:23:59,623 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:24:00,193 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:24:02,218 | INFO | atera | berputar: yaw - yaw_ref = 91 deg (> 90 deg) -> tersimpan PERCOBAAN 20261016_142402_COBA PD_PERCOBAAN KE-23
+2026-10-16 14:24:02,218 | INFO | atera | KOMET: berputar: yaw - yaw_ref = 91 deg (> 90 deg) | tersimpan: PERCOBAAN 20261016_142402_COBA PD_PERCOBAAN KE-23
+2026-10-16 14:24:13,315 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:24:13,369 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 14:24:13,370 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 14:24:13,424 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 14:24:13,449 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 14:24:13,498 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 14:24:15,587 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:24:20,504 | INFO | atera | Kalibrasi selesai (sudut nol -2.11 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:24:20,994 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:24:22,843 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:25:32,380 | INFO | atera | s = 2.00 m (> 2 m, mode Balancing) -> tersimpan PERCOBAAN 20261016_142532_COBA PD_PERCOBAAN KE-24
+2026-10-16 14:25:32,380 | INFO | atera | KOMET: s = 2.00 m (> 2 m, mode Balancing) | tersimpan: PERCOBAAN 20261016_142532_COBA PD_PERCOBAAN KE-24
+2026-10-16 14:25:41,851 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:25:43,151 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:27:37,810 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:29:42,583 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:29:42,637 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 14:29:42,639 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 14:29:42,693 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 14:29:42,716 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 14:29:42,770 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 14:29:46,089 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:29:51,002 | INFO | atera | Kalibrasi selesai (sudut nol -3.51 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:29:53,609 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:29:58,526 | INFO | atera | Kalibrasi selesai (sudut nol -2.85 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:30:11,813 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:30:16,729 | INFO | atera | Kalibrasi selesai (sudut nol -2.86 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:30:35,183 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:30:36,139 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:30:44,443 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:31:21,601 | ERROR | ddsm115 | motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:21,708 | INFO | atera | motor: motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 -> tersimpan PERCOBAAN 20261016_143121_COBA PD_PERCOBAAN KE-25
+2026-10-16 14:31:21,708 | INFO | atera | GANGGUAN: motor: motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 | tersimpan: PERCOBAAN 20261016_143121_COBA PD_PERCOBAAN KE-25
+2026-10-16 14:31:21,713 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:21,957 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:23,716 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:23,959 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:25,718 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:25,961 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:25,962 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:31:26,392 | INFO | atera | MULAI ditolak: motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:27,367 | INFO | atera | MULAI ditolak: motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:27,720 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:27,964 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:27,964 | INFO | atera | MULAI ditolak: motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:28,264 | INFO | atera | MULAI ditolak: motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:29,723 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:29,966 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:31,725 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:31,968 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:33,727 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:33,970 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:35,729 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:35,972 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:37,033 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:31:41,948 | INFO | atera | Kalibrasi selesai (sudut nol -2.68 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:31:41,951 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:42,194 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:43,400 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:31:48,316 | INFO | atera | Kalibrasi selesai (sudut nol -2.71 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:31:48,320 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:48,563 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:49,808 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:50,283 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:50,322 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:50,565 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:50,585 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:50,856 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:51,116 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:51,376 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:51,636 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:51,906 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:52,176 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:52,324 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:52,567 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:52,568 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:52,698 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:52,928 | INFO | atera | Roda sudah mati.
+2026-10-16 14:31:54,326 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:54,569 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:31:56,328 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:31:56,571 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:00,517 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:00,760 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:00,762 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 14:32:00,815 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 14:32:00,839 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 14:32:00,893 | INFO | atera | Ada 1 masalah, lihat baris Masalah.
+2026-10-16 14:32:00,896 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:01,139 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:02,265 | INFO | atera | Roda sudah mati.
+2026-10-16 14:32:02,680 | INFO | atera | Roda sudah mati.
+2026-10-16 14:32:02,898 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:03,142 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:03,142 | INFO | atera | Roda sudah mati.
+2026-10-16 14:32:03,212 | INFO | atera | Roda sudah mati.
+2026-10-16 14:32:04,122 | INFO | atera | Roda sudah mati.
+2026-10-16 14:32:04,402 | INFO | atera | Roda sudah mati.
+2026-10-16 14:32:04,762 | INFO | atera | Roda sudah mati.
+2026-10-16 14:32:04,900 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:05,144 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:05,145 | INFO | atera | Roda sudah mati.
+2026-10-16 14:32:05,480 | INFO | atera | Roda sudah mati.
+2026-10-16 14:32:06,904 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:07,147 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:08,906 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:09,149 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:10,908 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:11,151 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:12,910 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:13,153 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:14,912 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:15,155 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:16,914 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:17,157 | ERROR | ddsm115 | motor kiri: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-16 14:32:18,916 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:18,970 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 14:32:18,970 | INFO | atera | Kedua motor siap.
+2026-10-16 14:32:22,777 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:32:27,694 | INFO | atera | Kalibrasi selesai (sudut nol -3.42 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:32:28,499 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:32:38,947 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:32:39,001 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 14:32:39,003 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 14:32:39,057 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 14:32:39,082 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 14:32:39,137 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 14:32:41,276 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:32:46,193 | INFO | atera | Kalibrasi selesai (sudut nol -3.41 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 14:32:47,268 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:32:53,106 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:32:54,222 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261016_143254_COBA PD_PERCOBAAN KE-26
+2026-10-16 14:32:54,223 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261016_143254_COBA PD_PERCOBAAN KE-26
+2026-10-16 14:33:02,468 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:33:03,637 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 14:33:05,246 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 14:33:06,460 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:35:19,327 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:35:56,109 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:36:31,626 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:36:56,200 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:37:00,364 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:39:13,951 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:41:38,600 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:41:40,641 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:41:55,298 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:41:56,640 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:42:11,409 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:42:33,084 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261016_144233_COBA PD_PERCOBAAN KE-27
+2026-10-16 14:42:33,084 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261016_144233_COBA PD_PERCOBAAN KE-27
+2026-10-16 14:42:45,159 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:42:48,050 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:45:39,897 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:45:46,614 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:47:04,666 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:47:26,314 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:49:41,482 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:51:49,160 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:52:18,421 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:52:20,133 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:53:12,706 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:53:32,385 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:54:29,107 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:54:38,095 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 14:56:41,714 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 14:56:57,343 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261016_145657_COBA PD+CBF_PERCOBAAN KE-04
+2026-10-16 14:56:57,343 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261016_145657_COBA PD+CBF_PERCOBAAN KE-04
+2026-10-16 14:59:31,673 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 14:59:31,727 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 14:59:31,728 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 14:59:31,782 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 14:59:31,806 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 14:59:31,856 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 14:59:33,520 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 14:59:38,430 | INFO | atera | Kalibrasi selesai (sudut nol -2.99 deg, s = 0 di sini). Tekan MULAI.

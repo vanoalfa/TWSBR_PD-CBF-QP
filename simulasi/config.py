@@ -121,6 +121,13 @@ A_REM_PULANG = 0.30                 # [m/s^2]
 K_PULANG = 1.0                      # [1/s]
 E_S_MAKS = 0.10                     # [m]
 KP_THETA_SEMUA_MODE = True          # False = perilaku lama (Kp_theta hanya di mode Balancing)
+# [REVISI 16-10b] Setpoint di mode Balancing:
+#   "tetap"  : theta_ref = 0 (titik nol s), dtheta_ref = 0 = rumus PD lama (stabil di robot fisik, data 20261015 KE-04)
+#   "pulang" : profil pulang V_PULANG_MAKS / A_REM_PULANG / K_PULANG + penjepit E_S_MAKS (gaya dosen). Di robot fisik
+#              20261016 KE-09 ini membuat osilasi maju-mundur ~9 s yang membesar (psi std 3.8 deg, |dtheta| 19 rad/s):
+#              penjepit menyeret s_ref ikut robot, "pegas" ke titik nol tinggal Kp_theta*E_S_MAKS/R = 0.2 N m.
+# Mode Navigate tetap memakai setpoint bergerak (V_NAVIGATE).
+REFERENSI_BALANCING = "tetap"
 
 # =============================================================================
 #           [REVISI 16-10] 5c. PD HEADING (roda kiri dan kanan bergerak bersama)  (= robot fisik 4c)
