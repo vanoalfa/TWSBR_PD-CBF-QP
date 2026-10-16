@@ -10,10 +10,10 @@ Konvensi tanda (dipakai model.py dan semua file lain):
     u     > 0 : torsi motor SATU roda, mendorong roda ke DEPAN (reaksinya mendorong badan ke belakang)
             kedua roda diberi u yang sama, jadi torsi total = N_WHEEL*u
 
-Dua mode gerak (pd_control.py: MODE_BALANCING, MODE_NAVIGATE):
-    Balancing : robot diam di satu titik (Kp_theta aktif), semua barrier CBF aktif
-    Navigate  : robot dijalankan joystick / D-Pad (Kp_theta = 0, Kvel x arah), barrier jarak s nonaktif
-Titik nol jarak s (s = R*theta) direset ke posisi saat itu setiap robot masuk mode Balancing.
+Mode gerak otomatis (pd_control.py: MODE_DIAM, MODE_GERAK), tanpa tombol mode:
+    DIAM  : W / S tidak ditahan. Robot ditahan di setpoint theta (Kp_theta), constraint s dan KOMET s aktif.
+    GERAK : W / S ditahan. Kp_theta dan constraint s diabaikan, Kvel*arah menggerakkan robot.
+Setpoint theta (titik nol jarak s, s = R*theta) dipasang saat W / S dilepas, dan oleh tombol B.
 """
 
 import math
@@ -55,7 +55,7 @@ NU = 1
 # =============================================================================
 #                              3. SETPOINT
 # =============================================================================
-theta_setpoint = 0.0                # [rad]    sudut roda dinolkan saat robot masuk mode Balancing
+theta_setpoint = 0.0                # [rad]    theta diukur dari setpoint theta (titik nol s): B, W / S dilepas, R
 psi_setpoint = 0.0                  # [rad]
 dpsi_setpoint = 0.0                 # [rad/s]
 dtheta_setpoint = 0.0               # [rad/s]
@@ -67,9 +67,9 @@ dtheta_setpoint = 0.0               # [rad/s]
 psi_max_DEG = 15.0                  # [deg]    batas psi yang dijaga CBF (h1, h2); bisa diubah di jendela Kontrol
 psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
-dtheta_max = 13.0                   # [rad/s]  |dtheta| <= dtheta_max
-# ASUMSI: di bawah batas kecepatan motor DDSM115 (no-load 200 rpm = 20.9 rad/s, wiki Waveshare) dan di atas
-# kecepatan roda yang dibutuhkan PD untuk pulih dari dorongan 5 N di simulasi (12.3 rad/s, pengujian 20261012).
+# ASUMSI: sedikit di bawah batas kecepatan motor DDSM115 (no-load 200 rpm = 20.9 rad/s, wiki Waveshare), = robot fisik.
+# Dengan 13 rad/s h7/h8 melarang roda mengejar badan setelah dorongan ~10 N (PD butuh ~19 rad/s) -> robot jatuh.
+dtheta_max = 20.0                   # [rad/s]  |dtheta| <= dtheta_max
 psi_min = -psi_max
 dpsi_min = -dpsi_max
 dtheta_min = -dtheta_max
@@ -77,27 +77,48 @@ s_max = 1.0                         # [m]      jarak tempuh s = R*theta (dari ti
 s_min = -s_max
 
 # KOMET = kondisi robot yang sudah tidak tertolong, berlaku di mode PD maupun PD+CBF. Roda dimatikan.
-#   Jatuh : |psi| > SAFE_TILT_DEG                      (semua mode gerak)
-#   Lari  : |s|   > S_KOMET        (hanya mode Balancing, di mode Navigate robot memang boleh berjalan jauh)
+#   Jatuh    : |psi| > SAFE_TILT_DEG                (semua mode gerak)
+#   Lari     : |s|   > S_KOMET                      (hanya mode DIAM; saat GERAK robot memang berjalan jauh)
+#   Berputar : |yaw - yaw_ref| > YAW_KOMET_DEG      (semua mode gerak)
 SAFE_TILT_DEG = 40.0                # [deg]  ASUMSI: dipilih pengguna (20261014)
 S_KOMET = 2.0                       # [m]
+# KOMET berputar: s memakai RATA-RATA kedua roda, jadi robot yang berputar di tempat tidak pernah mencapai
+# |s| > S_KOMET. ASUMSI: 90 deg (sama dengan config robot fisik).
+YAW_KOMET_DEG = 90.0                # [deg]
 
 # =============================================================================
 #                              5. PD
 # =============================================================================
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
-# error = setpoint - state,   arah = -1 / 0 / +1 dari D-Pad joystick
+# error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
 Kp_psi = 10.91       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
 Kd_psi = 02.31       #5.2                # [N m s/rad]
-Kp_theta = 0.10      #0.24             # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
+Kp_theta = 0.10      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK)
 Kd_theta = 0.13      #0.41             # [N m s/rad]
-Kvel = -0.05                # [N m]       hanya aktif di mode Navigate (Tombol A / N)
+# Kvel*arah hanya mode GERAK. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta -> Kvel NEGATIF supaya W maju
+# (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s).
+# ASUMSI: -0.52 (0.20 m/s), sama dengan robot fisik.
+Kvel = -0.52                # [N m]
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan apalah_bisa/tunning.py).
 BALANCE_DIRECTION_SIGN = -1.0
 # BUTUH PENGUJIAN ARAH KOREKSI: gain kecil, badan dimiringkan ke depan, roda harus berputar ke DEPAN.
+
+# =============================================================================
+#                              5b. PD HEADING (roda kiri dan kanan bergerak bersama)  (= robot fisik 4b)
+# =============================================================================
+# yaw = R*(theta_kanan - theta_kiri)/W_RODA (+ = berputar ke KIRI dilihat dari atas)
+# u_belok = Kp_yaw*(yaw - yaw_ref) + Kd_yaw*(dyaw - dyaw_ref); roda kiri u + u_belok, roda kanan u - u_belok
+#   A / D dilepas : yaw_ref tetap.   A / D ditahan : dyaw_ref = -belok*YAW_RATE_BELOK (saat DIAM = berputar di tempat).
+W_RODA = 0.258                      # [m] tengah ban kiri ke tengah ban kanan (diukur pengguna)
+YAW_AKTIF = True
+Kp_yaw = 0.30                       # [N m/rad]     ASUMSI (lihat robot fisik config.py 4b)
+Kd_yaw = 0.10                       # [N m s/rad]
+YAW_RATE_BELOK = 1.0                # [rad/s] kecepatan belok A / D
+A_YAW_MAKS = 3.0                    # [rad/s^2]
+YAW_TORSI_MAKS = 0.40               # [N m]
 
 # =============================================================================
 #                              6. CBF-QP
@@ -106,8 +127,8 @@ BALANCE_DIRECTION_SIGN = -1.0
 Alpha_1 = 54.73 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
 Alpha_2 = 44.85 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
 Alpha_3 = 55.32 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 33.34 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
-Alpha_5 = 80.97 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode Balancing
+Alpha_4 = 33.34 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_5 = 80.97 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
 Alpha_6 = 485.31 #84.67          # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
@@ -118,6 +139,19 @@ while ("Alpha_%d" % (len(NAMA_ALPHA) + 1)) in globals():
 
 # QP solver CBF-QP (plugin ca.conic CasADi). "qpoases" = active-set, sudah ikut di paket pip casadi.
 CBF_QP_SOLVER = "qpoases"
+# pilihan lain: "eksak" (solusi pasti numpy), "osqp", "proxqp", "qrqp", "hpipm", "daqp", "highs", "ipqp".
+# Bandingkan:  python3 cbf_qp.py --banding-solver
+CBF_QP_SOLVER_BANDING = ["eksak", "qpoases", "osqp", "proxqp", "qrqp", "hpipm", "daqp", "highs", "ipqp"]
+# Slack, margin, DOB (= robot fisik, penjelasan lengkap di cbf_qp.py dan program/atera_program/config.py)
+CBF_SLACK_AKTIF = True
+# bobot slack per constraint (exact penalty, urutan DAFTAR_C h1..h8): yang kecil dilonggarkan dulu bila bertabrakan
+CBF_RHO_SLACK = [1.0e6, 1.0e6, 1.0e4, 1.0e4, 1.0e2, 1.0e2, 1.0e2, 1.0e2]    # h1 h2 | h3 h4 | h5 h6 | h7 h8
+CBF_SLACK_EPS = 1.0e-4
+CBF_TOL_SLACK = 1.0e-6
+CBF_MARGIN_DEG = 1.0                # [deg] barrier psi = psi_max - margin (garis merah plot tetap di psi_max)
+DOB_AKTIF = True                    # True: d_hat dipakai CBF-QP. False: hanya dicatat
+DOB_TAU_S = 0.020                   # [s]
+DOB_BATAS = 200.0                   # [rad/s^2]
 
 # Toleransi numerik (bukan besaran fisik)
 CBF_INFTY = 1.0e9                   # batas atas "tak hingga" constraint c di QP
@@ -193,9 +227,6 @@ ZERO_CALIBRATION_DELAY_S = 0.004
 JOYSTICK_PORT = "/dev/input/event5"
 JOYSTICK_AMBANG_ANALOG = 0.5        # analog dianggap ditekan bila simpangannya di atas nilai ini (0..1)
 
-# ASUMSI: torsi tambahan untuk belok (N m). Roda kiri diberi u - TORSI_BELOK*belok, roda kanan u + TORSI_BELOK*belok.
-TORSI_BELOK = 0.02
-
 # =============================================================================
 #                              10. RUNTIME DAN EVALUASI ISE
 # =============================================================================
@@ -242,6 +273,13 @@ RASIO_TORSI = MOTOR_KT_EFEKTIF / MOTOR_KT
 # Uji loop: perintah terkirim 1.8 ms setelah IMU dibaca (+ hitungan PD / CBF-QP), torsi mulai 0..4 ms kemudian.
 # ASUMSI: dibulatkan menjadi 1 periode kontrol.
 SIM_JEDA_TORSI = 0.005              # [s] jeda dari state dibaca sampai torsi bekerja (kelipatan 1 ms)
+# Batas arus bergantung kecepatan motor (back-EMF), digabung dengan batas arus MAX_CURRENT_A:
+#   i_maju_maks(w)   = min(MAX_CURRENT_A, MOTOR_STALL_CURRENT_A * (1 - w / w_noload))   (>= 0)
+#   i_mundur_maks(w) = min(MAX_CURRENT_A, MOTOR_STALL_CURRENT_A * (1 + w / w_noload))   (>= 0)
+#   w = kecepatan roda relatif badan (= putaran motor), w_noload = MOTOR_NO_LOAD_SPEED_RPM.
+# Jadi makin cepat roda, makin kecil arus yang bisa masuk, nol di ~20.9 rad/s (data robot 20261015: |dtheta|
+# tidak pernah > ~21 rad/s). Tanpa ini (False) roda simulasi bisa berputar secepat apa pun (motor ideal).
+SIM_BATAS_KECEPATAN = True
 SIM_MODEL_IMU = True                # True: psi dari model MPU6050 + Kalman, False: psi sempurna
 # Noise saat robot diam (0.5 s pertama delay_imu_20261009_134728.csv).
 SIM_GYRO_NOISE_DEG_S = 0.10         # [deg/s] simpangan baku gyro
@@ -312,8 +350,6 @@ PLOT_BACKEND = ["QtAgg", "Qt5Agg", "TkAgg"]
 
 # Jendela Kontrol (Qt)
 WARNA_QT_TEKAN = "#1d9e5a"       # tombol sedang ditekan
-WARNA_QT_MODE = "#544bb8"        # mode yang sedang aktif
-WARNA_QT_ABAI = "#9a9a9a"        # tulisan tombol yang sedang diabaikan
 WARNA_QT_UJI = "#c26a00"         # mode pengujian aktif
 WARNA_QT_PD = "#9467bd"          # tombol mode kontrol PD aktif (= tab:purple)
 WARNA_QT_PD_CBF = "#1f77b4"      # tombol mode kontrol PD + CBF-QP aktif (= tab:blue)
@@ -338,7 +374,7 @@ DESIMAL_ALPHA = 2
 # (atau skenario di bawah) berubah; tuning_optuna.py menghentikan program dan menjelaskan bedanya.
 #
 # SATU PENGUJIAN = OPTUNA_ULANGAN kali skenario berikut, robot di-reset di awal tiap ulangan (lantai
-# OPTUNA_ZETA_DEG, mode Balancing). Di dalam satu ulangan tidak ada reset:
+# OPTUNA_ZETA_DEG, mode DIAM). Di dalam satu ulangan tidak ada reset:
 #   1. Tenang awal  : robot diletakkan, ditunggu sampai STABIL (maks OPTUNA_DURASI_STABIL detik, tidak dinilai ISE).
 #   2. Dorongan     : didorong sesuai urutan OPTUNA_ARAH_DORONG. Dorongan berikutnya LANGSUNG diberikan
 #                     OPTUNA_DURASI_DORONGAN detik setelah dorongan sebelumnya, stabil atau belum (kondisi terburuk).
@@ -372,8 +408,8 @@ DESIMAL_ALPHA = 2
 #   (atau sebaliknya), a = OPTUNA_AMBANG_BANGBANG x u_max. Getaran kecil di sekitar 0 (noise) tidak dihitung.
 #   Angka besar (puluhan per detik) = kontrol bang-bang. Tidak masuk skor.
 # Tahap dengan "skor_s": False menghapus suku s, penalti jarak, dan komet |s|: yang dinilai hanya psi.
-OPTUNA_TRIAL_PD = 16300                 # jumlah trial tahap PD (bisa diubah per tahap di OPTUNA_TAHAP)
-OPTUNA_TRIAL_CBFQP = 16300              # jumlah trial tahap CBFQP_* (bisa diubah per tahap di OPTUNA_TAHAP)
+OPTUNA_TRIAL_PD = 163221013                 # jumlah trial tahap PD (bisa diubah per tahap di OPTUNA_TAHAP)
+OPTUNA_TRIAL_CBFQP = 16221013              # jumlah trial tahap CBFQP_* (bisa diubah per tahap di OPTUNA_TAHAP)
 OPTUNA_LANGKAH = 0.01                 # 2 angka di belakang koma
 
 # Batas pencarian PER PROFIL: OPTUNA_BATAS[profil][nama] = (batas bawah, batas atas). Edit sebelum tuning.
@@ -410,6 +446,10 @@ OPTUNA_BATAS = {
         "Alpha_6":  (11.00, 100.0),
     },
     "DATASHEET": {
+        "Kp_psi":   (5.0, 80.0),
+        "Kd_psi":   (0.5, 100.0),
+        "Kp_theta": (0.0, 1.0),
+        "Kd_theta": (0.0, 100.0),
         "Alpha_1": (25.77, 54.77),
         "Alpha_2": (25.77, 54.77),
         "Alpha_3": (30.00, 150.0),
@@ -428,6 +468,7 @@ OPTUNA_BATAS = {
 #   skor_s   : (opsional, default True) False = skor hanya dari psi
 #   penalti_jarak : (opsional, default True) False = OPTUNA_PENALTI_JARAK tidak dihitung (suku s di ISE tetap)
 #   cari_gaya     : (opsional, default False) True = tiap trial mencari gaya dorong tertinggi yang lolos (lihat atas)
+#   stagnant      : (opsional, default OPTUNA_STAGNANT) batas stagnan khusus tahap ini (lihat AUTO-EXIT di bawah)
 OPTUNA_TAHAP = {
     "PD":           {"variabel": ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta"], "trial": OPTUNA_TRIAL_PD,
                      "barrier": None, "penalti_jarak": False, "cari_gaya": True},
@@ -491,3 +532,12 @@ OPTUNA_PENALTI_GAGAL = 10.0         # [per detik]
 # diketahui setelah pencarian gaya selesai.
 OPTUNA_PRUNER_STARTUP = 10
 OPTUNA_PRUNER_WARMUP_S = 5
+# AUTO-EXIT STAGNAN (early stopping seluruh study, berbeda dengan pruning yang hanya menghentikan satu trial):
+# tuning satu tahap berhenti sendiri bila skor terbaik tidak MEMBAIK selama OPTUNA_STAGNANT trial selesai berturut-turut,
+# lalu langsung lanjut ke laporan (nilai untuk config.py, CSV, PNG) seperti biasa. Membaik = skor turun lebih dari
+#   OPTUNA_STAGNANT_MIN x max(1, |skor terbaik acuan|)        (relatif; tahap PD: kenaikan gaya lolos 0.5 N selalu terhitung)
+# Trial pruned tidak dihitung. Riwayat study di database ikut dihitung, jadi study yang dilanjutkan tidak mulai dari 0.
+# 0 = auto-exit mati. Bisa diganti per tahap (kunci "stagnant" di OPTUNA_TAHAP) atau saat menjalankan: --stagnant N.
+# ASUMSI: 300 trial dan 0.1 %. Mengubahnya TIDAK membuat study ditolak (bukan bagian skenario).
+OPTUNA_STAGNANT = 300
+OPTUNA_STAGNANT_MIN = 1.0e-3

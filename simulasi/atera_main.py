@@ -8,14 +8,26 @@ Mode kontrol PD / PD + CBF-QP dipilih dengan tombol di jendela Kontrol (atau key
 Mengganti mode: data perekaman biasa disimpan, lalu robot diletakkan ulang (seperti R) dengan mode baru.
 Semua perintah dan tombol dicetak di terminal saat program mulai.
 
-CONSTRAINT CBF-QP: dipilih dengan kotak centang h1 .. h8 di jendela Kontrol (awal = C_MODE Balancing di WORKPLACE
-cbf_qp.py). Yang dicentang dipakai di mode Balancing maupun Navigate. Plot: barrier dicentang merah, lainnya abu-abu.
+MODE GERAK otomatis (pd_control.py), sama dengan robot fisik (D-Pad):
+    DIAM  : W / S tidak ditahan. Robot ditahan di setpoint theta (Kp_theta aktif), constraint s (h5, h6) dan
+            KOMET s aktif.
+    GERAK : W / S ditahan. Kp_theta dan constraint s diabaikan, Kvel*arah menggerakkan robot.
+    Saat W / S DILEPAS, setpoint theta (titik nol s) dipasang tepat di posisi itu. Tombol B memasang setpoint roda
+    (titik nol s + arah / yaw_ref) kapan saja. A / D = belok (tanpa W / S: berputar di tempat).
+
+CONSTRAINT CBF-QP: dipilih dengan kotak centang h1 .. h8 di jendela Kontrol (awal = C_MODE[MODE_DIAM] di WORKPLACE
+cbf_qp.py). Saat GERAK, constraint yang tidak ada di C_MODE[MODE_GERAK] (h5, h6) ikut dilepas walau dicentang.
+Plot: barrier yang sedang dipakai merah, lainnya abu-abu.
 
 PEREKAM PERBANDINGAN (tombol 3): PD vs PD + CBF-QP dengan dorongan yang sama. Setiap rekaman yang selesai menjadi
 PEMBANDING mode-nya (plot realtime: PD ungu, PD+CBF biru, pudar). Bila keduanya ada, gambar BANDING PERBANDINGAN
 dibuat otomatis (sama dengan python3 ise.py --bandingkan --perbandingan). Disimpan di PLOT_EVALUASI/PERBANDINGAN.
 
-Dua mode gerak (pd_control.py): Balancing (tombol B) dan Navigate (tombol N). Dua jenis perekaman ISE:
+Tiap siklus: perintah W A S D -> pd.set_command -> state -> KOMET -> DOB -> PD -> CBF-QP -> PD heading
+(pd.compute_belok: roda kiri u + u_belok, roda kanan u - u_belok, supaya kedua roda bergerak bersama) -> step.
+DOB CBF-QP (cbf.dob_perbarui / cbf.dob_catat) juga jalan di mode PD supaya taksirannya tercatat di CSV.
+
+Jenis perekaman ISE:
     PERCOBAAN : dari robot diletakkan (atau sejak E terakhir) sampai E ditekan, KOMET, atau keluar.
                 Disimpan di PLOT_EVALUASI/PERCOBAAN.
     PENGUJIAN : mode pengujian (tombol T). Perekaman dimulai saat dorongan O / P diberikan dan berhenti
@@ -33,7 +45,7 @@ import pybullet
 import config
 import ise
 import model
-from pd_control import MODE_BALANCING, MODE_NAVIGATE, PDControl
+from pd_control import MODE_DIAM, MODE_GERAK, PDControl
 from simulasi import NAMA_ALPHA, Simulasi
 
 BANTUAN = """
@@ -50,13 +62,12 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
              1 (PD) -> 3 -> R -> O (atau P) -> tunggu %.0f s (disimpan otomatis, jadi pembanding PD)
              2 (PD + CBF-QP) -> R -> O (dorongan sama) -> tunggu -> disimpan + gambar BANDING otomatis
            3 tidak perlu dimatikan di antaranya. Gaya dorong (Gaya_dorong) jangan diubah di antara keduanya.
-  h1..h8   kotak centang constraint CBF-QP yang dipakai (di jendela Kontrol), berlaku di semua mode gerak.
-  B        Mode Balancing : robot diam di satu titik, W A S D diabaikan. Titik nol s (s = R*theta) dipindah
-           ke posisi robot saat B ditekan.
-  N        Mode Navigate  : W A S D dipakai (Kp_theta = 0). Constraint CBF tetap yang dicentang (bila h5 / h6
-           dicentang, robot tidak bisa berjalan lebih jauh dari s_max).
-  W / S    maju / mundur (ditahan)
-  A / D    belok kiri / kanan (ditahan)
+  h1..h8   kotak centang constraint CBF-QP yang dipakai (di jendela Kontrol). Saat GERAK h5 / h6 tetap dilepas.
+  W / S    maju / mundur (ditahan) = mode GERAK: Kp_theta dan constraint s diabaikan, torsi Kvel*arah.
+           Kecepatan tunak v = -R*Kvel*arah/Kd_theta = %+.2f m/s untuk W (Kvel di jendela Kontrol).
+           Dilepas = mode DIAM: setpoint theta (titik nol s) dipasang di posisi itu, Kp_theta aktif lagi.
+  A / D    belok kiri / kanan (ditahan), YAW_RATE_BELOK = %.2f rad/s (tanpa W / S: berputar di tempat)
+  B        pasang setpoint roda di posisi sekarang: titik nol s (s = R*theta) dan arah (yaw_ref)
   O        dorong robot ke depan
   P        dorong robot ke belakang
   E        simpan data dan plot ISE sekarang; robot tetap berjalan, perekaman baru dimulai
@@ -65,7 +76,8 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
            belum disimpan DIBUANG; tekan E dulu bila ingin disimpan). Nilai parameter tetap.
   T        masuk / keluar MODE PENGUJIAN. Di mode ini perekaman biasa berhenti; setiap O / P memulai
            satu PENGUJIAN: direkam %.0f s sejak dorongan, lalu disimpan otomatis (_PENGUJIAN KE-XX).
-  KOMET    |psi| > SAFE_TILT_DEG (semua mode), atau |s| > S_KOMET (hanya mode Balancing): motor dimatikan,
+  KOMET    |psi| > SAFE_TILT_DEG, |s| > S_KOMET (hanya mode DIAM), atau |yaw - yaw_ref| > YAW_KOMET_DEG
+           (berputar): motor dimatikan,
            perekaman berhenti (pengujian yang sedang berjalan langsung disimpan). Lanjutkan dengan R, E, atau Q.
   Berhenti juga bisa: tutup jendela PyBullet, atau Ctrl+C di terminal (hasil ISE tetap tersimpan)
 
@@ -88,7 +100,8 @@ HASIL ISE (folder PLOT_EVALUASI/PERCOBAAN, /PENGUJIAN, /PERBANDINGAN, file .csv 
   python3 ise.py --bandingkan --pd 3 --cbf 5 --tanggal 20261007   sama, untuk tanggal tertentu
   tambahkan --pengujian / --perbandingan untuk hasil tombol T / 3, contoh:  python3 ise.py --daftar --perbandingan
 =======================================================================
-""" % (config.DURASI_PENGUJIAN, config.DURASI_PENGUJIAN)
+""" % (config.DURASI_PENGUJIAN, -config.R * config.Kvel / config.Kd_theta if config.Kd_theta > 0.0 else float("nan"),
+       config.YAW_RATE_BELOK, config.DURASI_PENGUJIAN)
 
 
 def simpan_ise(perekam):
@@ -141,11 +154,24 @@ def teks_pembanding(pembanding):
     return "pembanding (tombol 3)   " + "   |   ".join(bagian)
 
 
-def letakkan_ulang(sim, perekam, mode):
-    """Robot diletakkan ulang di posisi awal (plot realtime ikut direset, titik nol s = posisi awal),
-    perekaman percobaan baru dimulai."""
+def letakkan_ulang(sim, perekam, mode, pd, cbf):
+    """Robot diletakkan ulang di posisi awal (plot realtime ikut direset, titik nol s = posisi awal), perekaman
+    percobaan baru dimulai. PD mulai DIAM dengan arah sekarang sebagai setpoint heading, DOB dikosongkan."""
     sim.reset()
     perekam.mulai(mode, ise.JENIS_PERCOBAAN)
+    pd.set_command(0, 0)
+    pd.pasang_yaw_ref(sim.baca_yaw()[0])
+    if cbf is not None:
+        cbf.reset_dob()
+
+
+def data_ekstra(pd, cbf, mode):
+    """Kolom CSV tambahan (ise.KOLOM_EKSTRA): arah, yaw, u_belok, DOB, slack."""
+    d_dtheta, d_dpsi = cbf.d_hat if cbf is not None else (0.0, 0.0)
+    return {"arah": pd.arah, "yaw_rad": pd.yaw, "dyaw_rad_s": pd.dyaw, "yaw_ref_rad": pd.yaw_ref,
+            "u_belok_Nm": pd.u_belok,
+            "dob_dtheta_rad_s2": d_dtheta, "dob_dpsi_rad_s2": d_dpsi,
+            "slack": cbf.slack if (cbf is not None and mode == ise.MODE_PD_CBF) else 0.0}
 
 
 def main():
@@ -182,20 +208,20 @@ def main():
     pembanding = {ise.MODE_PD: "", ise.MODE_PD_CBF: ""}       # nama file PERBANDINGAN pembanding tiap mode
     sim.teks_pembanding = teks_pembanding(pembanding)
 
-    # Constraint CBF-QP yang dipakai = kotak centang h1 .. h8 di jendela Kontrol (awal: C_MODE Balancing).
+    # Constraint CBF-QP yang dipakai = kotak centang h1 .. h8 di jendela Kontrol (awal: C_MODE[MODE_DIAM]), dan saat
+    # GERAK hanya yang juga ada di C_MODE[MODE_GERAK].
     if cbf is not None:
         jumlah_h = cbf.NH
-        centang_awal = [bool(m) for m in cbf.mask_mode[MODE_BALANCING]]
+        centang_awal = [bool(m) for m in cbf.mask_mode[MODE_DIAM]]
     else:
         jumlah_h = max(max(pasangan) for pasangan in config.CBF_BARRIER_H.values())
         centang_awal = [False] * jumlah_h
     sim.atur_centang_awal(centang_awal)
-    centang_dipakai = None                 # centang yang sedang dipakai CBF-QP (None = belum diterapkan)
+    centang_dipakai = None                 # centang yang sedang dipakai (None = belum diterapkan)
+    mask_dipakai = None                    # constraint yang sedang dipakai CBF-QP = centang dan mode gerak
 
     if pd.Kp_psi == 0.0 and pd.Kd_psi == 0.0:
         print("PERHATIAN: Kp_psi dan Kd_psi di config.py masih 0, robot akan komet. Isi di jendela Kontrol.")
-    if pd.Kvel == 0.0:
-        print("PERHATIAN: Kvel di config.py masih 0, tombol W / S tidak berpengaruh.")
     if cbf is not None:
         print("CBF-QP: %d constraint di DAFTAR_C | Alpha dipakai: %s"
               % (cbf.NH, ", ".join([cbf.nama_alpha[i] for i in cbf.alpha_dipakai])))
@@ -204,7 +230,6 @@ def main():
                 print("PERHATIAN: %s di config.py masih 0, CBF-QP tidak aktif (status ALPHA_NOL) sampai diisi."
                       % cbf.nama_alpha[i])
 
-    mode_gerak = MODE_BALANCING    # MODE_BALANCING (B) atau MODE_NAVIGATE (N)
     komet = False                  # True = KOMET, motor mati, menunggu R / E / Q
 
     # Mode pengujian (tombol T)
@@ -224,13 +249,14 @@ def main():
 
     perekam = ise.PerekamISE()             # perekaman biasa (PERCOBAAN)
     perekam.mulai(mode, ise.JENIS_PERCOBAAN)
+    pd.pasang_yaw_ref(sim.baca_yaw()[0])
     perekam_uji = ise.PerekamISE()         # mode pengujian (PENGUJIAN)
     perekam_banding = ise.PerekamISE()     # perekam perbandingan (PERBANDINGAN)
     print("Hasil ISE disimpan di folder:")
     print("   ", os.path.abspath(ise.folder_jenis(ise.JENIS_PERCOBAAN)))
     print("   ", os.path.abspath(ise.folder_jenis(ise.JENIS_PENGUJIAN)))
     print("   ", os.path.abspath(ise.folder_jenis(ise.JENIS_PERBANDINGAN)))
-    print("Mulai. Mode kontrol: %s | Mode Balancing | zeta %.1f deg" % (mode, zeta_dipakai))
+    print("Mulai. Mode kontrol: %s | mode DIAM | zeta %.1f deg" % (mode, zeta_dipakai))
 
     t = 0.0
     siklus = 0
@@ -347,8 +373,7 @@ def main():
                         simpan_ise(perekam)
                     mode = mode_baru
                     sim.atur_mode(mode)
-                    letakkan_ulang(sim, perekam, mode)
-                    mode_gerak = MODE_BALANCING
+                    letakkan_ulang(sim, perekam, mode, pd, cbf)
                     komet = False
                     t = 0.0
                     waktu_berikutnya = time.time()
@@ -364,8 +389,7 @@ def main():
                     banding_berjalan = False
                     sim.plot_tahan = True
                 print("Tombol R: robot diletakkan ulang, ISE dan plot mulai dari 0 (data yang belum disimpan dibuang).")
-                letakkan_ulang(sim, perekam, mode)
-                mode_gerak = MODE_BALANCING
+                letakkan_ulang(sim, perekam, mode, pd, cbf)
                 komet = False
                 t = 0.0
                 waktu_berikutnya = time.time()
@@ -388,8 +412,7 @@ def main():
                     print("Rekaman perbandingan yang sedang berjalan dibatalkan (tidak disimpan).")
                     banding_berjalan = False
                     sim.plot_tahan = True
-                letakkan_ulang(sim, perekam, mode)
-                mode_gerak = MODE_BALANCING
+                letakkan_ulang(sim, perekam, mode, pd, cbf)
                 komet = False
                 t = 0.0
                 waktu_berikutnya = time.time()
@@ -398,13 +421,10 @@ def main():
 
             for tombol in tombol_baru:
                 if tombol == "b":
-                    mode_gerak = MODE_BALANCING
-                    # Titik nol s dipindah ke posisi sekarang (dipakai PD, barrier CBF, KOMET, dan ISE).
+                    # Setpoint roda = posisi dan arah sekarang (titik nol s dipakai PD, barrier CBF, KOMET, dan ISE).
                     sim.nolkan_theta()
-                    print("Mode Balancing: robot ditahan di sini (titik nol s dipindah), W A S D diabaikan")
-                if tombol == "n":
-                    mode_gerak = MODE_NAVIGATE
-                    print("Mode Navigate: W A S D dipakai")
+                    pd.pasang_yaw_ref(sim.baca_yaw()[0])
+                    print("Tombol B: setpoint roda dipasang di sini (s = 0, arah sekarang).")
                 if tombol == "o" or tombol == "p":
                     arah_dorong = 1 if tombol == "o" else -1
                     teks_arah = "depan" if arah_dorong > 0 else "belakang"
@@ -453,36 +473,46 @@ def main():
                 config.psi_max = math.radians(config.psi_max_DEG)
                 config.psi_min = -config.psi_max
 
-            # Constraint CBF-QP = kotak centang di jendela Kontrol (tidak ikut berganti dengan mode gerak).
+            # Perintah gerak -> mode gerak otomatis. W / S baru DILEPAS (GERAK -> DIAM): setpoint theta dipasang
+            # tepat di posisi ini (sebelum state dibaca, jadi siklus ini sudah memakai theta = 0 di sini).
+            gerak_sebelumnya = pd.mode_gerak
+            pd.set_command(sim.arah, sim.belok)
+            if gerak_sebelumnya == MODE_GERAK and pd.mode_gerak == MODE_DIAM:
+                sim.nolkan_theta()
+
+            # Constraint CBF-QP = kotak centang di jendela Kontrol, dan saat GERAK hanya yang ada di C_MODE[MODE_GERAK].
             centang = sim.baca_centang()
             centang = (centang + [False] * jumlah_h)[:jumlah_h]
             if centang != centang_dipakai:
                 centang_dipakai = centang
+                print("Constraint CBF-QP dicentang: %s" % (ise.teks_mask(centang)))
+            mask = list(centang)
+            if cbf is not None:
+                mask = [centang[k] and cbf.mask_mode[pd.mode_gerak][k] > 0.0 for k in range(jumlah_h)]
+            if mask != mask_dipakai:
+                mask_dipakai = mask
                 if cbf is not None:
-                    cbf.pilih_barrier([k + 1 for k in range(jumlah_h) if centang[k]])
-                sim.atur_mask_plot(centang)
-                print("Constraint CBF-QP dipakai: %s" % (ise.teks_mask(centang)))
-
-            # Perintah gerak. Di Mode Balancing arah diabaikan (diatur di dalam PDControl).
-            pd.set_command(sim.arah, mode_gerak)
-            if mode_gerak == MODE_BALANCING:
-                u_belok = 0.0
-            else:
-                u_belok = config.TORSI_BELOK * sim.belok
+                    cbf.pilih_barrier([k + 1 for k in range(jumlah_h) if mask[k]])
+                sim.atur_mask_plot(mask)
 
             # ------------------------------------------------------------ kontrol
             x = sim.baca_state()
+            yaw, dyaw = sim.baca_yaw()                      # dari encoder kedua roda
             psi = x[2]
             s = model.hitung_s(x)
 
-            # KOMET: |psi| > SAFE_TILT_DEG (semua mode), atau |s| > S_KOMET (hanya mode Balancing)
+            # KOMET: |psi| > SAFE_TILT_DEG, |s| > S_KOMET (hanya mode DIAM), atau berputar
             sebab = ""
             if abs(psi) > math.radians(config.SAFE_TILT_DEG):
                 sebab = "psi = %.1f deg" % math.degrees(psi)
-            elif mode_gerak == MODE_BALANCING and abs(s) > config.S_KOMET:
+            elif pd.mode_gerak == MODE_DIAM and abs(s) > config.S_KOMET:
                 sebab = "s = %.2f m" % s
+            elif abs(yaw - pd.yaw_ref) > math.radians(config.YAW_KOMET_DEG):
+                sebab = "berputar, yaw - yaw_ref = %.0f deg" % math.degrees(yaw - pd.yaw_ref)
             if not komet and sebab != "":
                 komet = True
+                if cbf is not None:
+                    cbf.reset_dob()
                 print("komet (%s): motor dimatikan, perekaman berhenti. "
                       "Tekan R (ulang), E (simpan data), atau Q (keluar + simpan)." % sebab)
                 if pengujian_berjalan:
@@ -501,9 +531,13 @@ def main():
                 u_PD = 0.0
                 u = 0.0
                 u_belok = 0.0
+                pd.u_belok = 0.0
                 status_cbf = "MATI"
             else:
-                u_PD = pd.compute_PD(x)
+                # urutan: DOB (awal siklus) -> PD -> CBF-QP -> heading -> DOB (catat u)
+                if cbf is not None:
+                    cbf.dob_perbarui(x, config.DT)
+                u_PD = pd.compute(x)
                 if mode == ise.MODE_PD:
                     # Batas arus motor: u_min <= u <= u_max
                     u = max(config.u_min, min(config.u_max, u_PD))
@@ -514,6 +548,10 @@ def main():
                     # c_k pada u terpakai. Dicatat kosong bila constraint tidak dipakai (mask 0) atau CBF-QP tidak
                     # dijalankan (status ALPHA_NOL, nilai c = NaN).
                     nilai_c = [float(c) if m > 0.0 and math.isfinite(c) else None for c, m in zip(cbf.c, cbf.mask)]
+                # PD heading: kedua roda bergerak bersama (sisa torsi u_max - |u| saja)
+                u_belok = pd.compute_belok(yaw, dyaw, u, config.u_max, config.DT)
+                if cbf is not None:
+                    cbf.dob_catat(x, u)
 
             # Gaya dorongan yang bekerja di siklus ini (dicatat di CSV).
             if sim.sisa_dorong > 0.0:
@@ -537,7 +575,8 @@ def main():
                     if banding_berjalan:
                         t_banding = t_banding + config.DT
                         perekam_banding.tambah(t_banding, x, pd.error_theta, pd.error_dtheta, pd.error_psi,
-                                               pd.error_dpsi, u_PD, u, status_cbf, params, dorong, nilai_c)
+                                               pd.error_dpsi, u_PD, u, status_cbf, params, dorong, nilai_c,
+                                               data_ekstra(pd, cbf, mode))
                         if t_banding >= config.DURASI_PENGUJIAN - 0.5 * config.DT:
                             print("PERBANDINGAN %s selesai (%.0f s)." % (mode, config.DURASI_PENGUJIAN))
                             simpan_pembanding(sim, perekam_banding, pembanding)
@@ -551,21 +590,18 @@ def main():
                 elif not mode_pengujian:
                     t = t + config.DT
                     perekam.tambah(t, x, pd.error_theta, pd.error_dtheta, pd.error_psi, pd.error_dpsi,
-                                   u_PD, u, status_cbf, params, dorong, nilai_c)
+                                   u_PD, u, status_cbf, params, dorong, nilai_c, data_ekstra(pd, cbf, mode))
                 elif pengujian_berjalan:
                     t_uji = t_uji + config.DT
                     perekam_uji.tambah(t_uji, x, pd.error_theta, pd.error_dtheta, pd.error_psi, pd.error_dpsi,
-                                       u_PD, u, status_cbf, params, dorong, nilai_c)
+                                       u_PD, u, status_cbf, params, dorong, nilai_c, data_ekstra(pd, cbf, mode))
                     if t_uji >= config.DURASI_PENGUJIAN - 0.5 * config.DT:
                         print("PENGUJIAN selesai (%.0f s)." % config.DURASI_PENGUJIAN)
                         simpan_ise(perekam_uji)
                         pengujian_berjalan = False
 
             # ----------------------------------------------------------- tampilan
-            if mode_gerak == MODE_BALANCING:
-                gerak = "Mode Balancing"
-            else:
-                gerak = "Mode Navigate"
+            gerak = "mode " + pd.mode_gerak
             if mode_banding:
                 perekam_aktif = perekam_banding
                 t_tampil = t_banding
@@ -605,14 +641,20 @@ def main():
                              % (x[0], s, x[1], config.dtheta_max))
                 baris.append("u_PD %+.3f   u %+.3f N m    arus %+.2f / %.2f A"
                              % (u_PD, u, u / config.MOTOR_KT, config.MAX_CURRENT_A))
+                # heading, perintah gerak, DOB, slack
+                d_dtheta, d_dpsi = cbf.d_hat if cbf is not None else (0.0, 0.0)
+                baris.append("yaw %+.1f (ref %+.1f) deg  u_belok %+.3f  |  arah %+d belok %+d  |  DOB ddpsi %+.1f  "
+                             "slack %.2g" % (math.degrees(yaw), math.degrees(pd.yaw_ref), pd.u_belok, pd.arah,
+                                             pd.belok, d_dpsi,
+                                             cbf.slack if (cbf is not None and mode == ise.MODE_PD_CBF) else 0.0))
                 baris.append("ISE psi %.6f    t %.1f s  (kecepatan x%.2f waktu nyata)"
                              % (perekam_aktif.ise_psi, t_tampil, kecepatan))
                 if len(perekam_aktif.gain_berubah) > 0:
                     baris.append("TUNING: " + " ".join(perekam_aktif.gain_berubah) + " diubah saat direkam")
-                sim.tampilkan(baris, mode_gerak, komet, teks_uji, mode_banding)
+                sim.tampilkan(baris, pd.mode_gerak, komet, teks_uji, mode_banding)
 
             if siklus % 200 == 0 and not komet:
-                print("t %6.1f s (x%.2f) | %-6s | %-14s | psi %+6.2f deg | s %+5.2f m | dtheta %+6.2f rad/s | "
+                print("t %6.1f s (x%.2f) | %-6s | %-10s | psi %+6.2f deg | s %+5.2f m | dtheta %+6.2f rad/s | "
                       "u_PD %+6.3f | u %+6.3f | %s" % (t_tampil, kecepatan, mode, gerak, math.degrees(psi),
                                                        s, x[1], u_PD, u, status_cbf))
 

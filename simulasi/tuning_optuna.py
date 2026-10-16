@@ -17,7 +17,7 @@ untuk tiap profil karena torsi roda yang lebih kuat membutuhkan gain yang lebih 
 Study tidak boleh dilanjutkan bila nilai yang dikunci atau skenario (dorongan, durasi, penalti, dst) berubah:
 program berhenti dan menjelaskan bedanya, supaya skor lama dan baru tidak tercampur.
 
-Satu PENGUJIAN (headless, lantai config.OPTUNA_ZETA_DEG, mode Balancing) = OPTUNA_ULANGAN ulangan skenario, robot
+Satu PENGUJIAN (headless, lantai config.OPTUNA_ZETA_DEG, mode DIAM) = OPTUNA_ULANGAN ulangan skenario, robot
 di-reset di awal tiap ulangan:
     tenang sampai stabil -> dorongan berurutan OPTUNA_ARAH_DORONG berjarak OPTUNA_DURASI_DORONGAN s (stabil atau
     belum) -> tunggu stabil setelah dorongan terakhir. Ulangan ke-k memakai seed noise OPTUNA_SEED + k dan waktu
@@ -35,6 +35,12 @@ Satu TRIAL:
                    OPTUNA_PENALTI_KOMET). Alpha dinilai dari dorongan kecil sampai besar.
 Rumus skor pengujian: config.py bagian 13. Makin kecil makin baik.
 
+Dua jenis penghentian otomatis:
+    pruning   : satu TRIAL dihentikan bila skor sementaranya (dilaporkan tiap 1 detik simulasi) lebih buruk dari
+                median trial sebelumnya pada detik yang sama (MedianPruner, hanya tahap CBFQP_*).
+    stagnan   : seluruh TAHAP berhenti sendiri bila skor terbaik tidak membaik selama OPTUNA_STAGNANT trial selesai
+                berturut-turut (PenjagaStagnan), lalu laporan dibuat seperti biasa. Lihat config.py bagian 13.
+
 Log terminal tiap trial: trial | status | skor | waktu nyata | terbaik | gaya | bb/s | psimaks | gagal | detail
     gaya    = gaya lolos tertinggi [N] (tanpa komet), "-" bila gaya terendah pun komet
     bb/s    = bang-bang per detik: berapa kali u berbalik dari >= +a ke <= -a (atau sebaliknya),
@@ -51,6 +57,7 @@ semua komet).
 Jalankan (di folder simulasi):
     python3 tuning_optuna.py --profil TERUKUR --tahap PD            jumlah trial dari config.OPTUNA_TAHAP
     python3 tuning_optuna.py --profil TERUKUR --tahap CBFQP_PSI --trial 50   MENAMBAH 50 trial ke study yang ada
+    python3 tuning_optuna.py --profil TERUKUR --tahap PD --stagnant 500      batas stagnan 500 trial (0 = mati)
     python3 tuning_optuna.py --hasil                                cetak hasil terbaik semua profil dan tahap, buat ulang CSV + PNG
     python3 tuning_optuna.py --hasil --profil TERUKUR               hanya satu profil
     python3 tuning_optuna.py --profil TERUKUR --hapus PD            hapus study satu tahap (mulai dari nol)
@@ -86,7 +93,7 @@ except ImportError:
 import config
 import model
 import simulasi
-from pd_control import MODE_BALANCING, PDControl
+from pd_control import PDControl
 
 FOLDER_INI = os.path.dirname(os.path.abspath(__file__))
 FOLDER_HASIL = os.path.join(FOLDER_INI, "OPTUNA")
@@ -432,7 +439,7 @@ class Penguji:
         self.sim.reset()
         self.sim.acak = np.random.default_rng(config.OPTUNA_SEED + ulangan)
         self.sim.gaya_dorong = float(gaya)
-        self.pd.set_command(0, MODE_BALANCING)
+        self.pd.set_command(0)                    # mode DIAM (tanpa perintah gerak)
         data = {"t": [], "psi": [], "s": [], "waktu_dorong": [], "nama_dorong": nama, "ulangan": ulangan}
         if rekam:
             rekaman.append(data)
@@ -492,13 +499,13 @@ class Penguji:
                 data["waktu_dorong"].append(k * dt)
 
             x = self.sim.baca_state()
-            u_PD = self.pd.compute_PD(x)
+            u_PD = self.pd.compute(x)
             if not self.pakai_cbf:
                 u = max(config.u_min, min(config.u_max, u_PD))
                 gagal = False
             else:
                 u = self.cbf.compute(x, u_PD)
-                gagal = not self.cbf.feasible              # status CBF-QP bukan AMAN (GAGAL atau ALPHA_NOL)
+                gagal = not self.cbf.feasible              # status CBF-QP bukan AMAN (SLACK, GAGAL, atau ALPHA_NOL)
             self.sim.step(u)
 
             # Dinilai dari state yang dibaca kontrol (psi hasil Kalman).
@@ -743,7 +750,60 @@ def jumlah_per_status(study):
     return selesai, pruned
 
 
-def cetak_kepala(study, tahap, profil, penguji, definisi, variabel, bawah, atas, kunci, jumlah_trial):
+class PenjagaStagnan:
+    """Auto-exit (early stopping seluruh study) bila skor terbaik tidak membaik selama `stagnant` trial SELESAI
+    berturut-turut. Dipakai sebagai callback study.optimize(); memanggil study.stop() saat stagnan.
+
+    Membaik = skor < acuan - ambang * max(1, |acuan|), acuan = skor terbaik saat perbaikan terakhir. Perbaikan yang
+    lebih kecil dari ambang tidak mereset hitungan, tetapi tetap terkumpul: begitu totalnya melewati ambang terhadap
+    acuan, itu dihitung perbaikan. Trial pruned / gagal tidak dihitung. stagnant <= 0 = mati.
+    Riwayat study (trial selesai yang sudah ada di database) dihitung lebih dulu, jadi study yang dilanjutkan tidak
+    mulai dari nol."""
+
+    def __init__(self, study, stagnant, ambang):
+        self.stagnant = int(stagnant)
+        self.ambang = float(ambang)
+        self.acuan = math.inf
+        self.tanpa_perbaikan = 0
+        self.berhenti = False
+        for t in sorted(study.trials, key=lambda t: t.number):
+            if t.state == optuna.trial.TrialState.COMPLETE and t.value is not None:
+                self._catat(float(t.value))
+
+    @property
+    def aktif(self):
+        return self.stagnant > 0
+
+    def _catat(self, nilai):
+        if not math.isfinite(nilai):
+            self.tanpa_perbaikan += 1
+        elif not math.isfinite(self.acuan) or nilai < self.acuan - self.ambang * max(1.0, abs(self.acuan)):
+            self.acuan = nilai
+            self.tanpa_perbaikan = 0
+        else:
+            self.tanpa_perbaikan += 1
+
+    def stagnan(self):
+        return self.aktif and self.tanpa_perbaikan >= self.stagnant
+
+    def teks(self):
+        if not self.aktif:
+            return "auto-exit stagnan MATI (stagnant 0)"
+        return ("auto-exit bila %d trial selesai berturut-turut tanpa perbaikan > %g %% (sekarang %d / %d)"
+                % (self.stagnant, 100.0 * self.ambang, self.tanpa_perbaikan, self.stagnant))
+
+    def __call__(self, study, trial):
+        if trial.state != optuna.trial.TrialState.COMPLETE or trial.value is None:
+            return
+        self._catat(float(trial.value))
+        if self.stagnan() and not self.berhenti:
+            self.berhenti = True
+            print("STAGNAN: %d trial selesai berturut-turut tanpa perbaikan > %g %% (skor acuan %.4f). Tuning berhenti, "
+                  "lanjut ke laporan." % (self.tanpa_perbaikan, 100.0 * self.ambang, self.acuan))
+            study.stop()
+
+
+def cetak_kepala(study, tahap, profil, penguji, definisi, variabel, bawah, atas, kunci, jumlah_trial, penjaga):
     """Ringkasan pengaturan di awal tuning, lalu judul kolom log."""
     garis = "=" * len(FORMAT_HEADER % JUDUL_KOLOM)
     print(garis)
@@ -793,13 +853,15 @@ def cetak_kepala(study, tahap, profil, penguji, definisi, variabel, bawah, atas,
     print("gaya = gaya lolos [N] | bb/s = u berbalik antara >= +%.2f dan <= -%.2f N m per detik (bang-bang) | "
           "psimaks = puncak |psi| [deg] | gagal = lama status CBF bukan AMAN [s]"
           % (config.OPTUNA_AMBANG_BANGBANG * config.u_max, config.OPTUNA_AMBANG_BANGBANG * config.u_max))
+    print("Berhenti otomatis: %s." % penjaga.teks())
     print("Ctrl+C untuk berhenti: trial yang sudah selesai tetap tersimpan dan bisa dilanjutkan.")
     print(garis)
     print(FORMAT_HEADER % JUDUL_KOLOM)
     print("-" * len(garis))
 
 
-def jalankan_tahap(tahap, profil, jumlah_trial):
+def jalankan_tahap(tahap, profil, jumlah_trial, stagnant=None):
+    """stagnant: batas stagnan (trial); None = kunci "stagnant" tahap di config.OPTUNA_TAHAP, atau config.OPTUNA_STAGNANT."""
     definisi = config.OPTUNA_TAHAP[tahap]
     variabel = definisi["variabel"]
     bawah, atas = batas_pencarian(variabel, profil)
@@ -819,7 +881,10 @@ def jalankan_tahap(tahap, profil, jumlah_trial):
                      % (nama, kunci[nama]))
     study = buat_study(tahap, profil)
     periksa_study(study, penguji)
-    cetak_kepala(study, tahap, profil, penguji, definisi, variabel, bawah, atas, kunci, jumlah_trial)
+    if stagnant is None:
+        stagnant = definisi.get("stagnant", config.OPTUNA_STAGNANT)
+    penjaga = PenjagaStagnan(study, stagnant, config.OPTUNA_STAGNANT_MIN)
+    cetak_kepala(study, tahap, profil, penguji, definisi, variabel, bawah, atas, kunci, jumlah_trial, penjaga)
 
     def simpan_atribut(trial, keterangan, t0):
         trial.set_user_attr("keterangan", keterangan)
@@ -855,10 +920,16 @@ def jalankan_tahap(tahap, profil, jumlah_trial):
                               atribut.get("psi_maks_deg", 0.0), teks_gagal, detail))
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
-    try:
-        study.optimize(objektif, n_trials=jumlah_trial, callbacks=[cetak_trial])
-    except KeyboardInterrupt:
-        print("\nDihentikan dengan Ctrl+C.")
+    if penjaga.stagnan():
+        # Study yang dilanjutkan sudah stagnan sejak sebelumnya: tidak ada trial baru (tambah --stagnant untuk memaksa)
+        print("STAGNAN sejak sebelumnya: %d trial selesai terakhir tanpa perbaikan > %g %% (batas %d). Tidak ada trial "
+              "baru; untuk tetap melanjutkan pakai --stagnant dengan angka lebih besar, atau --stagnant 0."
+              % (penjaga.tanpa_perbaikan, 100.0 * penjaga.ambang, penjaga.stagnant))
+    else:
+        try:
+            study.optimize(objektif, n_trials=jumlah_trial, callbacks=[cetak_trial, penjaga])
+        except KeyboardInterrupt:
+            print("\nDihentikan dengan Ctrl+C.")
     laporkan(tahap, profil, penguji)
 
 
@@ -1087,6 +1158,8 @@ def hapus_tahap(tahap, profil):
 CONFIG_WAJIB = {
     "OPTUNA_AMBANG_BANGBANG": "OPTUNA_AMBANG_BANGBANG = 0.5      # fraksi u_max; |u| di atas ini dihitung torsi besar (bb/s)",
     "OPTUNA_GAYA_CBF_FRAKSI": "OPTUNA_GAYA_CBF_FRAKSI = [0.5, 0.75, 1.0]   # tahap CBFQP_*: gaya = fraksi x gaya_pd_terbaik",
+    "OPTUNA_STAGNANT": "OPTUNA_STAGNANT = 300           # auto-exit: trial selesai berturut-turut tanpa perbaikan (0 = mati)",
+    "OPTUNA_STAGNANT_MIN": "OPTUNA_STAGNANT_MIN = 1.0e-3    # perbaikan minimum (relatif) yang dihitung",
 }
 
 
@@ -1109,6 +1182,8 @@ def main():
     parser.add_argument("--tahap", choices=daftar_tahap,
                         help="tahap yang dijalankan (config.OPTUNA_TAHAP); nilai tahap lain dibaca dari config.py")
     parser.add_argument("--trial", type=int, default=None, help="jumlah trial (default dari config.OPTUNA_TAHAP)")
+    parser.add_argument("--stagnant", type=int, default=None,
+                        help="auto-exit bila sekian trial selesai tanpa perbaikan (default config.OPTUNA_STAGNANT, 0 = mati)")
     parser.add_argument("--hasil", action="store_true",
                         help="cetak hasil terbaik, buat ulang CSV + PNG (tanpa --profil: semua profil)")
     parser.add_argument("--hapus", choices=daftar_tahap, help="hapus study satu tahap dari satu profil")
@@ -1133,7 +1208,7 @@ def main():
         if args.profil is None:
             parser.error("--tahap butuh --profil (%s)" % " / ".join(daftar_profil))
         jumlah = args.trial if args.trial is not None else config.OPTUNA_TAHAP[args.tahap]["trial"]
-        jalankan_tahap(args.tahap, args.profil, jumlah)
+        jalankan_tahap(args.tahap, args.profil, jumlah, args.stagnant)
     else:
         parser.print_help()
 

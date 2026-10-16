@@ -1,9 +1,9 @@
 """joystick_mapping.py - mapping dan pembaca joystick Fantech WGP-13s (evdev, non-blocking), dan keyboard terminal.
 
 Fungsi tombol (Konteks_ATERA.md, ditambah L3 / R3 untuk perekaman ISE):
-    Tombol A : mode gerak Navigate (analog / D-Pad dipakai, Kp_theta = 0)
-    Tombol B : titik nol s pindah ke posisi sekarang (kapan saja); saat balancing juga masuk mode Balancing
-               (diam di tempat, Kp_theta aktif)
+    Tombol A : (kosong, belum dipakai)
+    Tombol B : pasang setpoint roda di posisi sekarang (kapan saja): setpoint theta (titik nol s) + arah (yaw_ref).
+               Kalibrasi untuk roda saja; Tombol Y untuk IMU + roda.
     Tombol X : matikan roda (percobaan disimpan)
     Tombol Y : kalibrasi IMU (robot diam dan tegak di titik seimbang) + titik nol s di posisi sekarang
     LB / RB  : mode kontrol PD / PD + CBF-QP
@@ -12,11 +12,13 @@ Fungsi tombol (Konteks_ATERA.md, ditambah L3 / R3 untuk perekaman ISE):
     QUIT     : keluar program
     L3       : mulai satu PENGUJIAN (direkam config.DURASI_PENGUJIAN detik; dorong robot dengan tangan)
     R3       : simpan PERCOBAAN sekarang, perekaman baru dimulai (robot tetap balancing)
-Perintah gerak (hanya mode Navigate): arah -1 / 0 / +1 dan belok -1 / 0 / +1, dari D-Pad atau analog kiri.
+Perintah gerak: arah -1 / 0 / +1 dan belok -1 / 0 / +1, dari D-Pad atau analog kiri. Mode gerak otomatis
+(pd_control.py): D-Pad atas / bawah ditekan = GERAK (Kvel), dilepas = DIAM dengan setpoint theta baru di titik itu.
+D-Pad kiri / kanan = belok (saat DIAM: berputar di tempat).
 
 Keyboard terminal (KeyboardTerminal, terminal SSH tempat GUI berjalan): aksi sama dengan joystick, lihat
-TOMBOL_KEYBOARD. Panah kiri / kanan = halaman GUI. W A S D = gerak (mode Navigate); karena terminal tidak memberi
-tahu saat tombol dilepas, "ditahan" ditebak dari pengulangan otomatis keyboard (config.KEYBOARD_TAHAN_*).
+TOMBOL_KEYBOARD. Panah kiri / kanan = halaman GUI. W A S D = gerak (sama dengan D-Pad); karena terminal tidak
+memberi tahu saat tombol dilepas, "ditahan" ditebak dari pengulangan otomatis keyboard (config.KEYBOARD_TAHAN_*).
 """
 
 import os
@@ -54,14 +56,13 @@ ABS_MAP = {
 
 # Pemetaan D-Pad / PAD (Code EV_ABS dengan Nilai Diskrit)
 DPAD_MAP = {
-    16: {-1: "PAD Kiri", 1: "PAD Kanan"},
+    16: {1: "PAD Kiri", -1: "PAD Kanan"},
     17: {-1: "PAD Atas", 1: "PAD Bawah"},
 }
 
-# Aksi program untuk tiap tombol
+# Aksi program untuk tiap tombol (Tombol A sengaja tidak dipakai)
 AKSI = {
-    "Tombol A": "NAVIGATE",
-    "Tombol B": "BALANCING",
+    "Tombol B": "SETPOINT",
     "Tombol X": "RODA_MATI",
     "Tombol Y": "KALIBRASI",
     "LB": "MODE_PD",
@@ -80,11 +81,13 @@ ANALOG_BELOK = 1
 
 BANTUAN = (
     "Tombol Y : kalibrasi IMU (robot diam, tegak di titik seimbang) + s = 0 di sini",
-    "MULAI    : mulai balancing, mode Balancing (ditolak bila |s| > %g m dari titik nol)" % config.s_max,
+    "MULAI    : mulai balancing (ditolak bila |s| > %g m dari titik nol)" % config.s_max,
     "Tombol X : matikan roda, percobaan disimpan",
     "LB / RB  : mode kontrol PD / PD + CBF-QP",
-    "Tombol B : s = 0 di sini (kapan saja); saat balancing juga mode Balancing (diam di tempat)",
-    "Tombol A : mode Navigate (D-Pad / analog kiri: maju-mundur dan belok)",
+    "Tombol B : pasang setpoint roda di sini (s = 0 dan arah sekarang), kapan saja",
+    "D-Pad    : atas / bawah = GERAK maju / mundur (Kvel), dilepas = DIAM dengan setpoint baru di titik itu",
+    "           kiri / kanan = belok (tanpa atas / bawah: berputar di tempat). Analog kiri sama dengan D-Pad",
+    "Tombol A : (kosong)",
     "L3       : mulai PENGUJIAN %.0f s (dorong robot dengan tangan setelah menekan L3)" % config.DURASI_PENGUJIAN,
     "R3       : simpan PERCOBAAN sekarang, rekaman baru dimulai",
     "LT / RT  : halaman GUI",
@@ -97,8 +100,7 @@ TOMBOL_KEYBOARD = {
     "y": "KALIBRASI",
     "m": "MULAI", "\r": "MULAI", "\n": "MULAI",          # m atau Enter
     "x": "RODA_MATI", " ": "RODA_MATI",                   # x atau spasi
-    "b": "BALANCING",
-    "n": "NAVIGATE",
+    "b": "SETPOINT",
     "1": "MODE_PD",
     "2": "MODE_PD_CBF",
     "t": "PENGUJIAN",
@@ -109,11 +111,21 @@ PANAH = {"C": "HALAMAN_KANAN", "D": "HALAMAN_KIRI"}      # ESC [ C / ESC [ D (at
 GERAK_KEYBOARD = {"w": ("arah", 1), "s": ("arah", -1), "a": ("belok", -1), "d": ("belok", 1)}
 
 BANTUAN_KEYBOARD = (
-    "Keyboard terminal: Y kalibrasi | M / Enter MULAI | X / Spasi roda mati | B Balancing | N Navigate",
+    "Keyboard terminal: Y kalibrasi | M / Enter MULAI | X / Spasi roda mati | B setpoint di sini",
     "  1 / 2 mode PD / PD+CBF | T PENGUJIAN | E simpan PERCOBAAN | Q keluar | Panah kiri / kanan halaman GUI",
-    "  W / S maju / mundur, A / D belok (tahan; hanya mode Navigate, berhenti +-%.1f s setelah dilepas)"
+    "  W / S maju / mundur, A / D belok (tahan, sama dengan D-Pad; dianggap lepas +-%.2f s setelah dilepas)"
     % config.KEYBOARD_TAHAN_ULANG_S,
 )
+
+
+def _dari_nama(code, nilai, kata_positif, kata_negatif):
+    """+1 / -1 / 0 dari nama tombol D-Pad di DPAD_MAP: nama memuat kata_positif -> +1, kata_negatif -> -1."""
+    nama = DPAD_MAP.get(code, {}).get(nilai, "")
+    if kata_positif in nama:
+        return 1
+    if kata_negatif in nama:
+        return -1
+    return 0
 
 
 def _arah(nilai):
@@ -197,13 +209,17 @@ class Joystick:
         return aksi
 
     def perintah(self):
-        """(arah, belok): arah +1 maju / -1 mundur, belok +1 kanan / -1 kiri, 0 = lepas. D-Pad didahulukan."""
-        arah = -self._dpad.get(config.DPAD_MAJU_CODE, 0)          # PAD Atas = -1 = maju
+        """(arah, belok): arah +1 maju / -1 mundur, belok +1 kanan / -1 kiri, 0 = lepas. D-Pad didahulukan.
+
+        Arah D-Pad dibaca dari NAMA di DPAD_MAP (bukan angka mentah): "Atas" = maju, "Bawah" = mundur,
+        "Kanan" = belok kanan, "Kiri" = belok kiri, jadi cukup DPAD_MAP yang harus benar.
+        Analog kiri: belok dibalik dengan config.JOYSTICK_ANALOG_BELOK_TANDA = -1."""
+        arah = _dari_nama(config.DPAD_MAJU_CODE, self._dpad.get(config.DPAD_MAJU_CODE, 0), "Atas", "Bawah")
         if arah == 0:
             arah = _arah(-self._analog.get(ANALOG_MAJU, 0.0))
-        belok = self._dpad.get(config.DPAD_BELOK_CODE, 0)          # PAD Kanan = +1 = belok kanan
+        belok = _dari_nama(config.DPAD_BELOK_CODE, self._dpad.get(config.DPAD_BELOK_CODE, 0), "Kanan", "Kiri")
         if belok == 0:
-            belok = _arah(self._analog.get(ANALOG_BELOK, 0.0))
+            belok = _arah(float(config.JOYSTICK_ANALOG_BELOK_TANDA) * self._analog.get(ANALOG_BELOK, 0.0))
         return arah, belok
 
     def close(self):

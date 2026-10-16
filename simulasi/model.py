@@ -46,7 +46,7 @@ def hitung_theta(sudut_encoder, psi):
 
 
 def hitung_s(x):
-    """Jarak tempuh s [m] dari titik nol s (direset tiap masuk mode Balancing). x boleh ndarray atau simbol CasADi.
+    """Jarak tempuh s [m] dari setpoint theta (titik nol s). x boleh ndarray atau simbol CasADi.
 
     s = R * theta
     Cadangan, s dari encoder murni (benar HANYA bila ENCODER_RELATIVE_TO_BODY = True, karena theta = encoder + psi):

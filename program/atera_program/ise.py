@@ -6,6 +6,9 @@ Folder hasil (di dalam atera_program, HHmmSS = jam saat disimpan):
     PLOT_EVALUASI/ATERA_RASPI/PENGUJIAN/PD/ dan .../PENGUJIAN/CBFQP/   (L3, DURASI_PENGUJIAN detik)
     PLOT_EVALUASI/ATERA_RASPI/<PERCOBAAN atau PENGUJIAN>/BANDING/      (hasil --bandingkan)
 Nomor KE-XX naik otomatis per tanggal, mode, dan jenis. Kolom CSV sama dengan simulasi/ise.py.
+Kolom CSV tambahan (KOLOM_EKSTRA, sesudah zeta_DEG): arah (perintah maju / mundur: 0 = mode DIAM, +1 / -1 = mode
+GERAK), yaw_rad, dyaw_rad_s, yaw_ref_rad, u_belok_Nm (PD heading), dob_dtheta_rad_s2, dob_dpsi_rad_s2 (DOB), slack.
+Status CBF "SLACK" (constraint dilonggarkan) dihitung di metrik.
 Penyimpanan saat robot masih balancing berjalan di PROSES TERPISAH (simpan(latar=True)) supaya loop kontrol tidak
 tertahan matplotlib.
 Gambar: .png dan .eps (vektor, untuk LaTeX). Batas sumbu tetap (config.PLOT_BATAS): psi +-1 rad, dpsi +-10 rad/s,
@@ -66,10 +69,13 @@ JENIS_PENGUJIAN = "PENGUJIAN"       # L3: DURASI_PENGUJIAN detik sejak tombol di
 
 KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
 KOLOM_GAIN = KOLOM_GAIN_PD + config.NAMA_ALPHA + ["psi_max_DEG"]
+# kolom tambahan (sama dengan simulasi/ise.py); file lama tanpa kolom ini tetap terbaca (nilai 0)
+KOLOM_EKSTRA = ["arah", "yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "u_belok_Nm", "dob_dtheta_rad_s2", "dob_dpsi_rad_s2",
+                "slack"]
 KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
              "error_theta", "error_dtheta", "error_psi", "error_dpsi",
              "u_PD_Nm", "u_Nm", "status_cbf", "dorong_N",
-             "ISE_theta", "ISE_dtheta", "ISE_psi", "ISE_dpsi"] + KOLOM_GAIN + ["zeta_DEG"]
+             "ISE_theta", "ISE_dtheta", "ISE_psi", "ISE_dpsi"] + KOLOM_GAIN + ["zeta_DEG"] + KOLOM_EKSTRA
 KOLOM_ANGKA = [k for k in KOLOM_CSV if k != "status_cbf"]
 POLA_NAMA = re.compile(r"^(\d{8})_(\d{6})_COBA (PD\+CBF|PD)_(PERCOBAAN|PENGUJIAN) KE-(\d+)\.csv$")
 DEG = 180.0 / math.pi
@@ -150,8 +156,9 @@ class PerekamISE:
         self.jumlah_c = 0
 
     def tambah(self, t, x, error_theta, error_dtheta, error_psi, error_dpsi, u_PD, u, status_cbf, gain, dorong=0.0,
-               nilai_c=None):
-        """Satu baris per siklus kontrol. gain: dict Kp_psi .. Alpha_n, psi_max_DEG, zeta_DEG. nilai_c: c_h1.. / None."""
+               nilai_c=None, ekstra=None):
+        """Satu baris per siklus kontrol. gain: dict Kp_psi .. Alpha_n, psi_max_DEG, zeta_DEG. nilai_c: c_h1.. / None.
+        ekstra: dict kolom KOLOM_EKSTRA (yang tidak ada ditulis 0)."""
         dt = t - self.t_terakhir
         self.t_terakhir = t
         self.ise_theta += error_theta ** 2 * dt
@@ -162,6 +169,8 @@ class PerekamISE:
                  dorong, self.ise_theta, self.ise_dtheta, self.ise_psi, self.ise_dpsi]
         baris += [float(gain.get(nama, getattr(config, nama, 0.0))) for nama in KOLOM_GAIN]
         baris += [float(gain.get("zeta_DEG", 0.0))]
+        ekstra = ekstra or {}
+        baris += [float(ekstra.get(nama, 0.0)) for nama in KOLOM_EKSTRA]
         if nilai_c is not None:
             self.jumlah_c = max(self.jumlah_c, len(nilai_c))
             baris += ["" if c is None else c for c in nilai_c]
@@ -290,10 +299,11 @@ def metrik(data):
 
     # CBF-QP (hanya baris mode PD+CBF, status "-" = mode PD)
     cbf = [i for i in range(n) if data["status_cbf"][i] != "-"]
-    m["cbf_aman"] = m["cbf_gagal"] = m["cbf_koreksi"] = None
+    m["cbf_aman"] = m["cbf_gagal"] = m["cbf_koreksi"] = m["cbf_slack"] = None
     if cbf:
         m["cbf_aman"] = 100.0 * sum(data["status_cbf"][i] == "AMAN" for i in cbf) / len(cbf)
         m["cbf_gagal"] = 100.0 * sum(data["status_cbf"][i] == "GAGAL" for i in cbf) / len(cbf)
+        m["cbf_slack"] = 100.0 * sum(data["status_cbf"][i] == "SLACK" for i in cbf) / len(cbf)
         m["cbf_koreksi"] = 100.0 * sum(koreksi_cbf(data, i) for i in cbf) / len(cbf)
 
     m["loop_hz"] = (n - 1) / (t[-1] - t[0]) if n > 1 and t[-1] > t[0] else 0.0
@@ -331,6 +341,7 @@ BARIS_METRIK = [
     ("Lama |s| > s_max [s]", "luar_s", "%.2f", True),
     ("Waktu pulih [s]  (|psi| < %g deg)" % config.EVAL_PSI_PULIH_DEG, "pulih", "%.2f", True),
     ("CBF-QP AMAN [% waktu]", "cbf_aman", "%.1f", False),
+    ("CBF-QP SLACK [% waktu]", "cbf_slack", "%.1f", False),          # constraint dilonggarkan
     ("CBF-QP GAGAL [% waktu]", "cbf_gagal", "%.1f", False),
     ("CBF-QP mengoreksi u [% waktu]", "cbf_koreksi", "%.1f", False),
     ("Loop rata-rata [Hz]", "loop_hz", "%.1f", False),
@@ -771,7 +782,8 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis):
     if data[MODE_PD]["psi_max_deg"] != data[MODE_PD_CBF]["psi_max_deg"]:
         catatan.append("psi_max kedua percobaan berbeda (garis / kotak psi = psi_max PD+CBF)")
     if m[MODE_PD_CBF]["cbf_aman"] is not None and m[MODE_PD_CBF]["cbf_aman"] < 99.95:
-        catatan.append("CBF-QP tidak selalu AMAN (saat GAGAL / ALPHA_NOL, u = u_PD yang dibatasi arus)")
+        catatan.append("CBF-QP tidak selalu AMAN (SLACK: constraint dilonggarkan, u paling sedikit melanggar; "
+                       "GAGAL / ALPHA_NOL: u = u_PD yang dibatasi arus)")
 
     def selisih(a, b):
         return "-" if a in (None, 0.0) or b is None else "%+.1f %%" % (100.0 * (b - a) / a)
