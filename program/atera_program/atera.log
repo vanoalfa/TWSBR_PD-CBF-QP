@@ -2271,3 +2271,155 @@ AttributeError: 'CBFQP' object has no attribute 'reset_dob'
 2026-10-16 14:59:31,856 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
 2026-10-16 14:59:33,520 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
 2026-10-16 14:59:38,430 | INFO | atera | Kalibrasi selesai (sudut nol -2.99 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:27:28,375 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 15:27:28,430 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 15:27:28,431 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 15:27:28,485 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 15:27:28,510 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 15:27:28,563 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 15:28:10,015 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:28:14,931 | INFO | atera | Kalibrasi selesai (sudut nol -3.10 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:28:21,941 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:28:26,860 | INFO | atera | Kalibrasi selesai (sudut nol -2.43 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:28:30,409 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 15:28:31,749 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 15:28:59,995 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 15:29:02,082 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 15:29:06,251 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261016_152906_COBA PD_PERCOBAAN KE-28
+2026-10-16 15:29:06,251 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261016_152906_COBA PD_PERCOBAAN KE-28
+2026-10-16 15:29:15,060 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 15:29:15,114 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 15:29:15,115 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 15:29:15,169 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 15:29:15,192 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 15:29:15,248 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 15:29:20,625 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:29:25,540 | INFO | atera | Robot bergerak saat kalibrasi (simpangan gyro 4.5 deg/s). Ulangi Tombol Y.
+2026-10-16 15:29:33,884 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:29:38,801 | INFO | atera | Kalibrasi selesai (sudut nol -2.45 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:29:47,326 | INFO | atera | Mode kontrol: PD+CBF
+2026-10-16 15:29:48,299 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:29:53,215 | INFO | atera | Kalibrasi selesai (sudut nol -2.53 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:30:04,908 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 15:30:06,208 | INFO | atera | Balancing, mode PD+CBF. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 15:30:09,728 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 15:30:09,782 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 15:30:09,783 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 15:30:09,837 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 15:30:09,861 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 15:30:09,915 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 15:30:15,301 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:30:20,218 | INFO | atera | Kalibrasi selesai (sudut nol -3.17 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:30:21,232 | INFO | atera | Mode kontrol: PD+CBF
+2026-10-16 15:30:22,423 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:30:27,340 | INFO | atera | Kalibrasi selesai (sudut nol -2.52 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:30:28,070 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 15:30:35,184 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 15:30:36,493 | INFO | atera | Balancing, mode PD+CBF. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 15:32:14,681 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261016_153214_COBA PD+CBF_PERCOBAAN KE-05
+2026-10-16 15:32:14,682 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261016_153214_COBA PD+CBF_PERCOBAAN KE-05
+2026-10-16 15:32:16,455 | INFO | atera | Kalibrasi ditolak: matikan roda dulu (Tombol X).
+2026-10-16 15:32:22,476 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:32:24,529 | INFO | atera | torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) -> tersimpan PERCOBAAN 20261016_153224_COBA PD_PERCOBAAN KE-29
+2026-10-16 15:32:24,530 | INFO | atera | KOMET: torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) | tersimpan: PERCOBAAN 20261016_153224_COBA PD_PERCOBAAN KE-29
+2026-10-16 15:32:25,643 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:32:30,550 | INFO | atera | Kalibrasi selesai (sudut nol -2.55 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:32:34,616 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 15:32:36,501 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 15:33:16,795 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261016_153316_COBA PD_PERCOBAAN KE-30
+2026-10-16 15:33:16,795 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261016_153316_COBA PD_PERCOBAAN KE-30
+2026-10-16 15:33:23,011 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:34:32,970 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:35:20,026 | INFO | atera | PENGUJIAN dimulai (30 s): dorong robot sekarang.
+2026-10-16 15:35:50,041 | INFO | atera | PENGUJIAN selesai, tersimpan: 20261016_153550_COBA PD+CBF_PENGUJIAN KE-01
+2026-10-16 15:36:10,610 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261016_153610_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-16 15:36:10,611 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261016_153610_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-16 15:36:19,659 | INFO | atera | PENGUJIAN dimulai (30 s): dorong robot sekarang.
+2026-10-16 15:36:49,673 | INFO | atera | PENGUJIAN selesai, tersimpan: 20261016_153649_COBA PD_PENGUJIAN KE-01
+2026-10-16 15:37:00,971 | INFO | atera | PENGUJIAN dimulai (30 s): dorong robot sekarang.
+2026-10-16 15:37:30,985 | INFO | atera | PENGUJIAN selesai, tersimpan: 20261016_153730_COBA PD_PENGUJIAN KE-02
+2026-10-16 15:37:31,699 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261016_153731_COBA PD_PERCOBAAN KE-31
+2026-10-16 15:37:31,699 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261016_153731_COBA PD_PERCOBAAN KE-31
+2026-10-16 15:37:33,081 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:37:38,752 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:37:40,233 | INFO | atera | Kalibrasi ditolak: matikan roda dulu (Tombol X).
+2026-10-16 15:38:31,057 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:38:39,553 | INFO | atera | Kalibrasi ditolak: matikan roda dulu (Tombol X).
+2026-10-16 15:41:40,346 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 15:41:40,400 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 15:41:40,401 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 15:41:40,455 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 15:41:40,478 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 15:41:40,533 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 15:41:45,534 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:41:50,450 | INFO | atera | Robot bergerak saat kalibrasi (simpangan gyro 18.1 deg/s). Ulangi Tombol Y.
+2026-10-16 15:41:52,516 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:41:57,431 | INFO | atera | Kalibrasi selesai (sudut nol -2.48 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:42:00,629 | INFO | atera | Mode kontrol: PD+CBF
+2026-10-16 15:42:01,837 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 15:42:05,804 | INFO | atera | Balancing, mode PD+CBF. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 15:42:19,126 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 15:42:19,180 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 15:42:19,181 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 15:42:19,235 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 15:42:19,259 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 15:42:19,313 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 15:42:24,894 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 15:42:29,810 | INFO | atera | Kalibrasi selesai (sudut nol -3.11 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 15:43:13,219 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 15:43:14,361 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 15:43:22,780 | INFO | atera | PENGUJIAN dimulai (30 s): dorong robot sekarang.
+2026-10-16 15:43:27,009 | INFO | atera | PENGUJIAN masih berjalan (4.2 / 30 s).
+2026-10-16 15:43:27,889 | INFO | atera | PENGUJIAN masih berjalan (5.1 / 30 s).
+2026-10-16 15:43:46,769 | INFO | atera | PENGUJIAN masih berjalan (24.0 / 30 s).
+2026-10-16 15:43:52,793 | INFO | atera | PENGUJIAN selesai, tersimpan: 20261016_154352_COBA PD_PENGUJIAN KE-03
+2026-10-16 15:43:57,331 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:43:58,063 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261016_154358_COBA PD_PERCOBAAN KE-32
+2026-10-16 15:43:58,063 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261016_154358_COBA PD_PERCOBAAN KE-32
+2026-10-16 15:44:00,764 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:01,067 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:01,258 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:01,451 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:01,650 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:01,854 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:02,036 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:02,246 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:02,453 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:02,676 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:02,900 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:03,179 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:03,403 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:03,638 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:03,842 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:04,054 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:04,266 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:04,708 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:05,139 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:44:06,869 | INFO | atera | PENGUJIAN dimulai (30 s): dorong robot sekarang.
+2026-10-16 15:44:36,881 | INFO | atera | PENGUJIAN selesai, tersimpan: 20261016_154436_COBA PD+CBF_PENGUJIAN KE-02
+2026-10-16 15:45:31,278 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:45:32,600 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:45:33,511 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:46:01,080 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 15:46:02,403 | INFO | atera | PENGUJIAN dimulai (30 s): dorong robot sekarang.
+2026-10-16 15:46:32,417 | INFO | atera | PENGUJIAN selesai, tersimpan: 20261016_154632_COBA PD+CBF_PENGUJIAN KE-03
+2026-10-16 15:48:39,087 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261016_154839_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-16 15:48:39,087 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261016_154839_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-16 16:24:38,610 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 16:24:38,664 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 16:24:38,665 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 16:24:38,719 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 16:24:38,742 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 16:24:38,796 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 16:24:44,085 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 16:24:49,001 | INFO | atera | Kalibrasi selesai (sudut nol -3.52 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 16:25:00,060 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 16:25:04,975 | INFO | atera | Kalibrasi selesai (sudut nol -2.88 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 16:25:11,390 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 16:25:12,494 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 16:25:29,037 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261016_162529_COBA PD_PERCOBAAN KE-33
+2026-10-16 16:25:29,037 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261016_162529_COBA PD_PERCOBAAN KE-33
+2026-10-16 16:25:30,632 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 16:25:32,008 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 16:25:33,230 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 16:26:11,881 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261016_162611_COBA PD+CBF_PERCOBAAN KE-08
