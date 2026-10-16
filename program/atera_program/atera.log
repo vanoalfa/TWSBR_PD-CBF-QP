@@ -1795,3 +1795,137 @@ AttributeError: module 'model' has no attribute 'fg'
 2026-10-16 09:45:19,858 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
 2026-10-16 09:45:28,073 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
 2026-10-16 09:45:34,685 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261016_094534_COBA PD_PERCOBAAN KE-08
+2026-10-16 12:54:23,739 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 12:54:23,794 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 12:54:23,798 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 12:54:23,853 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 12:54:23,940 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 12:54:24,184 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 12:54:52,269 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 12:54:57,185 | INFO | atera | Kalibrasi selesai (sudut nol -3.58 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 12:55:01,382 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 12:55:06,298 | INFO | atera | Kalibrasi selesai (sudut nol -2.94 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 12:55:12,251 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 12:55:14,518 | ERROR | atera | loop kontrol
+Traceback (most recent call last):
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 583, in run
+    self.proses_aksi(aksi)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 239, in proses_aksi
+    self.mulai()
+    ~~~~~~~~~~^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 325, in mulai
+    self.cbf.reset_dob()
+    ^^^^^^^^^^^^^^^^^^
+AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:55:14,520 | INFO | atera | Error: AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:55:16,638 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 12:55:17,323 | ERROR | atera | loop kontrol
+Traceback (most recent call last):
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 583, in run
+    self.proses_aksi(aksi)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 239, in proses_aksi
+    self.mulai()
+    ~~~~~~~~~~^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 325, in mulai
+    self.cbf.reset_dob()
+    ^^^^^^^^^^^^^^^^^^
+AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:55:17,324 | INFO | atera | Error: AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:55:18,223 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 12:55:20,292 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 12:55:21,092 | ERROR | atera | loop kontrol
+Traceback (most recent call last):
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 583, in run
+    self.proses_aksi(aksi)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 239, in proses_aksi
+    self.mulai()
+    ~~~~~~~~~~^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 325, in mulai
+    self.cbf.reset_dob()
+    ^^^^^^^^^^^^^^^^^^
+AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:55:21,093 | INFO | atera | Error: AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:55:21,860 | ERROR | atera | loop kontrol
+Traceback (most recent call last):
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 583, in run
+    self.proses_aksi(aksi)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 239, in proses_aksi
+    self.mulai()
+    ~~~~~~~~~~^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 325, in mulai
+    self.cbf.reset_dob()
+    ^^^^^^^^^^^^^^^^^^
+AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:55:21,861 | INFO | atera | Error: AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:55:22,230 | ERROR | atera | loop kontrol
+Traceback (most recent call last):
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 583, in run
+    self.proses_aksi(aksi)
+    ~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 239, in proses_aksi
+    self.mulai()
+    ~~~~~~~~~~^^
+  File "/home/atera/projects/skripsi/program/atera_program/atera_main.py", line 325, in mulai
+    self.cbf.reset_dob()
+    ^^^^^^^^^^^^^^^^^^
+AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:55:22,231 | INFO | atera | Error: AttributeError: 'CBFQP' object has no attribute 'reset_dob'
+2026-10-16 12:57:05,459 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 12:57:05,513 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 12:57:05,514 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 12:57:05,568 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 12:57:05,593 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 12:57:05,653 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 12:57:06,272 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 12:57:11,178 | INFO | atera | Kalibrasi selesai (sudut nol -2.81 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 12:57:19,025 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 12:57:20,913 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 12:58:10,590 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 12:58:11,567 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 12:58:22,876 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261016_125822_COBA PD_PERCOBAAN KE-09
+2026-10-16 12:58:22,876 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261016_125822_COBA PD_PERCOBAAN KE-09
+2026-10-16 12:58:23,739 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 12:58:25,630 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 12:58:37,958 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 12:59:00,320 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 12:59:03,749 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261016_125903_COBA PD_PERCOBAAN KE-10
+2026-10-16 12:59:03,749 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261016_125903_COBA PD_PERCOBAAN KE-10
+2026-10-16 12:59:28,477 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 12:59:28,531 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 12:59:28,532 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 12:59:28,586 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 12:59:28,609 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 12:59:28,664 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 12:59:29,414 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 12:59:34,323 | INFO | atera | Kalibrasi selesai (sudut nol -2.78 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 12:59:40,815 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 12:59:42,858 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 13:00:00,499 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 13:00:01,224 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 13:00:01,695 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 13:00:01,953 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 13:00:02,201 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 13:00:02,420 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 13:00:02,641 | INFO | atera | Mode Balancing: robot ditahan di sini (s = 0 di sini).
+2026-10-16 13:00:03,145 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 13:00:04,473 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 13:00:25,683 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261016_130025_COBA PD_PERCOBAAN KE-11
+2026-10-16 13:00:25,684 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261016_130025_COBA PD_PERCOBAAN KE-11
+2026-10-16 13:01:12,754 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-16 13:01:12,808 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-16 13:01:12,809 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-16 13:01:12,863 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-16 13:01:12,887 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-16 13:01:12,942 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-16 13:01:19,285 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 13:01:22,147 | INFO | atera | Kalibrasi IMU ... jaga robot DIAM dan TEGAK di titik seimbang.
+2026-10-16 13:01:27,064 | INFO | atera | Kalibrasi selesai (sudut nol -3.17 deg, s = 0 di sini). Tekan MULAI.
+2026-10-16 13:01:55,388 | INFO | atera | Titik nol s dipasang di sini (s = 0). Tekan MULAI.
+2026-10-16 13:01:57,409 | INFO | atera | Balancing, mode PD. Tombol A = Navigate, L3 = PENGUJIAN, X = roda mati.
+2026-10-16 13:01:59,997 | INFO | atera | Mode Navigate: D-Pad / analog kiri / keyboard W A S D untuk maju-mundur dan belok.
+2026-10-16 13:02:27,409 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261016_130227_COBA PD_PERCOBAAN KE-12
+2026-10-16 13:02:27,409 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261016_130227_COBA PD_PERCOBAAN KE-12

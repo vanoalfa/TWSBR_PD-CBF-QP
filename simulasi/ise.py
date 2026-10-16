@@ -79,10 +79,15 @@ KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
 KOLOM_GAIN_CBF = config.NAMA_ALPHA + ["psi_max_DEG"]
 KOLOM_GAIN = KOLOM_GAIN_PD + KOLOM_GAIN_CBF
 
+# [REVISI 16-10] Kolom tambahan (sesudah zeta_DEG, sebelum c_h..): yaw dan referensi PD heading, setpoint bergerak
+# theta_ref / dtheta_ref, u_belok, taksiran DOB, dan slack CBF-QP (0 di mode PD). File lama tanpa kolom ini tetap terbaca.
+KOLOM_EKSTRA = ["yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "theta_ref_rad", "dtheta_ref_rad_s", "u_belok_Nm",
+                "dob_dtheta_rad_s2", "dob_dpsi_rad_s2", "slack"]
 KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
              "error_theta", "error_dtheta", "error_psi", "error_dpsi",
              "u_PD_Nm", "u_Nm", "status_cbf", "dorong_N",
-             "ISE_theta", "ISE_dtheta", "ISE_psi", "ISE_dpsi"] + KOLOM_GAIN + ["zeta_DEG"]
+             "ISE_theta", "ISE_dtheta", "ISE_psi", "ISE_dpsi"] + KOLOM_GAIN + ["zeta_DEG"] + KOLOM_EKSTRA
+STATUS_SLACK = "SLACK"              # [REVISI 16-10] sama dengan cbf_qp.STATUS_SLACK
 
 # Contoh nama: 20261008_201530_COBA PD+CBF_PENGUJIAN KE-05_TUNING.csv  (bagian _HHmmSS boleh tidak ada: file lama)
 POLA_NAMA = re.compile(r"^(\d{8})(?:_(\d{6}))?_COBA (PD\+CBF|PD)_(PERCOBAAN|PENGUJIAN|PERBANDINGAN) KE-(\d+)(_TUNING)?\.csv$")
@@ -406,12 +411,13 @@ class PerekamISE:
         self.c_dipakai = []
 
     def tambah(self, t, x, error_theta, error_dtheta, error_psi, error_dpsi, u_PD, u, status_cbf, gain, dorong=0.0,
-               nilai_c=None):
+               nilai_c=None, ekstra=None):
         """Dipanggil tiap siklus kontrol.
 
         gain    : dict berisi Kp_psi, Kd_psi, Kp_theta, Kd_theta, Kvel, Alpha_1, Alpha_2, ... dan zeta_DEG
         dorong  : gaya dorongan yang sedang bekerja [N] (+ ke depan, - ke belakang, 0 tidak ada)
         nilai_c : list nilai constraint CBF-QP (None = constraint tidak dipakai), atau None (mode PD / motor mati)
+        ekstra  : [REVISI 16-10] dict kolom KOLOM_EKSTRA (yang tidak ada ditulis 0)
         """
         dt = t - self.t_terakhir
         self.t_terakhir = t
@@ -444,6 +450,9 @@ class PerekamISE:
             baris.append(gain_sekarang[nama])
         self.zeta_deg = float(gain.get("zeta_DEG", getattr(config, "zeta_DEG", 0.0)))
         baris.append(self.zeta_deg)
+        ekstra = ekstra or {}
+        for nama in KOLOM_EKSTRA:                    # [REVISI 16-10]
+            baris.append(float(ekstra.get(nama, 0.0)))
         # Kolom constraint CBF-QP di ujung baris (kolom lain tetap di posisinya).
         if nilai_c is not None:
             self.jumlah_c = max(self.jumlah_c, len(nilai_c))
@@ -497,6 +506,9 @@ class PerekamISE:
             status = [baris[11] for baris in self.data]
             cbf_ok = persen_cbf_ok(status)
             judul = judul + "  |  CBF-QP berstatus OK %.1f %% waktu" % cbf_ok
+            slack = persen_status(status, STATUS_SLACK)          # [REVISI 16-10]
+            if slack > 0.0:
+                judul = judul + " (SLACK %.1f %%)" % slack
             if len(self.c_dipakai) > 0:
                 judul = judul + "  |  constraint aktif: " + teks_mask(self.c_dipakai)
             alpha_nol = persen_status(status, STATUS_ALPHA_NOL)
@@ -677,8 +689,8 @@ def persen_status(status, nama):
 
 
 def persen_cbf_ok(status):
-    """Persentase waktu CBF-QP berstatus AMAN. Selain AMAN (GAGAL, ALPHA_NOL), keluaran
-    cbf_qp.py adalah u_PD yang dibatasi arus saja. Mengembalikan None untuk mode PD (status "-")."""
+    """Persentase waktu CBF-QP berstatus AMAN. Selain AMAN: SLACK ([REVISI 16-10] constraint dilonggarkan),
+    GAGAL / ALPHA_NOL (u_PD yang dibatasi arus saja). Mengembalikan None untuk mode PD (status "-")."""
     jumlah = 0
     jumlah_ok = 0
     for teks in status:
@@ -712,6 +724,7 @@ def ringkasan(data):
         "dorong_maks": nilai_maks(data["dorong_N"]),
         "cbf_ok": persen_cbf_ok(data["status_cbf"]),
         "alpha_nol": persen_status(data["status_cbf"], STATUS_ALPHA_NOL),
+        "slack": persen_status(data["status_cbf"], STATUS_SLACK),          # [REVISI 16-10]
     }
     return hasil
 
@@ -873,7 +886,8 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN, nam
         catatan.append("CBF-QP TIDAK AKTIF %.1f %% waktu (ALPHA_NOL: ada Alpha = 0), selama itu PD+CBF = PD"
                        % hasil_cbf["alpha_nol"])
     if hasil_cbf["cbf_ok"] is not None and hasil_cbf["cbf_ok"] < 99.95:
-        catatan.append("CBF-QP tidak selalu OK (saat tidak OK, u = u_PD yang dibatasi arus)")
+        catatan.append("CBF-QP tidak selalu OK (SLACK: constraint dilonggarkan, u paling sedikit melanggar; "
+                       "GAGAL / ALPHA_NOL: u = u_PD yang dibatasi arus)")
 
     # ------------------------------------------------------------------ nama
     awalan = "BANDING" if jenis == JENIS_PERCOBAAN else "BANDING " + jenis
@@ -922,12 +936,13 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN, nam
         ["Dorongan (O / P)", teks_dorongan(hasil_pd), teks_dorongan(hasil_cbf), ""],
         ["CBF-QP berstatus OK [% waktu]", "-",
          "-" if hasil_cbf["cbf_ok"] is None else "%.1f" % hasil_cbf["cbf_ok"], ""],
+        ["CBF-QP berstatus SLACK [% waktu]", "-", "%.1f" % hasil_cbf["slack"], ""],     # [REVISI 16-10]
     ]
     judul_kolom = ["0 - %.1f s" % t_banding, label_pd, label_cbf, "PD+CBF terhadap PD"]
 
     # ---------------------------------------------------------------- gambar
-    fig = plt.figure(figsize=(13, 13.0))
-    kisi = fig.add_gridspec(3, 2, height_ratios=[1.25, 0.34, 1.05])
+    fig = plt.figure(figsize=(13, 13.8))                 # [REVISI 16-10] lebih tinggi: tabel bertambah 1 baris (SLACK)
+    kisi = fig.add_gridspec(3, 2, height_ratios=[1.25, 0.34, 1.2])
     gambar1 = fig.add_subplot(kisi[0, 0])
     gambar2 = fig.add_subplot(kisi[0, 1])
     gambar3 = fig.add_subplot(kisi[1, :])

@@ -9,6 +9,8 @@ File ini hanya mengurus simulasinya:
         a. torsi roda = arus perintah x MOTOR_KT_EFEKTIF (bukan MOTOR_KT)
         b. torsi baru bekerja SIM_JEDA_TORSI detik setelah perintah dihitung
         c. psi dibaca lewat model MPU6050 (akselerometer + gyro + noise) dan Kalman yang sama dengan robot
+        d. [REVISI 16-10] batas arus bergantung kecepatan roda (back-EMF, SIM_BATAS_KECEPATAN): arus yang bisa masuk
+           turun linear dari batas arus sampai 0 di kecepatan no-load DDSM115 (200 rpm = 20.9 rad/s)
     - jendela "ATERA - Kontrol" (Qt): tombol mode kontrol PD / PD + CBF-QP, tombol W A S D B N O P,
       dan kolom angka parameter (input utama). B = mode Balancing, N = mode Navigate
     - plot realtime: kurva sekarang + kurva PEMBANDING (pengujian terakhir tiap mode: PD ungu, PD+CBF biru)
@@ -22,7 +24,8 @@ Arah di simulasi:
     Roda kiri (Lwheel_link) ada di sisi -X dunia, roda kanan (Rwheel_link) di sisi +X.
     psi   > 0 : badan miring ke depan (diukur dari garis vertikal)
     theta > 0 : roda menggelinding ke depan (sudut roda absolut, definisi di model.hitung_theta)
-    u     > 0 : torsi mendorong roda ke depan (torsi SATU roda, kedua roda diberi u yang sama)
+    u     > 0 : torsi mendorong roda ke depan (torsi SATU roda; roda kiri u + u_belok, roda kanan u - u_belok)
+    yaw   > 0 : [REVISI 16-10] robot berputar ke kiri dilihat dari atas (baca_yaw, dari encoder kedua roda)
 """
 
 import importlib.util
@@ -37,7 +40,7 @@ import pybullet_data
 
 import config
 import model
-from pd_control import MODE_BALANCING
+from pd_control import MODE_BALANCING, hitung_yaw
 
 
 # Kalman dipakai langsung dari kalman.py milik robot (tanpa salinan). Dimuat lewat path karena folder robot juga
@@ -62,6 +65,22 @@ DAFTAR_PARAMS = [(_nama, config.DESIMAL.get(_nama, config.DESIMAL_ALPHA))
 
 FOLDER_INI = os.path.dirname(os.path.abspath(__file__))
 PILIHAN_URDF = [os.path.join(FOLDER_INI, path) for path in config.URDF_PILIHAN]
+
+
+def batas_arus_kecepatan(arus, w):
+    """[REVISI 16-10] Arus [A] yang benar-benar bisa masuk motor DDSM115 pada kecepatan roda w [rad/s] (relatif badan,
+    + = ke depan), untuk arus perintah `arus` (sudah dibatasi MAX_CURRENT_A). Model motor DC: tegangan baterai habis
+    dipakai back-EMF saat roda cepat, jadi arus SEARAH putaran turun linear sampai 0 di kecepatan no-load:
+        i_maju_maks   = min(MAX_CURRENT_A, MOTOR_STALL_CURRENT_A * (1 - w / w_noload)),  dijepit >= 0
+        i_mundur_maks = min(MAX_CURRENT_A, MOTOR_STALL_CURRENT_A * (1 + w / w_noload)),  dijepit >= 0
+    Arus yang MELAWAN putaran (mengerem) tidak dikurangi (sampai MAX_CURRENT_A).
+    ASUMSI: kurva linear; w_noload = MOTOR_NO_LOAD_SPEED_RPM (cocok dengan plafon ~21 rad/s data robot 20261015)."""
+    if not config.SIM_BATAS_KECEPATAN:
+        return arus
+    w_noload = config.MOTOR_NO_LOAD_SPEED_RPM * 2.0 * math.pi / 60.0
+    maju = min(config.MAX_CURRENT_A, max(0.0, config.MOTOR_STALL_CURRENT_A * (1.0 - w / w_noload)))
+    mundur = min(config.MAX_CURRENT_A, max(0.0, config.MOTOR_STALL_CURRENT_A * (1.0 + w / w_noload)))
+    return max(-mundur, min(maju, arus))
 
 
 def cari_urdf():
@@ -1063,7 +1082,7 @@ class Simulasi:
         # Realisme dari uji hardware (config.py bagian 11)
         self.skala_torsi = config.RASIO_TORSI                           # torsi nyata / torsi perintah
         self.jeda_substep = int(round(config.SIM_JEDA_TORSI / self.dt_fisika))
-        self.antrean_torsi = []        # torsi yang sudah diperintah tetapi belum bekerja (satu per langkah fisika)
+        self.antrean_torsi = []        # [REVISI 16-10] ARUS yang sudah diperintah tetapi belum bekerja (satu per langkah fisika)
         self.kalman = kalman.KalmanAngle()
         self.psi_imu = 0.0             # [rad]   psi hasil Kalman (yang dibaca kontrol)
         self.dpsi_imu = 0.0            # [rad/s] dpsi dari gyro
@@ -1082,9 +1101,12 @@ class Simulasi:
         self.dorong_menyala = {1: None, -1: None}
 
         if gui:
-            print("Realisme: torsi roda x%.2f (K efektif %.3f N m/A), jeda torsi %.1f ms, model IMU + Kalman %s."
+            print("Realisme: torsi roda x%.2f (K efektif %.3f N m/A), jeda torsi %.1f ms, model IMU + Kalman %s, "
+                  "batas arus-kecepatan motor %s."
                   % (self.skala_torsi, config.MOTOR_KT_EFEKTIF, self.jeda_substep * self.dt_fisika * 1000,
-                     "AKTIF" if config.SIM_MODEL_IMU else "MATI (psi sempurna)"))
+                     "AKTIF" if config.SIM_MODEL_IMU else "MATI (psi sempurna)",
+                     ("AKTIF (0 A di %.0f rpm)" % config.MOTOR_NO_LOAD_SPEED_RPM) if config.SIM_BATAS_KECEPATAN
+                     else "MATI (motor ideal)"))
             print("Titik dorong O / P: bidang %.0f x %.0f mm, pusatnya %.1f mm di atas poros roda "
                   "(puncak badan %.1f mm), %.1f mm dari garis tengah badan."
                   % (config.DORONG_SISI * 1000, config.DORONG_SISI * 1000, self.tinggi_dorong * 1000, self.tinggi_atas * 1000,
@@ -1265,6 +1287,15 @@ class Simulasi:
         self.psi_imu = math.radians(psi_kalman)
         self.dpsi_imu = math.radians(gyro)
 
+    def baca_yaw(self):
+        """[REVISI 16-10] (yaw, dyaw) dari 'encoder' kedua roda, sama seperti robot fisik (pd_control.hitung_yaw).
+        Joint PyBullet mengukur roda relatif badan (seperti DDSM115); psi saling meniadakan di selisih kiri-kanan."""
+        kiri = p.getJointState(self.robot, self.joint_kiri)
+        kanan = p.getJointState(self.robot, self.joint_kanan)
+        yaw = hitung_yaw(self.tanda_kiri * kiri[0], self.tanda_kanan * kanan[0])
+        dyaw = hitung_yaw(self.tanda_kiri * kiri[1], self.tanda_kanan * kanan[1])
+        return yaw, dyaw
+
     def nolkan_theta(self):
         """Titik nol s dipindah ke posisi sekarang (dipanggil setiap robot masuk mode Balancing)."""
         self.theta_nol = self.theta_nol + self.baca_state()[0]
@@ -1361,18 +1392,25 @@ class Simulasi:
         # Batas arus motor berlaku untuk tiap roda (u = MOTOR_KT x arus perintah).
         u_kiri = max(config.u_min, min(config.u_max, u_kiri))
         u_kanan = max(config.u_min, min(config.u_max, u_kanan))
-        # (a) Torsi yang benar-benar keluar dari roda = arus perintah x MOTOR_KT_EFEKTIF.
-        torsi_kiri = self.skala_torsi * u_kiri
-        torsi_kanan = self.skala_torsi * u_kanan
+        # [REVISI 16-10] Yang diantrekan sekarang ARUS perintah (i = u / MOTOR_KT), supaya batas arus yang bergantung
+        # kecepatan roda (batas_arus_kecepatan) dihitung saat arus itu benar-benar bekerja.
+        arus_kiri = u_kiri / config.MOTOR_KT
+        arus_kanan = u_kanan / config.MOTOR_KT
 
         for _ in range(config.SUBSTEP):
-            # (b) Torsi baru bekerja jeda_substep langkah fisika (SIM_JEDA_TORSI detik) setelah diperintah.
-            self.antrean_torsi.append((torsi_kiri, torsi_kanan))
+            # (b) Arus baru bekerja jeda_substep langkah fisika (SIM_JEDA_TORSI detik) setelah diperintah.
+            self.antrean_torsi.append((arus_kiri, arus_kanan))
             kiri_bekerja, kanan_bekerja = self.antrean_torsi.pop(0)
+            # [REVISI 16-10] (c) Batas arus bergantung kecepatan motor (back-EMF), lalu
+            # (a) torsi yang benar-benar keluar dari roda = arus x MOTOR_KT_EFEKTIF (= skala_torsi x MOTOR_KT).
+            w_kiri = self.tanda_kiri * p.getJointState(self.robot, self.joint_kiri)[1]
+            w_kanan = self.tanda_kanan * p.getJointState(self.robot, self.joint_kanan)[1]
+            torsi_kiri = self.skala_torsi * config.MOTOR_KT * batas_arus_kecepatan(kiri_bekerja, w_kiri)
+            torsi_kanan = self.skala_torsi * config.MOTOR_KT * batas_arus_kecepatan(kanan_bekerja, w_kanan)
             p.setJointMotorControl2(self.robot, self.joint_kiri, p.TORQUE_CONTROL,
-                                    force=self.tanda_kiri * kiri_bekerja)
+                                    force=self.tanda_kiri * torsi_kiri)
             p.setJointMotorControl2(self.robot, self.joint_kanan, p.TORQUE_CONTROL,
-                                    force=self.tanda_kanan * kanan_bekerja)
+                                    force=self.tanda_kanan * torsi_kanan)
             if self.sisa_dorong > 0.0:
                 self.beri_gaya_dorong()
                 self.sisa_dorong = self.sisa_dorong - self.dt_fisika

@@ -1,12 +1,39 @@
 """cbf_qp.py - safety filter CBF-QP ATERA, diselesaikan CasADi (ca.conic, QP solver config.CBF_QP_SOLVER).
-File ini sama persis di simulasi/ dan program/atera_program/.
+Bagian di luar WORKPLACE PROGRAM sama persis di simulasi/ dan program/atera_program/ (WORKPLACE boleh berbeda).
 
-    u* = argmin_u  || u - u_PD ||^2
-    s.t.  c_k(x, u) >= 0      untuk setiap c_k di DAFTAR_C yang aktif di mode gerak sekarang
-                              (DAFTAR_C dan pilihan constraint per mode ditulis di WORKPLACE PROGRAM, di bawah)
-          -i_max <= u / K_t <= i_max                           batas arus motor
+[REVISI 16-10] Ringkasan perubahan (dicari dengan kata "[REVISI 16-10]" di file ini):
+    1. SLACK  : setiap constraint diberi slack SENDIRI d_k >= 0 dengan bobot rho_k (config.CBF_RHO_SLACK, satu nilai
+                per h, urutan DAFTAR_C). Penalti slack LINEAR (exact penalty) + suku kuadrat kecil eps:
+                    min  (u - u_PD)^2 + sum_k (rho_k * d_k + eps * d_k^2)          eps = config.CBF_SLACK_EPS
+                    s.t. c_k(x, u) + d_k >= 0   untuk setiap constraint,   u_min <= u <= u_max,   d_k >= 0
+                Sifat exact penalty: bila rho_k lebih besar dari pengali Lagrange constraint k di QP lama, maka
+                d = 0 dan u SAMA PERSIS dengan QP lama setiap kali semua constraint bisa dipenuhi. Bila tidak ada u
+                yang memenuhi semua (constraint bertabrakan, atau torsi motor tidak cukup), QP tetap punya solusi dan
+                constraint yang bobotnya KECIL dilonggarkan lebih dulu (PRIORITAS). Bobot besar di h1/h2 = psi didahulukan.
+                Kenapa tidak persis segway_cbf.py dosen (SATU slack bersama, penalti kuadrat rho*d^2)?
+                  - Dosen hanya punya constraint tilt. Dengan h1..h8, satu slack bersama membagi pelanggaran ke semua
+                    constraint tanpa prioritas; bobot per constraint membuat psi selalu didahulukan.
+                  - Penalti kuadrat membuat constraint yang sedang aktif selalu sedikit dilanggar (turunan rho*d^2 di d = 0
+                    adalah 0), jadi status SLACK muncul walau tidak ada tabrakan. Penalti linear tidak.
+                  Catatan uji loop tertutup 16-10 (model planar): di dorongan 5-12 N pilihan bobot ini TIDAK mengubah
+                  hasil. Yang menentukan adalah dtheta_max: dengan 13 rad/s SEMUA varian slack membuat robot jatuh di
+                  dorongan 10 N (h7/h8 melarang roda mengejar badan), dengan 20 rad/s tidak. QP lama "selamat" di kasus
+                  itu hanya karena saat GAGAL ia kembali ke u_PD (semua constraint dibuang).
+                Status baru "SLACK" = ada constraint yang dilonggarkan (CSV kolom slack = d_k terbesar).
+                CBF_SLACK_AKTIF = False -> d dipaksa 0 (perilaku lama, GAGAL -> u_PD dibatasi arus).
+    2. DOB    : Disturbance Observer (class DOB). Model f(x) + g(x)*u tidak tahu dorongan tangan, gesekan, batas
+                kecepatan motor, atau torsi motor yang berbeda dari datasheet. DOB menaksir selisihnya:
+                    d_hat = low-pass( percepatan terukur - percepatan prediksi model )   untuk ddtheta dan ddpsi
+                lalu f(x) di WORKPLACE diganti f(x) + [0, d_hat_dtheta, 0, d_hat_dpsi]. Rumus constraint di WORKPLACE
+                TIDAK berubah: lie(h, f) otomatis memuat gangguan. Contoh h1 (HOCBF): L_f^2 h1 = -(f_dpsi + d_hat_dpsi).
+                DOB_AKTIF = False -> d_hat tetap dihitung dan dicatat, tetapi TIDAK dipakai CBF-QP.
+    3. MARGIN : barrier psi memakai psi_max - CBF_MARGIN_DEG (menutup jeda DOB beberapa ms saat dorongan mulai).
+                Garis merah di plot tetap di psi_max (spesifikasi).
+    4. SOLVER : config.CBF_QP_SOLVER boleh "eksak" (solusi pasti QP 2 variabel ini dengan numpy, tanpa ca.conic),
+                atau plugin ca.conic CasADi: "qpoases", "osqp", "proxqp", "qrqp", "hpipm", "daqp", "highs", "ipqp".
+                Bandingkan semuanya:  python3 cbf_qp.py --banding-solver
 
-    u = torsi SATU roda [N m].   Hard constraint, tanpa slack.
+    u = torsi SATU roda [N m].
     Alpha_1, Alpha_2, ... diambil dari config.py (semua Alpha_<nomor> yang berurutan mulai dari 1).
     zeta (kemiringan bidang) dan psi_max (batas h1, h2) juga parameter: nilainya dibaca dari config.zeta dan
     config.psi_max tiap siklus, jadi bisa diubah saat program berjalan tanpa membangun ulang solver.
@@ -17,29 +44,30 @@ m_k = 0 selalu terpenuhi dan tidak ikut membatasi u. Yang berganti saat mode ber
 
 Model torsi: u adalah torsi PERINTAH (arus perintah x K_t datasheet). Torsi yang benar-benar bekerja di roda adalah
 rasio_torsi * u, dengan rasio_torsi = K_t efektif / K_t datasheet (config.RASIO_TORSI).
-g(x) di model CBF-QP dikalikan rasio_torsi, jadi CBF-QP menghitung dengan tenaga roda yang sungguh ada. Tanpa ini
-CBF-QP menganggap roda 1 / rasio_torsi kali lebih kuat dari kenyataan: koreksi torsinya terlalu kecil,
-dan constraint yang dikira terpenuhi ternyata dilanggar. rasio_torsi adalah parameter solver, jadi bisa diganti
-saat berjalan (cbf.rasio_torsi = nilai) tanpa membangun ulang solver. Batas arus tetap dalam torsi perintah.
+g(x) di model CBF-QP dikalikan rasio_torsi, jadi CBF-QP menghitung dengan tenaga roda yang sungguh ada.
 
 Tuning bertahap (simulasi/tuning_optuna.py): pilih_barrier(nomor) mengaktifkan hanya constraint bernomor itu
 (1 = h1, dst), tanpa membangun ulang solver, dengan cara yang sama seperti mask mode gerak.
 
-Susunan QP di CasADi (satu variabel keputusan u). Setiap c_k affine terhadap u: c(x, u, p) = a(x, p)*u + b(x, p).
-    min_u  1/2 * H * u^2 + G * u          H = 2, G = -2*u_PD      (= (u - u_PD)^2 dikurangi konstanta u_PD^2)
-    s.t.   -b(x, p) <= a(x, p) * u <= CBF_INFTY                    (c >= 0)
-           u_min <= u <= u_max                                     (batas arus)
-    a(x, p) dan b(x, p) dihitung dari ekspresi CasADi WORKPLACE (ca.Function), lalu QP diselesaikan ca.conic
-    dengan plugin config.CBF_QP_SOLVER ("qpoases" = active-set, solusi eksak untuk QP kecil ini).
+Susunan QP di CasADi (variabel keputusan z = [u, d_1, ..., d_NH]). Setiap c_k affine terhadap u:
+c(x, u, p) = a(x, p)*u + b(x, p).
+    min_z  1/2 * z' H z + G' z      H = diag(2, 2*eps, ..., 2*eps), G = [-2*u_PD, rho_1, ..., rho_NH]
+                                    (= (u - u_PD)^2 + sum (rho_k*d_k + eps*d_k^2) - konstanta)
+    s.t.   -b(x, p) <= a(x, p)*u + d <= CBF_INFTY          (matriks constraint [a | I], c + d >= 0)
+           [u_min, 0, ..] <= z <= [u_max, d_maks, ..]      (batas arus, slack >= 0; d_maks = 0 bila slack mati)
+    a(x, p) dan b(x, p) dihitung dari ekspresi CasADi WORKPLACE (ca.Function) tiap siklus.
     Tidak ada kode C yang di-generate / di-build: solver langsung siap saat CBFQP() dibuat.
 
-Kebutuhan: pip install casadi   (plugin qpoases sudah ikut di paket pip casadi).
+Kebutuhan: pip install casadi   (plugin qpoases, osqp, proxqp, qrqp, hpipm, daqp, highs, ipqp ikut di paket pip casadi
+           3.6 ke atas; yang tidak ada di versi Anda dilaporkan "tidak tersedia" oleh --banding-solver).
 
 Semua nilai fisik dan gain dibaca dari config.py; f(x) dan g(x) dari model.py.
 """
 
 from __future__ import annotations
 
+import math
+import sys
 import time
 
 import casadi as ca
@@ -49,9 +77,14 @@ import config
 import model
 from pd_control import MODE_BALANCING, MODE_NAVIGATE
 
-STATUS_AMAN = "AMAN"                # u = u* dari QP solver
-STATUS_GAGAL = "GAGAL"              # tidak ada u yang memenuhi semua constraint, atau QP solver gagal secara numerik
+STATUS_AMAN = "AMAN"                # u = u* dari QP solver, semua constraint terpenuhi (slack = 0)
+STATUS_SLACK = "SLACK"              # [REVISI 16-10] QP selesai, tetapi constraint terpaksa dilonggarkan (slack > 0)
+STATUS_GAGAL = "GAGAL"              # QP solver gagal secara numerik (atau tanpa slack: tidak ada u yang memenuhi)
 STATUS_ALPHA = "ALPHA_NOL"          # ada Alpha <= 0, CBF-QP tidak dijalankan
+
+# [REVISI 16-10] urutan parameter tambahan di vektor p (sesudah semua Alpha)
+_P_ZETA, _P_RASIO, _P_PSI_MAX, _P_D_DTHETA, _P_D_DPSI = range(5)
+JUMLAH_P_EKSTRA = 5
 
 
 def workplace(x, u, f, g, zeta, psi_max):
@@ -142,22 +175,33 @@ def workplace(x, u, f, g, zeta, psi_max):
 
 
 def _cbf_expressions():
-    """Simbol x, u, p = [Alpha_1, Alpha_2, ..., zeta, rasio_torsi, psi_max], f, g, DAFTAR_C, C_MODE dan nama Alpha
-    dari WORKPLACE. Constraint: c >= 0."""
+    """Simbol x, u, p = [Alpha_1, ..., zeta, rasio_torsi, psi_max, d_dtheta, d_dpsi], f, g, DAFTAR_C, C_MODE dan
+    nama Alpha dari WORKPLACE. Constraint: c >= 0."""
     nama_alpha = config.NAMA_ALPHA
+    n_alpha = len(nama_alpha)
     x = ca.SX.sym("x", config.NX)
     u = ca.SX.sym("u", config.NU)
-    p = ca.SX.sym("p", len(nama_alpha) + 3)        # tiga elemen terakhir: zeta, rasio_torsi, psi_max
-    zeta = p[len(nama_alpha)]
-    rasio_torsi = p[len(nama_alpha) + 1]
-    psi_max = p[len(nama_alpha) + 2]
+    p = ca.SX.sym("p", n_alpha + JUMLAH_P_EKSTRA)
+    zeta = p[n_alpha + _P_ZETA]
+    rasio_torsi = p[n_alpha + _P_RASIO]
+    psi_max = p[n_alpha + _P_PSI_MAX]
+    d_dtheta = p[n_alpha + _P_D_DTHETA]           # [REVISI 16-10] gangguan ddtheta hasil DOB [rad/s^2]
+    d_dpsi = p[n_alpha + _P_D_DPSI]               # [REVISI 16-10] gangguan ddpsi hasil DOB [rad/s^2]
 
     # Alpha_1, Alpha_2, ... dibuat sebagai nama global supaya bisa langsung ditulis di WORKPLACE.
-    for i in range(len(nama_alpha)):
+    for i in range(n_alpha):
         globals()[nama_alpha[i]] = p[i]
 
     f, g = model.fg_casadi(x, zeta)
     g = rasio_torsi * g                            # u = torsi perintah, torsi nyata = rasio_torsi * u (lihat docstring modul)
+
+    # [REVISI 16-10] DOB: f yang dipakai WORKPLACE = f model + gangguan taksiran DOB (0 bila DOB_AKTIF = False).
+    # Gangguan hanya masuk ke baris percepatan (ddtheta, ddpsi), baris dtheta dan dpsi (kecepatan) tetap.
+    gangguan = [0.0] * config.NX
+    gangguan[config.IDX_DTHETA] = d_dtheta
+    gangguan[config.IDX_DPSI] = d_dpsi
+    f = f + ca.vertcat(*gangguan)
+
     try:
         daftar_c, c_mode = workplace(x, u, f, g, zeta, psi_max)
     except NameError as kesalahan:
@@ -192,19 +236,168 @@ def _mask_tiap_mode(daftar_c, c_mode):
     return mask
 
 
+# =============================================================================
+# [REVISI 16-10] QP solver
+# =============================================================================
+SOLVER_EKSAK = "eksak"
+
+
 def _opsi_solver(plugin):
     """Opsi ca.conic tiap plugin: tanpa cetakan di terminal, dan tidak melempar error saat QP tidak punya solusi
-    (hasilnya diperiksa sendiri di compute())."""
+    (hasilnya diperiksa sendiri di compute()). Opsi yang tidak dikenal versi casadi Anda -> dibuat tanpa opsi."""
+    opsi = {"error_on_fail": False}
     if plugin == "qpoases":
-        return {"printLevel": "none", "error_on_fail": False}
-    if plugin == "osqp":
-        return {"osqp": {"verbose": False, "eps_abs": 1e-9, "eps_rel": 1e-9, "polish": True}, "error_on_fail": False}
-    return {"error_on_fail": False}
+        opsi["printLevel"] = "none"
+    elif plugin == "osqp":
+        opsi["osqp"] = {"verbose": False, "eps_abs": 1e-9, "eps_rel": 1e-9, "polish": True, "max_iter": 20000}
+    elif plugin in ("qrqp", "ipqp"):
+        opsi.update({"print_iter": False, "print_header": False, "print_info": False})
+    return opsi
 
 
+def bobot_slack(nh):
+    """[REVISI 16-10] rho_k tiap constraint (urutan DAFTAR_C) dari config.CBF_RHO_SLACK: satu angka -> semua sama;
+    list -> per constraint (bila lebih pendek dari jumlah constraint, nilai terakhir diulang)."""
+    rho = config.CBF_RHO_SLACK
+    if isinstance(rho, (int, float)):
+        return np.full(nh, float(rho))
+    rho = [float(v) for v in rho]
+    if len(rho) == 0 or min(rho) <= 0.0:
+        raise RuntimeError("config.CBF_RHO_SLACK harus angka > 0 atau list angka > 0 (satu per constraint h).")
+    return np.array((rho + [rho[-1]] * nh)[:nh])
+
+
+def buat_solver(plugin, nh):
+    """ca.conic untuk QP 1 + nh variabel (u dan satu slack per constraint) dengan nh constraint.
+    plugin "eksak" -> None (dipakai qp_eksak)."""
+    if plugin == SOLVER_EKSAK:
+        return None
+    nv = config.NU + nh
+    struktur = {"h": ca.Sparsity.dense(nv, nv), "a": ca.Sparsity.dense(nh, nv)}
+    try:
+        return ca.conic("atera_cbf_qp", plugin, struktur, _opsi_solver(plugin))
+    except RuntimeError:
+        # casadi lama tidak mengenal sebagian opsi: buat tanpa opsi tambahan (kegagalan tetap ditangkap di compute)
+        try:
+            return ca.conic("atera_cbf_qp", plugin, struktur)
+        except RuntimeError as kesalahan:
+            raise RuntimeError("%s | QP solver '%s' tidak tersedia di casadi ini (cek config.CBF_QP_SOLVER, misalnya "
+                               "'qpoases' atau 'eksak')" % (str(kesalahan).strip().splitlines()[-1][:90], plugin))
+
+
+def qp_eksak(a, b, u_pd, u_lb, u_ub, rho, pakai_slack=True, eps=None):
+    """[REVISI 16-10] Solusi PASTI QP CBF-QP ini (1 variabel u + 1 slack per constraint) tanpa iterasi, dengan numpy.
+
+        min (u - u_pd)^2 + sum_k (rho_k*d_k + eps*d_k^2)   s.t.  a_k*u + b_k + d_k >= 0,  u_lb <= u <= u_ub,  d_k >= 0
+
+    Untuk u tetap, slack terbaik tiap constraint d_k(u) = max(0, l_k(u)),  l_k(u) = -a_k*u - b_k  (garis lurus).
+    Jadi QP = minimasi 1 dimensi  J(u) = (u - u_pd)^2 + sum_k (rho_k*phi_k + eps*phi_k^2),  phi_k = max(0, l_k(u)),
+    di [u_lb, u_ub] (cembung). Titik l_k(u) = 0 membagi selang menjadi potongan; di tiap potongan himpunan constraint
+    yang dilanggar (P) tetap dan J kuadratik biasa, dengan minimum
+        u = (2*u_pd - sum_P rho_k*s_k - 2*eps*sum_P s_k*q_k) / (2 + 2*eps*sum_P s_k^2),   s = -a, q = -b
+    lalu dijepit ke potongan itu. Minimum terkecil dari semua potongan = solusi QP (pasti, bukan perkiraan).
+    Mengembalikan (u, d ndarray(NH), ok). pakai_slack=False: d = 0 dipaksa, ok = False bila tidak ada u yang memenuhi.
+    """
+    a = np.asarray(a, dtype=float).ravel()
+    b = np.asarray(b, dtype=float).ravel()
+    rho = np.asarray(rho, dtype=float).ravel() * np.ones(len(a))
+    eps = float(config.CBF_SLACK_EPS if eps is None else eps)
+    lo, hi = float(u_lb), float(u_ub)
+    tol = float(config.CBF_TOL_KOEFISIEN)
+    nol = np.zeros(len(a))
+    if not pakai_slack:
+        # tanpa slack: selang u yang memenuhi semua constraint (QP lama)
+        lo_c, hi_c, kosong = lo, hi, False
+        for ak, bk in zip(a, b):
+            if ak > tol:
+                lo_c = max(lo_c, -bk / ak)
+            elif ak < -tol:
+                hi_c = min(hi_c, -bk / ak)
+            elif bk < 0.0:
+                kosong = True
+        if not kosong and lo_c <= hi_c:
+            return float(min(max(u_pd, lo_c), hi_c)), nol, True
+        return float(min(max(u_pd, lo), hi)), nol, False
+    s, q = -a, -b
+    titik = [lo, hi]
+    for sk, qk in zip(s, q):
+        if abs(sk) > tol and lo < -qk / sk < hi:
+            titik.append(-qk / sk)
+    titik = np.unique(np.array(titik))
+    if len(titik) == 1:                                          # lo == hi
+        return float(lo), np.maximum(0.0, s * lo + q), True
+
+    def biaya(u):
+        phi = np.maximum(0.0, s * u + q)
+        return (u - u_pd) ** 2 + float(np.sum(rho * phi + eps * phi * phi))
+
+    terbaik = (np.inf, lo)
+    for p0, p1 in zip(titik[:-1], titik[1:]):
+        P = (s * (0.5 * (p0 + p1)) + q) > 0.0                    # constraint yang dilanggar di potongan ini
+        u = ((2.0 * u_pd - np.sum(rho[P] * s[P]) - 2.0 * eps * np.sum(s[P] * q[P]))
+             / (2.0 + 2.0 * eps * np.sum(s[P] ** 2)))
+        u = min(max(u, p0), p1)
+        j = biaya(u)
+        if j < terbaik[0]:
+            terbaik = (j, u)
+    u = float(terbaik[1])
+    d = np.maximum(0.0, s * u + q)
+    d[d < 1e-9 * (1.0 + np.abs(q))] = 0.0                       # sisa pembulatan di titik patah = 0
+    return u, d, True
+
+
+# =============================================================================
+# [REVISI 16-10] DOB (Disturbance Observer)
+# =============================================================================
+class DOB:
+    """Penaksir gangguan percepatan d_hat = [d_dtheta, d_dpsi] [rad/s^2].
+
+    Tiap siklus kontrol (urutan WAJIB):
+        dob.perbarui(x, dt)    di awal siklus, dengan state baru x
+        ... hitung u ...
+        dob.catat(x, u)        setelah u dikirim ke motor (u = torsi perintah SATU roda yang benar-benar dipakai)
+
+    perbarui():  percepatan terukur  = (x_baru - x_lalu) / dt                        (dtheta dari encoder, dpsi gyro)
+                 percepatan prediksi = f(x_lalu) + g(x_lalu) * rasio_torsi * u_lalu  (model.py, TANPA gangguan)
+                 sisa = terukur - prediksi  -> d_hat += a*(sisa - d_hat),  a = dt / (DOB_TAU_S + dt)  (low-pass)
+    Yang tertangkap: dorongan / tarikan tangan, lantai miring yang tidak diketahui model, gesekan, torsi motor
+    yang lebih kecil dari datasheet, batas kecepatan motor (back-EMF). Noise turunan gyro diredam DOB_TAU_S.
+    """
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.d = np.zeros(2)                        # [d_dtheta, d_dpsi]
+        self._x_lalu = None
+        self._a_prediksi = None
+
+    def perbarui(self, x, dt):
+        x = np.asarray(x, dtype=float).ravel()
+        if self._x_lalu is not None and self._a_prediksi is not None and dt > 1e-6:
+            a_ukur = np.array([x[config.IDX_DTHETA] - self._x_lalu[config.IDX_DTHETA],
+                               x[config.IDX_DPSI] - self._x_lalu[config.IDX_DPSI]]) / dt
+            sisa = a_ukur - self._a_prediksi
+            bobot = dt / (float(config.DOB_TAU_S) + dt)
+            self.d = self.d + bobot * (sisa - self.d)
+            batas = float(config.DOB_BATAS)
+            self.d = np.clip(self.d, -batas, batas)
+        self._x_lalu = x.copy()
+        self._a_prediksi = None                     # wajib diisi catat() di siklus ini
+
+    def catat(self, x, u, rasio_torsi, zeta):
+        x = np.asarray(x, dtype=float).ravel()
+        dx = model.f(x, zeta) + model.g(x, zeta) * float(rasio_torsi) * float(u)
+        self._a_prediksi = np.array([dx[config.IDX_DTHETA], dx[config.IDX_DPSI]])
+
+
+# =============================================================================
+# CBF-QP
+# =============================================================================
 class CBFQP:
-    def __init__(self, zeta=None) -> None:
-        """zeta: kemiringan bidang [rad] yang dipakai terus. None = baca config.zeta tiap siklus (bisa berubah)."""
+    def __init__(self, zeta=None, plugin=None) -> None:
+        """zeta: kemiringan bidang [rad] yang dipakai terus. None = baca config.zeta tiap siklus (bisa berubah).
+        plugin: QP solver (None = config.CBF_QP_SOLVER)."""
         self.zeta_tetap = zeta
         x, u, p, f, g, daftar_c, c_mode, self.nama_alpha = _cbf_expressions()
         self.NH = len(daftar_c)                         # jumlah constraint di DAFTAR_C
@@ -212,7 +405,7 @@ class CBFQP:
         # Mask tiap mode sebagai parameter: c_efektif = m*c + (1 - m)  (m = 0 -> selalu terpenuhi, a = 0)
         m = ca.SX.sym("m", self.NH)
         c = ca.vertcat(*[m[k] * daftar_c[k] + (1.0 - m[k]) for k in range(self.NH)])
-        p_semua = ca.vertcat(p, m)                      # p_semua = [Alpha..., zeta, rasio_torsi, psi_max, mask...]
+        p_semua = ca.vertcat(p, m)                      # p_semua = [Alpha..., zeta, rasio, psi_max, d_dtheta, d_dpsi, mask...]
 
         # Alpha yang dipakai constraint aktif tiap mode (hanya ini yang wajib > 0 di mode itu)
         self._daftar_c = daftar_c
@@ -228,25 +421,20 @@ class CBFQP:
                                "CBF-QP butuh c = a(x)*u + b(x).")
         self._coeff = ca.Function("cbf_coeff", [x, p_semua], [a, b])
 
-        # QP solver CasADi: H (NU x NU) dan A (NH x NU) padat
-        self.plugin = str(config.CBF_QP_SOLVER)
-        struktur = {"h": ca.Sparsity.dense(config.NU, config.NU), "a": ca.Sparsity.dense(self.NH, config.NU)}
-        try:
-            self.solver = ca.conic("atera_cbf_qp", self.plugin, struktur, _opsi_solver(self.plugin))
-        except RuntimeError:
-            # casadi lama tidak mengenal sebagian opsi: buat tanpa opsi tambahan (kegagalan tetap ditangkap di compute)
-            try:
-                self.solver = ca.conic("atera_cbf_qp", self.plugin, struktur)
-            except RuntimeError as kesalahan:
-                raise RuntimeError("QP solver '%s' tidak tersedia di casadi (cek config.CBF_QP_SOLVER, misalnya "
-                                   "'qpoases'): %s" % (self.plugin, str(kesalahan).strip().splitlines()[-1]))
-        self._uba = np.full(self.NH, float(config.CBF_INFTY))          # c <= CBF_INFTY ("tak hingga")
+        # QP solver ([REVISI 16-10] 1 + NH variabel: u dan satu slack per constraint, bobot rho_k)
+        self.plugin = str(config.CBF_QP_SOLVER if plugin is None else plugin)
+        self.rho = bobot_slack(self.NH)
+        self.solver = buat_solver(self.plugin, self.NH)
+        self._uba = np.full(self.NH, float(config.CBF_INFTY))          # c + d <= CBF_INFTY ("tak hingga")
 
         self.u_lb = float(config.MIN_CURRENT_A * config.MOTOR_KT)       # batas arus: u_min <= u <= u_max
         self.u_ub = float(config.MAX_CURRENT_A * config.MOTOR_KT)
 
         # torsi nyata / torsi perintah yang dipakai g(x) (lihat docstring modul); boleh diganti saat berjalan
         self.rasio_torsi = float(config.RASIO_TORSI)
+
+        # [REVISI 16-10] DOB
+        self.dob = DOB()
 
         # mode gerak awal = Balancing
         self.mode = MODE_BALANCING
@@ -257,20 +445,23 @@ class CBFQP:
         self.status = STATUS_AMAN
         self.solver_ok = True                          # hasil QP solver (sebelum diperiksa ulang)
         self.solver_status = ""                        # teks status dari QP solver
-        self.feasible = True
+        self.feasible = True                           # True = semua constraint terpenuhi (status AMAN)
         self.active = False
-        self.c = np.zeros(self.NH)                     # nilai tiap constraint pada u terakhir (>= 0 = terpenuhi)
+        self.c = np.zeros(self.NH)                     # nilai tiap constraint pada u terakhir (>= 0 = terpenuhi, TANPA slack)
+        self.slack = 0.0                               # [REVISI 16-10] slack terbesar siklus terakhir
+        self.slack_vektor = np.zeros(self.NH)          # [REVISI 16-10] slack tiap constraint (urutan DAFTAR_C)
         self.u_pd = 0.0
         self.u = 0.0
         self.u_interval = (self.u_lb, self.u_ub)
         self.solve_ms = 0.0
-        self.count = {STATUS_AMAN: 0, STATUS_GAGAL: 0, STATUS_ALPHA: 0}
+        self.count = {STATUS_AMAN: 0, STATUS_SLACK: 0, STATUS_GAGAL: 0, STATUS_ALPHA: 0}
 
+    # ------------------------------------------------------------------ mode
     def mode_cbf(self, mode: str) -> None:
         """Pilih constraint CBF sesuai mode gerak (MODE_BALANCING atau MODE_NAVIGATE).
 
         Balancing : constraint di C_MODE[MODE_BALANCING]
-        Navigate  : constraint di C_MODE[MODE_NAVIGATE] (tanpa h5, h6, supaya robot boleh berjalan jauh)
+        Navigate  : constraint di C_MODE[MODE_NAVIGATE]
         Solver tidak dibangun ulang: hanya mask-nya yang berganti. Aman dipanggil tiap siklus.
         """
         if mode == self.mode:
@@ -284,8 +475,8 @@ class CBFQP:
     def pilih_barrier(self, nomor) -> None:
         """Aktifkan HANYA constraint bernomor `nomor` (1 = constraint pertama di DAFTAR_C, yaitu h1, dst).
 
-        Dipakai tuning bertahap (tuning_optuna.py), mode gerak diabaikan sampai mode_cbf() dipanggil lagi.
-        Solver tidak dibangun ulang: hanya mask-nya yang berganti.
+        Dipakai tuning bertahap (tuning_optuna.py) dan kotak centang simulasi, mode gerak diabaikan sampai
+        mode_cbf() dipanggil lagi. Solver tidak dibangun ulang: hanya mask-nya yang berganti.
         """
         mask = np.zeros(self.NH)
         for n in nomor:
@@ -306,6 +497,25 @@ class CBFQP:
                     break
         return hasil
 
+    # ------------------------------------------------------------------- DOB
+    def reset_dob(self) -> None:
+        """[REVISI 16-10] Kosongkan DOB: dipanggil saat robot diletakkan ulang, MULAI, KOMET, atau titik nol s pindah."""
+        self.dob.reset()
+
+    def dob_perbarui(self, x, dt) -> None:
+        """[REVISI 16-10] Awal siklus kontrol (semua mode, juga mode PD supaya d_hat selalu siap dan tercatat)."""
+        self.dob.perbarui(x, dt)
+
+    def dob_catat(self, x, u) -> None:
+        """[REVISI 16-10] Akhir siklus: u = torsi perintah SATU roda yang dikirim (setelah batas arus)."""
+        self.dob.catat(x, u, self.rasio_torsi, self.zeta())
+
+    @property
+    def d_hat(self):
+        """[REVISI 16-10] (d_dtheta, d_dpsi) taksiran DOB [rad/s^2]."""
+        return float(self.dob.d[0]), float(self.dob.d[1])
+
+    # ------------------------------------------------------------- parameter
     def zeta(self) -> float:
         """Kemiringan bidang yang dipakai sekarang [rad]."""
         if self.zeta_tetap is not None:
@@ -319,11 +529,17 @@ class CBFQP:
             nilai.append(float(getattr(config, nama)))
         return np.array(nilai)
 
+    def psi_max_barrier(self) -> float:
+        """[REVISI 16-10] psi_max yang dipakai barrier = config.psi_max - CBF_MARGIN_DEG (tidak kurang dari 0)."""
+        return max(0.0, float(config.psi_max) - math.radians(float(config.CBF_MARGIN_DEG)))
+
     def _parameter(self, alphas=None) -> np.ndarray:
-        """p = [Alpha_1, Alpha_2, ..., zeta, rasio_torsi, psi_max, mask_1, ..., mask_NH]."""
+        """p = [Alpha_1, ..., zeta, rasio_torsi, psi_max, d_dtheta, d_dpsi, mask_1, ..., mask_NH]."""
         if alphas is None:
             alphas = self._alphas()
-        return np.concatenate([np.asarray(alphas, dtype=float), [self.zeta(), self.rasio_torsi, float(config.psi_max)],
+        d = self.dob.d if config.DOB_AKTIF else np.zeros(2)
+        return np.concatenate([np.asarray(alphas, dtype=float),
+                               [self.zeta(), self.rasio_torsi, self.psi_max_barrier(), float(d[0]), float(d[1])],
                                self.mask])
 
     def constraint_coefficients(self, x, alphas=None):
@@ -335,6 +551,9 @@ class CBFQP:
     def allowed_interval(self, x, alphas=None):
         """Selang u yang memenuhi semua constraint aktif (termasuk batas arus). lo > hi berarti tidak ada solusi."""
         a, b = self.constraint_coefficients(x, alphas)
+        return self._interval(a, b)
+
+    def _interval(self, a, b):
         lo, hi = self.u_lb, self.u_ub
         for ak, bk in zip(a, b):
             if ak > config.CBF_TOL_KOEFISIEN:
@@ -345,18 +564,45 @@ class CBFQP:
                 return np.inf, -np.inf
         return lo, hi
 
+    # -------------------------------------------------------------- hitung u
     def _fallback(self, status: str) -> float:
-        # ASUMSI: bila CBF-QP tidak punya solusi atau solver gagal, u = u_PD yang disaturasi ke batas arus.
-        # Kejadiannya tercatat di self.status / self.count supaya terlihat di log dan CSV.
+        # ASUMSI: bila CBF-QP tidak dijalankan (ALPHA_NOL) atau solver gagal numerik, u = u_PD yang disaturasi ke
+        # batas arus. Kejadiannya tercatat di self.status / self.count supaya terlihat di log dan CSV.
         self.status = status
         self.feasible = False
         self.active = False
+        self.slack = 0.0
+        self.slack_vektor = np.zeros(self.NH)
         self.count[status] += 1
         self.u = float(min(max(self.u_pd, self.u_lb), self.u_ub))
         return self.u
 
     def _catat_c(self, a, b):
         self.c = a * self.u + b
+
+    def _selesaikan(self, a, b):
+        """[REVISI 16-10] QP u + slack per constraint. Mengembalikan (u, d ndarray(NH), solver_ok, teks status)."""
+        pakai_slack = bool(config.CBF_SLACK_AKTIF)
+        if self.solver is None:                                         # "eksak"
+            u, d, ok = qp_eksak(a, b, self.u_pd, self.u_lb, self.u_ub, self.rho, pakai_slack)
+            return u, d, ok, "eksak" if ok else "tidak ada u yang memenuhi"
+        d_maks = float(config.CBF_INFTY) if pakai_slack else 0.0
+        A = np.hstack([a.reshape(self.NH, 1), np.eye(self.NH)])
+        try:
+            eps = float(config.CBF_SLACK_EPS)
+            hasil = self.solver(h=np.diag(np.concatenate([[2.0], np.full(self.NH, 2.0 * eps)])),
+                                g=np.concatenate([[-2.0 * self.u_pd], self.rho]), a=A,
+                                lba=-b, uba=self._uba, lbx=np.concatenate([[self.u_lb], np.zeros(self.NH)]),
+                                ubx=np.concatenate([[self.u_ub], np.full(self.NH, d_maks)]))
+            z = np.asarray(hasil["x"], dtype=float).ravel()
+            u, d = float(z[0]), z[1:1 + self.NH]
+            statistik = self.solver.stats()
+            ok = bool(statistik.get("success", True))
+            teks = str(statistik.get("return_status", "OK" if ok else "gagal"))
+        except RuntimeError as kesalahan:                               # QP tidak punya solusi / gagal numerik
+            u, d, ok = float("nan"), np.full(self.NH, np.nan), False
+            teks = str(kesalahan).strip().splitlines()[-1][:80] if str(kesalahan).strip() else "error"
+        return u, d, ok, teks
 
     def compute(self, x, u_pd: float) -> float:
         """u* [N m] (torsi satu roda) untuk state x = [theta, dtheta, psi, dpsi] dan u_PD dari PDControl."""
@@ -377,39 +623,86 @@ class CBFQP:
             return self._fallback(STATUS_ALPHA)
 
         a, b = self.constraint_coefficients(x, p[:len(self.nama_alpha)])
-        self.u_interval = self.allowed_interval(x, p[:len(self.nama_alpha)])
+        self.u_interval = self._interval(a, b)
 
-        # QP: min (u - u_PD)^2  s.t.  -b <= a*u <= CBF_INFTY,  u_lb <= u <= u_ub
         t0 = time.perf_counter()
-        try:
-            hasil = self.solver(h=np.array([[2.0]]), g=np.array([-2.0 * self.u_pd]), a=a.reshape(self.NH, 1),
-                                lba=-b, uba=self._uba, lbx=np.array([self.u_lb]), ubx=np.array([self.u_ub]))
-            u = float(np.asarray(hasil["x"], dtype=float).ravel()[0])
-            statistik = self.solver.stats()
-            self.solver_ok = bool(statistik.get("success", True))
-            self.solver_status = str(statistik.get("return_status", "OK" if self.solver_ok else "gagal"))
-        except RuntimeError as kesalahan:               # QP tidak punya solusi / gagal numerik
-            u = float("nan")
-            self.solver_ok = False
-            self.solver_status = str(kesalahan).strip().splitlines()[-1][:80] if str(kesalahan).strip() else "error"
+        u, d, self.solver_ok, self.solver_status = self._selesaikan(a, b)
         self.solve_ms = (time.perf_counter() - t0) * 1000.0
 
+        # Periksa ulang hasil solver (jangan percaya begitu saja): batas u, slack >= 0, dan c + d >= 0.
         scale = np.maximum(1.0, np.abs(a) + np.abs(b))
-        solved = (self.solver_ok and np.isfinite(u)
+        solved = (self.solver_ok and np.isfinite(u) and bool(np.all(np.isfinite(d)))
+                  and bool(np.all(d >= -config.CBF_TOL_BATAS_U))
                   and self.u_lb - config.CBF_TOL_BATAS_U <= u <= self.u_ub + config.CBF_TOL_BATAS_U
-                  and bool(np.all(a * u + b >= -config.CBF_TOL_CONSTRAINT * scale)))
+                  and bool(np.all(a * u + b + np.maximum(d, 0.0) >= -config.CBF_TOL_CONSTRAINT * scale)))
         if not solved:
             self._fallback(STATUS_GAGAL)
             self._catat_c(a, b)
             return self.u
 
-        self.status = STATUS_AMAN
-        self.feasible = True
-        self.count[STATUS_AMAN] += 1
+        u = float(min(max(u, self.u_lb), self.u_ub))
+        self.slack_vektor = np.maximum(0.0, np.asarray(d, dtype=float))
+        self.slack = float(np.max(self.slack_vektor)) if self.NH else 0.0
+        if self.slack > config.CBF_TOL_SLACK:
+            self.status = STATUS_SLACK                  # [REVISI 16-10] constraint dilonggarkan, u = paling sedikit melanggar
+            self.feasible = False
+        else:
+            self.status = STATUS_AMAN
+            self.feasible = True
+        self.count[self.status] += 1
         self.active = abs(u - self.u_pd) > config.CBF_TOL_AKTIF
         self.u = u
         self._catat_c(a, b)
         return u
+
+
+# =============================================================================
+# Uji mandiri:  python3 cbf_qp.py                 (solver config.CBF_QP_SOLVER dibanding solusi eksak)
+#               python3 cbf_qp.py --banding-solver (semua QP solver di config.CBF_QP_SOLVER_BANDING)
+# =============================================================================
+def _sampel_uji(cbf, jumlah, seed=0):
+    """State acak di sekitar safety set + u_PD acak + gangguan DOB acak (termasuk kasus yang butuh slack)."""
+    rng = np.random.default_rng(seed)
+    hasil = []
+    for _ in range(jumlah):
+        x = rng.uniform(-1.3, 1.3, config.NX) * np.array([1.2 * config.s_max / config.R, config.dtheta_max,
+                                                          config.psi_max, config.dpsi_max])
+        u_pd = rng.uniform(2.0 * config.u_min, 2.0 * config.u_max)
+        d = rng.normal(0.0, 20.0, 2)
+        hasil.append((x, u_pd, d))
+    return hasil
+
+
+def _uji_solver(plugin, sampel, mode):
+    """(tersedia, teks) untuk satu plugin: selisih terhadap qp_eksak, persen gagal, waktu solve."""
+    try:
+        cbf = CBFQP(plugin=plugin)
+    except Exception as kesalahan:
+        return False, "tidak tersedia (%s)" % str(kesalahan).strip().splitlines()[-1].split(" | ")[0][:90]
+    cbf.mode_cbf(mode)
+    selisih_u, selisih_j, waktu, gagal, pakai_slack = [], [], [], 0, 0
+    for x, u_pd, d in sampel:
+        cbf.dob.d = d.copy()
+        u = cbf.compute(x, u_pd)
+        waktu.append(cbf.solve_ms)
+        if cbf.status == STATUS_GAGAL:
+            gagal += 1
+            continue
+        a, b = cbf.constraint_coefficients(x)
+        u_e, d_e, _ = qp_eksak(a, b, u_pd, cbf.u_lb, cbf.u_ub, cbf.rho, bool(config.CBF_SLACK_AKTIF))
+        pakai_slack += bool(np.max(d_e) > config.CBF_TOL_SLACK)
+        eps = float(config.CBF_SLACK_EPS)
+        j_e = (u_e - u_pd) ** 2 + float(np.sum(cbf.rho * d_e + eps * d_e ** 2))
+        d_s = cbf.slack_vektor
+        j = (u - u_pd) ** 2 + float(np.sum(cbf.rho * d_s + eps * d_s ** 2))
+        selisih_u.append(abs(u - u_e))
+        selisih_j.append((j - j_e) / max(1.0, abs(j_e)))
+    n = len(sampel)
+    teks = ("gagal %5.1f %% | |u - u_eksak| maks %.1e N m | biaya relatif maks %+.1e | solve rata %.3f ms, maks %.3f ms"
+            " | kasus butuh slack %d" % (100.0 * gagal / n, max(selisih_u, default=float("nan")),
+                                         max(selisih_j, default=float("nan")), np.mean(waktu), np.max(waktu),
+                                         pakai_slack))
+    return True, teks
 
 
 if __name__ == "__main__":
@@ -418,24 +711,24 @@ if __name__ == "__main__":
         if getattr(config, nama) <= 0.0:
             print("%s di config.py masih 0; uji ini memakai nilai sementara 20." % nama)
             setattr(config, nama, 20.0)
+    if "--banding-solver" in sys.argv[1:]:
+        cbf = CBFQP(plugin=SOLVER_EKSAK)
+        sampel = _sampel_uji(cbf, 3000)
+        print("Perbandingan QP solver CBF-QP (3000 kasus acak, mode Balancing, slack %s, rho %s)"
+              % ("AKTIF" if config.CBF_SLACK_AKTIF else "MATI", " ".join("%.0e" % r for r in cbf.rho)))
+        print("Batas waktu satu siklus kontrol: %.1f ms" % (1000.0 * config.DT))
+        for plugin in config.CBF_QP_SOLVER_BANDING:
+            _, teks = _uji_solver(plugin, sampel, MODE_BALANCING)
+            print("  %-8s %s" % (plugin, teks))
+        raise SystemExit(0)
+
     cbf = CBFQP()
-    print("QP solver CasADi: %s" % cbf.plugin)
-    rng = np.random.default_rng(0)
+    print("QP solver: %s | slack %s (rho %s) | DOB %s | margin psi %.1f deg"
+          % (cbf.plugin, "AKTIF" if config.CBF_SLACK_AKTIF else "MATI", " ".join("%.0e" % r for r in cbf.rho),
+             "AKTIF" if config.DOB_AKTIF else "MATI (hanya dicatat)", config.CBF_MARGIN_DEG))
     for mode in (MODE_BALANCING, MODE_NAVIGATE):
         cbf.mode_cbf(mode)
         print("mode %s | constraint aktif: %d dari %d | Alpha yang dipakai: %s"
               % (mode, int(cbf.mask.sum()), cbf.NH, [cbf.nama_alpha[i] for i in cbf.alpha_dipakai]))
-        worst = 0.0
-        waktu = []
-        for _ in range(2000):
-            x = rng.uniform(-1.0, 1.0, config.NX) * np.array([5.0, config.dtheta_max, config.psi_max, config.dpsi_max])
-            u_pd = rng.uniform(2.0 * config.u_min, 2.0 * config.u_max)
-            u = cbf.compute(x, u_pd)
-            waktu.append(cbf.solve_ms)
-            lo, hi = cbf.u_interval
-            if lo <= hi:
-                worst = max(worst, abs(u - min(max(u_pd, lo), hi)))
-        print("  jumlah per status:", cbf.count)
-        print(f"  selisih maksimum u* QP solver terhadap solusi eksak (kasus feasible): {worst:.2e} N m")
-        print(f"  waktu solve rata-rata {np.mean(waktu):.3f} ms, maksimum {np.max(waktu):.3f} ms "
-              f"(batas waktu satu siklus kontrol {1000.0 * config.DT:.1f} ms)")
+        _, teks = _uji_solver(cbf.plugin, _sampel_uji(cbf, 2000), mode)
+        print("  " + teks)

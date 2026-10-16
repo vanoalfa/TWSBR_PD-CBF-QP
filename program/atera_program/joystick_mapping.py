@@ -54,7 +54,7 @@ ABS_MAP = {
 
 # Pemetaan D-Pad / PAD (Code EV_ABS dengan Nilai Diskrit)
 DPAD_MAP = {
-    16: {-1: "PAD Kiri", 1: "PAD Kanan"},
+    16: {1: "PAD Kiri", -1: "PAD Kanan"},
     17: {-1: "PAD Atas", 1: "PAD Bawah"},
 }
 

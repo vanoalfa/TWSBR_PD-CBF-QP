@@ -11,8 +11,9 @@ Konvensi tanda (dipakai model.py dan semua file lain):
             kedua roda diberi u yang sama, jadi torsi total = N_WHEEL*u
 
 Dua mode gerak (pd_control.py: MODE_BALANCING, MODE_NAVIGATE):
-    Balancing : robot diam di satu titik (Kp_theta aktif), semua barrier CBF aktif
-    Navigate  : robot dijalankan joystick / D-Pad (Kp_theta = 0, Kvel x arah), barrier jarak s nonaktif
+    Balancing : robot diam di satu titik (setpoint s pulang ke titik nol), semua barrier CBF aktif
+    Navigate  : robot dijalankan joystick / D-Pad / W A S D (setpoint s berjalan V_NAVIGATE), barrier jarak s nonaktif
+    [REVISI 16-10] Kp_theta dipakai di kedua mode karena setpoint theta_ref ikut bergerak (bagian 5b).
 Titik nol jarak s (s = R*theta) direset ke posisi saat itu setiap robot masuk mode Balancing.
 """
 
@@ -67,9 +68,10 @@ dtheta_setpoint = 0.0               # [rad/s]
 psi_max_DEG = 15.0                  # [deg]    batas psi yang dijaga CBF (h1, h2); bisa diubah di jendela Kontrol
 psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
-dtheta_max = 13.0                   # [rad/s]  |dtheta| <= dtheta_max
-# ASUMSI: di bawah batas kecepatan motor DDSM115 (no-load 200 rpm = 20.9 rad/s, wiki Waveshare) dan di atas
-# kecepatan roda yang dibutuhkan PD untuk pulih dari dorongan 5 N di simulasi (12.3 rad/s, pengujian 20261012).
+# [REVISI 16-10] 13.0 -> 20.0 (= robot fisik; keputusan sebelumnya: batas h7/h8 dinaikkan ke batas motor).
+# Dengan 13 rad/s h7/h8 melarang roda mengejar badan setelah dorongan ~10 N (PD butuh ~19 rad/s) -> robot jatuh.
+# ASUMSI: sedikit di bawah batas kecepatan motor DDSM115 (no-load 200 rpm = 20.9 rad/s, wiki Waveshare).
+dtheta_max = 20.0                   # [rad/s]  |dtheta| <= dtheta_max
 psi_min = -psi_max
 dpsi_min = -dpsi_max
 dtheta_min = -dtheta_max
@@ -81,6 +83,9 @@ s_min = -s_max
 #   Lari  : |s|   > S_KOMET        (hanya mode Balancing, di mode Navigate robot memang boleh berjalan jauh)
 SAFE_TILT_DEG = 40.0                # [deg]  ASUMSI: dipilih pengguna (20261014)
 S_KOMET = 2.0                       # [m]
+# [REVISI 16-10] KOMET berputar: |yaw - yaw_ref| > YAW_KOMET_DEG (semua mode). s memakai RATA-RATA kedua roda, jadi
+# robot yang berputar di tempat tidak pernah mencapai |s| > S_KOMET. ASUMSI: 90 deg (sama dengan config robot fisik).
+YAW_KOMET_DEG = 90.0                # [deg]
 
 # =============================================================================
 #                              5. PD
@@ -88,16 +93,47 @@ S_KOMET = 2.0                       # [m]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari D-Pad joystick
+# [REVISI 16-10] setpoint theta dan dtheta sekarang BERGERAK (theta_ref, dtheta_ref, bagian 5b), lihat pd_control.py.
 Kp_psi = 10.91       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
 Kd_psi = 02.31       #5.2                # [N m s/rad]
-Kp_theta = 0.10      #0.24             # [N m/rad]    hanya aktif di mode Balancing (Tombol B)
+Kp_theta = 0.10      #0.24             # [N m/rad]    [REVISI 16-10] dipakai di kedua mode (KP_THETA_SEMUA_MODE)
 Kd_theta = 0.13      #0.41             # [N m s/rad]
-Kvel = -80.00               # [N m]       hanya aktif di mode Navigate (Tombol A / N)
+# [REVISI 16-10] Kvel sekarang hanya tambahan opsional (feed-forward torsi x arah); kecepatan jalan diatur V_NAVIGATE.
+# Nilai lama -80 (selalu menjenuhkan torsi 1.5 N m saat W / S) dinolkan.
+Kvel = 0.0                  # [N m]       hanya mode Navigate
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan apalah_bisa/tunning.py).
 BALANCE_DIRECTION_SIGN = -1.0
 # BUTUH PENGUJIAN ARAH KOREKSI: gain kecil, badan dimiringkan ke depan, roda harus berputar ke DEPAN.
+
+# =============================================================================
+#           [REVISI 16-10] 5b. REFERENSI GERAK (setpoint bergerak)  (= program/atera_program/config.py 4b)
+# =============================================================================
+#   Navigate  : v_target = arah * V_NAVIGATE                              (W / S)
+#   Balancing : v_target = sign(e)*min(V_PULANG_MAKS, sqrt(2*A_REM_PULANG*|e|), K_PULANG*|e|),  e = 0 - s
+#   v_ref mengejar v_target (percepatan maks A_REF_MAKS), s_ref += v_ref*dt, s_ref dijepit [s - E_S_MAKS, s + E_S_MAKS]
+#   theta_ref = s_ref/R, dtheta_ref = v_ref/R
+V_NAVIGATE = 0.30                   # [m/s]
+A_REF_MAKS = 0.50                   # [m/s^2]
+V_PULANG_MAKS = 0.30                # [m/s]
+A_REM_PULANG = 0.30                 # [m/s^2]
+K_PULANG = 1.0                      # [1/s]
+E_S_MAKS = 0.10                     # [m]
+KP_THETA_SEMUA_MODE = True          # False = perilaku lama (Kp_theta hanya di mode Balancing)
+
+# =============================================================================
+#           [REVISI 16-10] 5c. PD HEADING (roda kiri dan kanan bergerak bersama)  (= robot fisik 4c)
+# =============================================================================
+# yaw = R*(theta_kanan - theta_kiri)/W_RODA (+ = berputar ke KIRI dilihat dari atas)
+# u_belok = Kp_yaw*(yaw - yaw_ref) + Kd_yaw*(dyaw - dyaw_ref); roda kiri u + u_belok, roda kanan u - u_belok
+W_RODA = 0.258                      # [m] tengah ban kiri ke tengah ban kanan (diukur pengguna)
+YAW_AKTIF = True
+Kp_yaw = 0.30                       # [N m/rad]     ASUMSI (lihat robot fisik config.py 4c)
+Kd_yaw = 0.10                       # [N m s/rad]
+YAW_RATE_NAVIGATE = 1.0             # [rad/s] kecepatan belok A / D
+A_YAW_MAKS = 3.0                    # [rad/s^2]
+YAW_TORSI_MAKS = 0.40               # [N m]
 
 # =============================================================================
 #                              6. CBF-QP
@@ -118,6 +154,19 @@ while ("Alpha_%d" % (len(NAMA_ALPHA) + 1)) in globals():
 
 # QP solver CBF-QP (plugin ca.conic CasADi). "qpoases" = active-set, sudah ikut di paket pip casadi.
 CBF_QP_SOLVER = "qpoases"
+# [REVISI 16-10] pilihan lain: "eksak" (solusi pasti numpy), "osqp", "proxqp", "qrqp", "hpipm", "daqp", "highs", "ipqp".
+# Bandingkan:  python3 cbf_qp.py --banding-solver
+CBF_QP_SOLVER_BANDING = ["eksak", "qpoases", "osqp", "proxqp", "qrqp", "hpipm", "daqp", "highs", "ipqp"]
+# [REVISI 16-10] Slack, margin, DOB (= robot fisik, penjelasan lengkap di cbf_qp.py dan program/atera_program/config.py)
+CBF_SLACK_AKTIF = True
+# bobot slack per constraint (exact penalty, urutan DAFTAR_C h1..h8): yang kecil dilonggarkan dulu bila bertabrakan
+CBF_RHO_SLACK = [1.0e6, 1.0e6, 1.0e4, 1.0e4, 1.0e2, 1.0e2, 1.0e2, 1.0e2]    # h1 h2 | h3 h4 | h5 h6 | h7 h8
+CBF_SLACK_EPS = 1.0e-4
+CBF_TOL_SLACK = 1.0e-6
+CBF_MARGIN_DEG = 1.0                # [deg] barrier psi = psi_max - margin (garis merah plot tetap di psi_max)
+DOB_AKTIF = True                    # True: d_hat dipakai CBF-QP. False: hanya dicatat
+DOB_TAU_S = 0.020                   # [s]
+DOB_BATAS = 200.0                   # [rad/s^2]
 
 # Toleransi numerik (bukan besaran fisik)
 CBF_INFTY = 1.0e9                   # batas atas "tak hingga" constraint c di QP
@@ -193,8 +242,7 @@ ZERO_CALIBRATION_DELAY_S = 0.004
 JOYSTICK_PORT = "/dev/input/event5"
 JOYSTICK_AMBANG_ANALOG = 0.5        # analog dianggap ditekan bila simpangannya di atas nilai ini (0..1)
 
-# ASUMSI: torsi tambahan untuk belok (N m). Roda kiri diberi u - TORSI_BELOK*belok, roda kanan u + TORSI_BELOK*belok.
-TORSI_BELOK = 1.00
+# [REVISI 16-10] TORSI_BELOK dihapus: belok sekarang lewat PD heading (bagian 5c, YAW_RATE_NAVIGATE).
 
 # =============================================================================
 #                              10. RUNTIME DAN EVALUASI ISE
@@ -242,6 +290,13 @@ RASIO_TORSI = MOTOR_KT_EFEKTIF / MOTOR_KT
 # Uji loop: perintah terkirim 1.8 ms setelah IMU dibaca (+ hitungan PD / CBF-QP), torsi mulai 0..4 ms kemudian.
 # ASUMSI: dibulatkan menjadi 1 periode kontrol.
 SIM_JEDA_TORSI = 0.005              # [s] jeda dari state dibaca sampai torsi bekerja (kelipatan 1 ms)
+# [REVISI 16-10] Batas arus bergantung kecepatan motor (back-EMF), digabung dengan batas arus MAX_CURRENT_A:
+#   i_maju_maks(w)   = min(MAX_CURRENT_A, MOTOR_STALL_CURRENT_A * (1 - w / w_noload))   (>= 0)
+#   i_mundur_maks(w) = min(MAX_CURRENT_A, MOTOR_STALL_CURRENT_A * (1 + w / w_noload))   (>= 0)
+#   w = kecepatan roda relatif badan (= putaran motor), w_noload = MOTOR_NO_LOAD_SPEED_RPM.
+# Jadi makin cepat roda, makin kecil arus yang bisa masuk, nol di ~20.9 rad/s (data robot 20261015: |dtheta|
+# tidak pernah > ~21 rad/s). Tanpa ini (False) roda simulasi bisa berputar secepat apa pun (motor ideal).
+SIM_BATAS_KECEPATAN = True
 SIM_MODEL_IMU = True                # True: psi dari model MPU6050 + Kalman, False: psi sempurna
 # Noise saat robot diam (0.5 s pertama delay_imu_20261009_134728.csv).
 SIM_GYRO_NOISE_DEG_S = 0.10         # [deg/s] simpangan baku gyro
