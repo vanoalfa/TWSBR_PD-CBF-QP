@@ -432,7 +432,7 @@ DESIMAL_ALPHA = 2
 OPTUNA_TRIAL_PD = 163221013                 # jumlah trial tahap PD (bisa diubah per tahap di OPTUNA_TAHAP)
 OPTUNA_TRIAL_CBFQP = 163221013              # jumlah trial tahap CBFQP_* (bisa diubah per tahap di OPTUNA_TAHAP)
 OPTUNA_TRIAL_SEMUA = 163221013              # jumlah trial tahap SEMUA (tuning gabungan 10 variabel)
-OPTUNA_LANGKAH = 0.001                # 3 angka di belakang koma: gain kecil (Kp_theta ~0.05, Kd_theta ~0.1)
+OPTUNA_LANGKAH = 0.01                  # 2 angka di belakang koma: gain kecil (Kp_theta ~0.05, Kd_theta ~0.1)
                                       #     butuh ketelitian ini (langkah 0.01 = 10-20 % dari nilainya)
 
 # Batas pencarian PER PROFIL: OPTUNA_BATAS[profil][nama] = (batas bawah, batas atas). Edit sebelum tuning.
