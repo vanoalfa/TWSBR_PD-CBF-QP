@@ -9,10 +9,17 @@ File ini hanya mengurus simulasinya:
         a. torsi roda = arus perintah x MOTOR_KT_EFEKTIF (bukan MOTOR_KT)
         b. torsi baru bekerja SIM_JEDA_TORSI detik setelah perintah dihitung
         c. psi dibaca lewat model MPU6050 (akselerometer + gyro + noise) dan Kalman yang sama dengan robot
+<<<<<<< HEAD
         d. batas arus bergantung kecepatan roda (back-EMF, SIM_BATAS_KECEPATAN): arus yang bisa masuk
            turun linear dari batas arus sampai 0 di kecepatan no-load DDSM115 (200 rpm = 20.9 rad/s)
     - jendela "ATERA - Kontrol" (Qt): tombol mode kontrol PD / PD + CBF-QP, tombol W A S D B F O P,
       dan kolom angka parameter (input utama). B = pasang setpoint roda di posisi sekarang, F = mode BEBAS
+=======
+        d. [REVISI 16-10] batas arus bergantung kecepatan roda (back-EMF, SIM_BATAS_KECEPATAN): arus yang bisa masuk
+           turun linear dari batas arus sampai 0 di kecepatan no-load DDSM115 (200 rpm = 20.9 rad/s)
+    - jendela "ATERA - Kontrol" (Qt): tombol mode kontrol PD / PD + CBF-QP, tombol W A S D B N O P,
+      dan kolom angka parameter (input utama). B = mode Balancing, N = mode Navigate
+>>>>>>> 7d5352e39ec0aad5133ccc33531aaa63e082affe
     - plot realtime: kurva sekarang + kurva PEMBANDING (pengujian terakhir tiap mode: PD ungu, PD+CBF biru)
     - keyboard di jendela PyBullet (input cadangan, tombolnya sama)
     - tampilan di jendela PyBullet: teks parameter dan bidang merah safety set
@@ -25,7 +32,11 @@ Arah di simulasi:
     psi   > 0 : badan miring ke depan (diukur dari garis vertikal)
     theta > 0 : roda menggelinding ke depan (sudut roda absolut, definisi di model.hitung_theta)
     u     > 0 : torsi mendorong roda ke depan (torsi SATU roda; roda kiri u + u_belok, roda kanan u - u_belok)
+<<<<<<< HEAD
     yaw   > 0 : robot berputar ke kiri dilihat dari atas (baca_yaw, dari encoder kedua roda)
+=======
+    yaw   > 0 : [REVISI 16-10] robot berputar ke kiri dilihat dari atas (baca_yaw, dari encoder kedua roda)
+>>>>>>> 7d5352e39ec0aad5133ccc33531aaa63e082affe
 """
 
 import importlib.util
@@ -40,7 +51,11 @@ import pybullet_data
 
 import config
 import model
+<<<<<<< HEAD
 from pd_control import MODE_BEBAS, MODE_DIAM, MODE_GERAK, hitung_yaw
+=======
+from pd_control import MODE_BALANCING, hitung_yaw
+>>>>>>> 7d5352e39ec0aad5133ccc33531aaa63e082affe
 
 
 # Kalman dipakai langsung dari kalman.py milik robot (tanpa salinan). Dimuat lewat path karena folder robot juga
@@ -68,7 +83,11 @@ PILIHAN_URDF = [os.path.join(FOLDER_INI, path) for path in config.URDF_PILIHAN]
 
 
 def batas_arus_kecepatan(arus, w):
+<<<<<<< HEAD
     """Arus [A] yang benar-benar bisa masuk motor DDSM115 pada kecepatan roda w [rad/s] (relatif badan,
+=======
+    """[REVISI 16-10] Arus [A] yang benar-benar bisa masuk motor DDSM115 pada kecepatan roda w [rad/s] (relatif badan,
+>>>>>>> 7d5352e39ec0aad5133ccc33531aaa63e082affe
     + = ke depan), untuk arus perintah `arus` (sudah dibatasi MAX_CURRENT_A). Model motor DC: tegangan baterai habis
     dipakai back-EMF saat roda cepat, jadi arus SEARAH putaran turun linear sampai 0 di kecepatan no-load:
         i_maju_maks   = min(MAX_CURRENT_A, MOTOR_STALL_CURRENT_A * (1 - w / w_noload)),  dijepit >= 0
@@ -1074,7 +1093,11 @@ class Simulasi:
         # Realisme dari uji hardware (config.py bagian 11)
         self.skala_torsi = config.RASIO_TORSI                           # torsi nyata / torsi perintah
         self.jeda_substep = int(round(config.SIM_JEDA_TORSI / self.dt_fisika))
+<<<<<<< HEAD
         self.antrean_torsi = []        # ARUS yang sudah diperintah tetapi belum bekerja (satu per langkah fisika)
+=======
+        self.antrean_torsi = []        # [REVISI 16-10] ARUS yang sudah diperintah tetapi belum bekerja (satu per langkah fisika)
+>>>>>>> 7d5352e39ec0aad5133ccc33531aaa63e082affe
         self.kalman = kalman.KalmanAngle()
         self.psi_imu = 0.0             # [rad]   psi hasil Kalman (yang dibaca kontrol)
         self.dpsi_imu = 0.0            # [rad/s] dpsi dari gyro
@@ -1280,7 +1303,11 @@ class Simulasi:
         self.dpsi_imu = math.radians(gyro)
 
     def baca_yaw(self):
+<<<<<<< HEAD
         """(yaw, dyaw) dari 'encoder' kedua roda, sama seperti robot fisik (pd_control.hitung_yaw).
+=======
+        """[REVISI 16-10] (yaw, dyaw) dari 'encoder' kedua roda, sama seperti robot fisik (pd_control.hitung_yaw).
+>>>>>>> 7d5352e39ec0aad5133ccc33531aaa63e082affe
         Joint PyBullet mengukur roda relatif badan (seperti DDSM115); psi saling meniadakan di selisih kiri-kanan."""
         kiri = p.getJointState(self.robot, self.joint_kiri)
         kanan = p.getJointState(self.robot, self.joint_kanan)
@@ -1385,7 +1412,11 @@ class Simulasi:
         # Batas arus motor berlaku untuk tiap roda (u = MOTOR_KT x arus perintah).
         u_kiri = max(config.u_min, min(config.u_max, u_kiri))
         u_kanan = max(config.u_min, min(config.u_max, u_kanan))
+<<<<<<< HEAD
         # Yang diantrekan adalah ARUS perintah (i = u / MOTOR_KT), supaya batas arus yang bergantung
+=======
+        # [REVISI 16-10] Yang diantrekan sekarang ARUS perintah (i = u / MOTOR_KT), supaya batas arus yang bergantung
+>>>>>>> 7d5352e39ec0aad5133ccc33531aaa63e082affe
         # kecepatan roda (batas_arus_kecepatan) dihitung saat arus itu benar-benar bekerja.
         arus_kiri = u_kiri / config.MOTOR_KT
         arus_kanan = u_kanan / config.MOTOR_KT
@@ -1394,7 +1425,11 @@ class Simulasi:
             # (b) Arus baru bekerja jeda_substep langkah fisika (SIM_JEDA_TORSI detik) setelah diperintah.
             self.antrean_torsi.append((arus_kiri, arus_kanan))
             kiri_bekerja, kanan_bekerja = self.antrean_torsi.pop(0)
+<<<<<<< HEAD
             # (c) Batas arus bergantung kecepatan motor (back-EMF), lalu
+=======
+            # [REVISI 16-10] (c) Batas arus bergantung kecepatan motor (back-EMF), lalu
+>>>>>>> 7d5352e39ec0aad5133ccc33531aaa63e082affe
             # (a) torsi yang benar-benar keluar dari roda = arus x MOTOR_KT_EFEKTIF (= skala_torsi x MOTOR_KT).
             w_kiri = self.tanda_kiri * p.getJointState(self.robot, self.joint_kiri)[1]
             w_kanan = self.tanda_kanan * p.getJointState(self.robot, self.joint_kanan)[1]
