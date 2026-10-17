@@ -124,8 +124,8 @@ YAW_TORSI_MAKS = 0.40               # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 54.73 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 44.85 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_1 = 25.8600 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 25.8900 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
 Alpha_3 = 55.32 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
 Alpha_4 = 33.34 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
 Alpha_5 = 80.97 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
