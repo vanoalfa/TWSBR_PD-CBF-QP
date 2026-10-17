@@ -8,7 +8,7 @@ Rumus PD:
     jadi theta = 0 tepat di setpoint. SIGN = config.BALANCE_DIRECTION_SIGN (= -1), sehingga sama dengan
     u_PD = Kp_psi*psi + Kd_psi*dpsi + Kp_theta*theta + Kd_theta*dtheta + Kvel*arah        (semua gain positif)
 
-Mode gerak OTOMATIS dari perintah maju / mundur (set_command), tanpa tombol mode:
+Mode gerak (mode_gerak), dipilih set_command() dan atur_bebas():
     MODE_DIAM  : arah = 0 (D-Pad atas / bawah tidak ditekan). Kp_theta AKTIF -> robot ditahan di setpoint theta.
                  CBF-QP memakai constraint jarak s (h5, h6) dan KOMET |s| > S_KOMET aktif (atera_main.py).
     MODE_GERAK : arah = +1 / -1 (D-Pad atas / bawah ditekan). Kp_theta DIABAIKAN, Kvel*arah AKTIF.
@@ -16,22 +16,27 @@ Mode gerak OTOMATIS dari perintah maju / mundur (set_command), tanpa tombol mode
     Saat D-Pad DILEPAS (GERAK -> DIAM), atera_main.py memasang setpoint theta baru tepat di posisi itu
     (titik nol s pindah, theta = 0). Tombol B memasang setpoint yang sama kapan saja.
     Belok (D-Pad kiri / kanan) bukan GERAK: tanpa maju / mundur robot tetap DIAM dan berputar di tempat.
+    MODE_BEBAS : Tombol A (toggle, atur_bebas). Seperti program lama: Kp_theta DIABAIKAN, Kvel*arah aktif, TANPA PD
+                 heading (yaw tidak ditahan), belok = selisih torsi tetap TORSI_BELOK. Constraint s, KOMET s, dan
+                 KOMET yaw tidak dipakai. Robot bisa ditarik tali ke mana saja (kedua roda bebas berputar sendiri).
+                 Tekan A lagi: kembali DIAM / GERAK, setpoint theta dan arah dipasang di posisi itu (atera_main.py).
 
-    Kecepatan tunak saat GERAK (lantai datar: psi -> 0 dan u -> 0):   Kd_theta*dtheta + Kvel*arah = 0
+    Kecepatan tunak saat GERAK / BEBAS (lantai datar: psi -> 0 dan u -> 0):   Kd_theta*dtheta + Kvel*arah = 0
         dtheta = -Kvel*arah / Kd_theta,   v = R*dtheta
     jadi Kvel harus NEGATIF supaya arah +1 (D-Pad atas) berjalan ke DEPAN.
 
-PD heading (sinkron roda kiri-kanan, compute_belok):
+PD heading (sinkron roda kiri-kanan, compute_belok; tidak dipakai di MODE_BEBAS):
     yaw  = R*(theta_kanan - theta_kiri)/W_RODA       (+ = robot berputar ke KIRI dilihat dari atas, dari encoder)
     dyaw_ref mengejar -belok*YAW_RATE_BELOK (perubahan maks A_YAW_MAKS per detik), yaw_ref += dyaw_ref*dt
         -> D-Pad kiri / kanan dilepas: yaw_ref tetap, robot tidak berputar-putar sendiri
     u_belok = Kp_yaw*(yaw - yaw_ref) + Kd_yaw*(dyaw - dyaw_ref)
     roda kiri u + u_belok, roda kanan u - u_belok   (u_belok > 0 = robot berputar ke KANAN, yaw turun)
     u_belok dibatasi YAW_TORSI_MAKS dan sisa torsi u_max - |u| (balancing didahulukan, rata-rata kedua roda tetap u).
+    MODE_BEBAS: u_belok = belok*TORSI_BELOK (tanpa umpan balik yaw), juga dibatasi sisa torsi u_max - |u|.
 
 Kontrak: pd.compute(x) -> float (N m),  x = [theta, dtheta, psi, dpsi].
 Urutan pemakaian tiap siklus:
-    pd.set_command(arah, belok)                          (mode gerak ikut otomatis)
+    pd.set_command(arah, belok)                          (mode gerak ikut otomatis; pd.atur_bebas() untuk Tombol A)
     u_PD = pd.compute(x)
     u_belok = pd.compute_belok(yaw, dyaw, u, u_max, dt)  (u = torsi sesudah CBF-QP / batas arus)
 """
@@ -40,6 +45,7 @@ import config
 
 MODE_DIAM = "DIAM"         # nama mode gerak, dipakai juga oleh cbf_qp.py (kunci C_MODE) dan atera_main.py
 MODE_GERAK = "GERAK"
+MODE_BEBAS = "BEBAS"
 
 
 def _jepit(nilai, bawah, atas):
@@ -72,6 +78,7 @@ class PDControl:
 
         # Perintah dari joystick / keyboard
         self.mode_gerak = MODE_DIAM
+        self.bebas = False             # True = MODE_BEBAS (Tombol A)
         self.arah = 0                  # -1 mundur, 0 lepas, +1 maju
         self.belok = 0                 # -1 kiri, 0 lepas, +1 kanan
 
@@ -87,10 +94,21 @@ class PDControl:
 
     def set_command(self, arah, belok=0):
         """arah = -1 / 0 / +1 (+1 = maju), belok = -1 / 0 / +1 (+1 = kanan).
-        Mode gerak ikut otomatis: MODE_GERAK bila arah != 0, selain itu MODE_DIAM."""
+        Mode gerak ikut otomatis: MODE_BEBAS bila bebas, MODE_GERAK bila arah != 0, selain itu MODE_DIAM."""
         self.arah = int(arah)
         self.belok = int(belok)
-        self.mode_gerak = MODE_GERAK if self.arah != 0 else MODE_DIAM
+        self._pilih_mode()
+
+    def atur_bebas(self, aktif):
+        """Tombol A: MODE_BEBAS nyala (True) / mati (False). Mode gerak langsung ikut."""
+        self.bebas = bool(aktif)
+        self._pilih_mode()
+
+    def _pilih_mode(self):
+        if self.bebas:
+            self.mode_gerak = MODE_BEBAS
+        else:
+            self.mode_gerak = MODE_GERAK if self.arah != 0 else MODE_DIAM
 
     def pasang_yaw_ref(self, yaw):
         """Setpoint heading = arah robot sekarang (MULAI, Tombol B, robot diletakkan ulang)."""
@@ -111,10 +129,10 @@ class PDControl:
         error_psi = self.psi_setpoint - psi
         error_dpsi = self.dpsi_setpoint - dpsi
 
-        # Kp_theta hanya saat DIAM; saat GERAK robot tidak ditahan di setpoint theta
-        Kp_theta = 0.0 if self.mode_gerak == MODE_GERAK else self.Kp_theta
+        # Kp_theta hanya saat DIAM; saat GERAK / BEBAS robot tidak ditahan di setpoint theta
+        Kp_theta = self.Kp_theta if self.mode_gerak == MODE_DIAM else 0.0
 
-        # Persamaan PD (arah = 0 saat DIAM, jadi Kvel*arah hanya bekerja saat GERAK)
+        # Persamaan PD (arah = 0 saat DIAM, jadi Kvel*arah hanya bekerja saat D-Pad atas / bawah ditekan)
         u_PD = (self.Kp_psi * error_psi) + (self.Kd_psi * error_dpsi) \
             + (Kp_theta * error_theta) + (self.Kd_theta * error_dtheta)
         u_PD = u_PD * self.balance_direction_sign
@@ -134,16 +152,23 @@ class PDControl:
         self.yaw = float(yaw)
         self.dyaw = float(dyaw)
 
-        # Referensi heading: belok +1 (kanan) = berputar searah jarum jam dilihat dari atas = yaw turun
-        langkah = config.A_YAW_MAKS * dt
-        self.dyaw_ref += _jepit(-self.belok * config.YAW_RATE_BELOK - self.dyaw_ref, -langkah, langkah)
-        self.yaw_ref += self.dyaw_ref * dt
+        if self.mode_gerak == MODE_BEBAS:
+            # Program lama: selisih torsi tetap, tanpa umpan balik yaw. Referensi ikut yaw sekarang supaya tidak
+            # melompat saat MODE_BEBAS dimatikan.
+            self.yaw_ref = self.yaw
+            self.dyaw_ref = 0.0
+            u_belok = self.belok * config.TORSI_BELOK
+        else:
+            # Referensi heading: belok +1 (kanan) = berputar searah jarum jam dilihat dari atas = yaw turun
+            langkah = config.A_YAW_MAKS * dt
+            self.dyaw_ref += _jepit(-self.belok * config.YAW_RATE_BELOK - self.dyaw_ref, -langkah, langkah)
+            self.yaw_ref += self.dyaw_ref * dt
+            if config.YAW_AKTIF:
+                u_belok = self.Kp_yaw * (self.yaw - self.yaw_ref) + self.Kd_yaw * (self.dyaw - self.dyaw_ref)
+                u_belok = _jepit(u_belok, -config.YAW_TORSI_MAKS, config.YAW_TORSI_MAKS)
+            else:
+                u_belok = 0.0
 
-        if not config.YAW_AKTIF:
-            self.u_belok = 0.0
-            return 0.0
-        u_belok = self.Kp_yaw * (self.yaw - self.yaw_ref) + self.Kd_yaw * (self.dyaw - self.dyaw_ref)
-        u_belok = _jepit(u_belok, -config.YAW_TORSI_MAKS, config.YAW_TORSI_MAKS)
         sisa = max(0.0, float(u_maks) - abs(float(u)))           # balancing didahulukan
         self.u_belok = _jepit(u_belok, -sisa, sisa)
         return self.u_belok

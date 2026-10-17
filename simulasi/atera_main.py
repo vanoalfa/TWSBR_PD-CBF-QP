@@ -8,15 +8,17 @@ Mode kontrol PD / PD + CBF-QP dipilih dengan tombol di jendela Kontrol (atau key
 Mengganti mode: data perekaman biasa disimpan, lalu robot diletakkan ulang (seperti R) dengan mode baru.
 Semua perintah dan tombol dicetak di terminal saat program mulai.
 
-MODE GERAK otomatis (pd_control.py), sama dengan robot fisik (D-Pad):
+MODE GERAK (pd_control.py), sama dengan robot fisik (D-Pad, Tombol A):
     DIAM  : W / S tidak ditahan. Robot ditahan di setpoint theta (Kp_theta aktif), constraint s (h5, h6) dan
             KOMET s aktif.
     GERAK : W / S ditahan. Kp_theta dan constraint s diabaikan, Kvel*arah menggerakkan robot.
     Saat W / S DILEPAS, setpoint theta (titik nol s) dipasang tepat di posisi itu. Tombol B memasang setpoint roda
     (titik nol s + arah / yaw_ref) kapan saja. A / D = belok (tanpa W / S: berputar di tempat).
+    BEBAS : tombol F (toggle). Seperti program lama: tanpa PD heading, Kp_theta dan constraint s diabaikan, belok A / D
+            = selisih torsi TORSI_BELOK. Tekan F lagi: kembali DIAM / GERAK, setpoint dipasang di posisi itu.
 
 CONSTRAINT CBF-QP: dipilih dengan kotak centang h1 .. h8 di jendela Kontrol (awal = C_MODE[MODE_DIAM] di WORKPLACE
-cbf_qp.py). Saat GERAK, constraint yang tidak ada di C_MODE[MODE_GERAK] (h5, h6) ikut dilepas walau dicentang.
+cbf_qp.py). Saat GERAK / BEBAS, constraint yang tidak ada di C_MODE mode itu (h5, h6) ikut dilepas walau dicentang.
 Plot: barrier yang sedang dipakai merah, lainnya abu-abu.
 
 PEREKAM PERBANDINGAN (tombol 3): PD vs PD + CBF-QP dengan dorongan yang sama. Setiap rekaman yang selesai menjadi
@@ -24,7 +26,8 @@ PEMBANDING mode-nya (plot realtime: PD ungu, PD+CBF biru, pudar). Bila keduanya 
 dibuat otomatis (sama dengan python3 ise.py --bandingkan --perbandingan). Disimpan di PLOT_EVALUASI/PERBANDINGAN.
 
 Tiap siklus: perintah W A S D -> pd.set_command -> state -> KOMET -> DOB -> PD -> CBF-QP -> PD heading
-(pd.compute_belok: roda kiri u + u_belok, roda kanan u - u_belok, supaya kedua roda bergerak bersama) -> step.
+(pd.compute_belok: roda kiri u + u_belok, roda kanan u - u_belok, supaya kedua roda bergerak bersama; BEBAS: selisih
+torsi tetap) -> step.
 DOB CBF-QP (cbf.dob_perbarui / cbf.dob_catat) juga jalan di mode PD supaya taksirannya tercatat di CSV.
 
 Jenis perekaman ISE:
@@ -45,7 +48,7 @@ import pybullet
 import config
 import ise
 import model
-from pd_control import MODE_DIAM, MODE_GERAK, PDControl
+from pd_control import MODE_BEBAS, MODE_DIAM, MODE_GERAK, PDControl
 from simulasi import NAMA_ALPHA, Simulasi
 
 BANTUAN = """
@@ -62,12 +65,14 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
              1 (PD) -> 3 -> R -> O (atau P) -> tunggu %.0f s (disimpan otomatis, jadi pembanding PD)
              2 (PD + CBF-QP) -> R -> O (dorongan sama) -> tunggu -> disimpan + gambar BANDING otomatis
            3 tidak perlu dimatikan di antaranya. Gaya dorong (Gaya_dorong) jangan diubah di antara keduanya.
-  h1..h8   kotak centang constraint CBF-QP yang dipakai (di jendela Kontrol). Saat GERAK h5 / h6 tetap dilepas.
+  h1..h8   kotak centang constraint CBF-QP yang dipakai (di jendela Kontrol). Saat GERAK / BEBAS h5 / h6 dilepas.
   W / S    maju / mundur (ditahan) = mode GERAK: Kp_theta dan constraint s diabaikan, torsi Kvel*arah.
            Kecepatan tunak v = -R*Kvel*arah/Kd_theta = %+.2f m/s untuk W (Kvel di jendela Kontrol).
            Dilepas = mode DIAM: setpoint theta (titik nol s) dipasang di posisi itu, Kp_theta aktif lagi.
   A / D    belok kiri / kanan (ditahan), YAW_RATE_BELOK = %.2f rad/s (tanpa W / S: berputar di tempat)
   B        pasang setpoint roda di posisi sekarang: titik nol s (s = R*theta) dan arah (yaw_ref)
+  F        mode BEBAS nyala / mati (robot fisik: Tombol A): tanpa PD heading, Kp_theta, constraint s; A / D = selisih
+           torsi TORSI_BELOK. Saat dimatikan, setpoint roda dipasang di posisi itu.
   O        dorong robot ke depan
   P        dorong robot ke belakang
   E        simpan data dan plot ISE sekarang; robot tetap berjalan, perekaman baru dimulai
@@ -77,7 +82,7 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
   T        masuk / keluar MODE PENGUJIAN. Di mode ini perekaman biasa berhenti; setiap O / P memulai
            satu PENGUJIAN: direkam %.0f s sejak dorongan, lalu disimpan otomatis (_PENGUJIAN KE-XX).
   KOMET    |psi| > SAFE_TILT_DEG, |s| > S_KOMET (hanya mode DIAM), atau |yaw - yaw_ref| > YAW_KOMET_DEG
-           (berputar): motor dimatikan,
+           (berputar, bukan mode BEBAS): motor dimatikan,
            perekaman berhenti (pengujian yang sedang berjalan langsung disimpan). Lanjutkan dengan R, E, atau Q.
   Berhenti juga bisa: tutup jendela PyBullet, atau Ctrl+C di terminal (hasil ISE tetap tersimpan)
 
@@ -156,9 +161,11 @@ def teks_pembanding(pembanding):
 
 def letakkan_ulang(sim, perekam, mode, pd, cbf):
     """Robot diletakkan ulang di posisi awal (plot realtime ikut direset, titik nol s = posisi awal), perekaman
-    percobaan baru dimulai. PD mulai DIAM dengan arah sekarang sebagai setpoint heading, DOB dikosongkan."""
+    percobaan baru dimulai. PD mulai DIAM (BEBAS mati) dengan arah sekarang sebagai setpoint heading,
+    DOB dikosongkan."""
     sim.reset()
     perekam.mulai(mode, ise.JENIS_PERCOBAAN)
+    pd.atur_bebas(False)
     pd.set_command(0, 0)
     pd.pasang_yaw_ref(sim.baca_yaw()[0])
     if cbf is not None:
@@ -166,10 +173,10 @@ def letakkan_ulang(sim, perekam, mode, pd, cbf):
 
 
 def data_ekstra(pd, cbf, mode):
-    """Kolom CSV tambahan (ise.KOLOM_EKSTRA): arah, yaw, u_belok, DOB, slack."""
+    """Kolom CSV tambahan (ise.KOLOM_EKSTRA): arah, bebas, yaw, u_belok, DOB, slack."""
     d_dtheta, d_dpsi = cbf.d_hat if cbf is not None else (0.0, 0.0)
-    return {"arah": pd.arah, "yaw_rad": pd.yaw, "dyaw_rad_s": pd.dyaw, "yaw_ref_rad": pd.yaw_ref,
-            "u_belok_Nm": pd.u_belok,
+    return {"arah": pd.arah, "bebas": float(pd.bebas),
+            "yaw_rad": pd.yaw, "dyaw_rad_s": pd.dyaw, "yaw_ref_rad": pd.yaw_ref, "u_belok_Nm": pd.u_belok,
             "dob_dtheta_rad_s2": d_dtheta, "dob_dpsi_rad_s2": d_dpsi,
             "slack": cbf.slack if (cbf is not None and mode == ise.MODE_PD_CBF) else 0.0}
 
@@ -425,6 +432,14 @@ def main():
                     sim.nolkan_theta()
                     pd.pasang_yaw_ref(sim.baca_yaw()[0])
                     print("Tombol B: setpoint roda dipasang di sini (s = 0, arah sekarang).")
+                if tombol == "f":
+                    pd.atur_bebas(not pd.bebas)
+                    if pd.bebas:
+                        print("Mode BEBAS: PD heading, Kp_theta, constraint s mati. Tekan F lagi untuk kembali.")
+                    else:
+                        sim.nolkan_theta()                   # setpoint roda = posisi dan arah sekarang
+                        pd.pasang_yaw_ref(sim.baca_yaw()[0])
+                        print("Mode BEBAS mati: setpoint dipasang di sini (s = 0, arah sekarang).")
                 if tombol == "o" or tombol == "p":
                     arah_dorong = 1 if tombol == "o" else -1
                     teks_arah = "depan" if arah_dorong > 0 else "belakang"
@@ -480,7 +495,7 @@ def main():
             if gerak_sebelumnya == MODE_GERAK and pd.mode_gerak == MODE_DIAM:
                 sim.nolkan_theta()
 
-            # Constraint CBF-QP = kotak centang di jendela Kontrol, dan saat GERAK hanya yang ada di C_MODE[MODE_GERAK].
+            # Constraint CBF-QP = kotak centang di jendela Kontrol DAN yang ada di C_MODE mode gerak sekarang.
             centang = sim.baca_centang()
             centang = (centang + [False] * jumlah_h)[:jumlah_h]
             if centang != centang_dipakai:
@@ -501,13 +516,13 @@ def main():
             psi = x[2]
             s = model.hitung_s(x)
 
-            # KOMET: |psi| > SAFE_TILT_DEG, |s| > S_KOMET (hanya mode DIAM), atau berputar
+            # KOMET: |psi| > SAFE_TILT_DEG, |s| > S_KOMET (hanya mode DIAM), atau berputar (bukan mode BEBAS)
             sebab = ""
             if abs(psi) > math.radians(config.SAFE_TILT_DEG):
                 sebab = "psi = %.1f deg" % math.degrees(psi)
             elif pd.mode_gerak == MODE_DIAM and abs(s) > config.S_KOMET:
                 sebab = "s = %.2f m" % s
-            elif abs(yaw - pd.yaw_ref) > math.radians(config.YAW_KOMET_DEG):
+            elif pd.mode_gerak != MODE_BEBAS and abs(yaw - pd.yaw_ref) > math.radians(config.YAW_KOMET_DEG):
                 sebab = "berputar, yaw - yaw_ref = %.0f deg" % math.degrees(yaw - pd.yaw_ref)
             if not komet and sebab != "":
                 komet = True

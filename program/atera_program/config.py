@@ -13,11 +13,13 @@ Konvensi tanda (sama dengan simulasi):
                 (u_belok = PD heading, bagian 4b; rata-rata kedua roda tetap u)
     yaw   > 0 : robot berputar ke KIRI dilihat dari atas, yaw = R*(theta_kanan - theta_kiri)/W_RODA
 
-Mode gerak otomatis (pd_control.py), tanpa tombol mode:
+Mode gerak (pd_control.py):
     DIAM  : D-Pad atas / bawah tidak ditekan. Robot ditahan di setpoint theta (Kp_theta), constraint s dan
             KOMET s aktif.
     GERAK : D-Pad atas / bawah ditekan. Kp_theta dan constraint s diabaikan, Kvel*arah menggerakkan robot.
     Saat D-Pad dilepas, setpoint theta (titik nol s) dipasang tepat di posisi itu.
+    BEBAS : Tombol A (toggle). Seperti program lama: tanpa PD heading, Kp_theta dan constraint s diabaikan, belok =
+            selisih torsi TORSI_BELOK. Robot bisa ditarik tali ke mana saja. Tekan A lagi: setpoint dipasang di situ.
 """
 
 import math
@@ -65,8 +67,8 @@ psi_min, dpsi_min, dtheta_min, s_min = -psi_max, -dpsi_max, -dtheta_max, -s_max
 
 # KOMET = robot tidak tertolong, roda dimatikan (sama dengan simulasi):
 #   jatuh    : |psi| > SAFE_TILT_DEG               (semua mode gerak)
-#   lari     : |s|   > S_KOMET                     (hanya mode DIAM; saat GERAK robot memang berjalan jauh)
-#   berputar : |yaw - yaw_ref| > YAW_KOMET_DEG     (semua mode gerak)
+#   lari     : |s|   > S_KOMET                     (hanya mode DIAM; saat GERAK / BEBAS robot memang berjalan jauh)
+#   berputar : |yaw - yaw_ref| > YAW_KOMET_DEG     (mode DIAM dan GERAK; di mode BEBAS yaw memang bebas)
 SAFE_TILT_DEG = 40.0                # [deg]  ASUMSI: dipilih pengguna (20261014)
 S_KOMET = 2.0                       # [m]
 START_TILT_DEG = 15.0               # [deg] MULAI ditolak bila |psi| lebih besar
@@ -94,9 +96,9 @@ KOMET_REM_SELESAI = 0.5             # [rad/s]
 # u_PD = Kp_psi*psi + Kd_psi*dpsi + Kp_theta*theta + Kd_theta*dtheta + Kvel*arah   (torsi SATU roda, pd_control.py)
 Kp_psi = 10.91          # [N m/rad]
 Kd_psi = 2.31           # [N m s/rad]
-Kp_theta = 0.10         # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK)
+Kp_theta = 0.10         # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
 Kd_theta = 0.13         # [N m s/rad]
-# Kvel*arah hanya mode GERAK (arah +1 = D-Pad atas, -1 = D-Pad bawah). Kecepatan tunak di lantai datar:
+# Kvel*arah hanya mode GERAK / BEBAS (arah +1 = D-Pad atas, -1 = D-Pad bawah). Kecepatan tunak di lantai datar:
 #     v = -R*Kvel*arah/Kd_theta      -> Kvel NEGATIF supaya D-Pad atas berjalan ke DEPAN
 #     (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s; no-load DDSM115 1.05 m/s)
 # ASUMSI: -0.52 (0.20 m/s). Nilai sebelumnya +0.05 membuat D-Pad atas berjalan MUNDUR ~0.02 m/s.
@@ -122,6 +124,10 @@ Kd_yaw = 0.10                       # [N m s/rad]
 YAW_RATE_BELOK = 1.0                # [rad/s] kecepatan belok D-Pad kiri / kanan, A / D (~57 deg/s)
 A_YAW_MAKS = 3.0                    # [rad/s^2] perubahan maksimum dyaw_ref
 YAW_TORSI_MAKS = 0.40               # [N m] batas |u_belok| (juga dibatasi sisa torsi u_max - |u|)
+# Mode BEBAS (Tombol A): PD heading mati, belok D-Pad = selisih torsi tetap: roda kiri u + TORSI_BELOK*belok, kanan
+# u - TORSI_BELOK*belok (dibatasi sisa torsi u_max - |u|). ASUMSI: 0.02 N m = nilai program lama (commit 61784ea).
+# Naikkan bila belok di mode BEBAS terlalu lemah (YAW_TORSI_MAKS sebagai batas yang masih wajar).
+TORSI_BELOK = 0.02                  # [N m]
 
 # =============================================================================
 #                              5. CBF-QP  (= simulasi)

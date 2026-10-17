@@ -80,10 +80,10 @@ KOLOM_GAIN_CBF = config.NAMA_ALPHA + ["psi_max_DEG"]
 KOLOM_GAIN = KOLOM_GAIN_PD + KOLOM_GAIN_CBF
 
 # Kolom tambahan (sesudah zeta_DEG, sebelum c_h..): arah (perintah maju / mundur: 0 = mode DIAM, +1 / -1 = mode
-# GERAK), yaw dan referensi PD heading, u_belok, taksiran DOB, dan slack CBF-QP (0 di mode PD).
+# GERAK), bebas (1 = mode BEBAS, tombol F), yaw dan referensi PD heading, u_belok, taksiran DOB, dan slack CBF-QP (0 di mode PD).
 # File lama tanpa kolom ini tetap terbaca.
-KOLOM_EKSTRA = ["arah", "yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "u_belok_Nm", "dob_dtheta_rad_s2", "dob_dpsi_rad_s2",
-                "slack"]
+KOLOM_EKSTRA = ["arah", "bebas", "yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "u_belok_Nm", "dob_dtheta_rad_s2",
+                "dob_dpsi_rad_s2", "slack"]
 KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
              "error_theta", "error_dtheta", "error_psi", "error_dpsi",
              "u_PD_Nm", "u_Nm", "status_cbf", "dorong_N",

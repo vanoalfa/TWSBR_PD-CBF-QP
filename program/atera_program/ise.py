@@ -7,7 +7,7 @@ Folder hasil (di dalam atera_program, HHmmSS = jam saat disimpan):
     PLOT_EVALUASI/ATERA_RASPI/<PERCOBAAN atau PENGUJIAN>/BANDING/      (hasil --bandingkan)
 Nomor KE-XX naik otomatis per tanggal, mode, dan jenis. Kolom CSV sama dengan simulasi/ise.py.
 Kolom CSV tambahan (KOLOM_EKSTRA, sesudah zeta_DEG): arah (perintah maju / mundur: 0 = mode DIAM, +1 / -1 = mode
-GERAK), yaw_rad, dyaw_rad_s, yaw_ref_rad, u_belok_Nm (PD heading), dob_dtheta_rad_s2, dob_dpsi_rad_s2 (DOB), slack.
+GERAK), bebas (1 = mode BEBAS, Tombol A), yaw_rad, dyaw_rad_s, yaw_ref_rad, u_belok_Nm (PD heading), dob_dtheta_rad_s2, dob_dpsi_rad_s2 (DOB), slack.
 Status CBF "SLACK" (constraint dilonggarkan) dihitung di metrik.
 Penyimpanan saat robot masih balancing berjalan di PROSES TERPISAH (simpan(latar=True)) supaya loop kontrol tidak
 tertahan matplotlib.
@@ -70,8 +70,8 @@ JENIS_PENGUJIAN = "PENGUJIAN"       # L3: DURASI_PENGUJIAN detik sejak tombol di
 KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
 KOLOM_GAIN = KOLOM_GAIN_PD + config.NAMA_ALPHA + ["psi_max_DEG"]
 # kolom tambahan (sama dengan simulasi/ise.py); file lama tanpa kolom ini tetap terbaca (nilai 0)
-KOLOM_EKSTRA = ["arah", "yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "u_belok_Nm", "dob_dtheta_rad_s2", "dob_dpsi_rad_s2",
-                "slack"]
+KOLOM_EKSTRA = ["arah", "bebas", "yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "u_belok_Nm", "dob_dtheta_rad_s2",
+                "dob_dpsi_rad_s2", "slack"]
 KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
              "error_theta", "error_dtheta", "error_psi", "error_dpsi",
              "u_PD_Nm", "u_Nm", "status_cbf", "dorong_N",

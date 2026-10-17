@@ -11,8 +11,8 @@ File ini hanya mengurus simulasinya:
         c. psi dibaca lewat model MPU6050 (akselerometer + gyro + noise) dan Kalman yang sama dengan robot
         d. batas arus bergantung kecepatan roda (back-EMF, SIM_BATAS_KECEPATAN): arus yang bisa masuk
            turun linear dari batas arus sampai 0 di kecepatan no-load DDSM115 (200 rpm = 20.9 rad/s)
-    - jendela "ATERA - Kontrol" (Qt): tombol mode kontrol PD / PD + CBF-QP, tombol W A S D B O P,
-      dan kolom angka parameter (input utama). B = pasang setpoint roda di posisi sekarang
+    - jendela "ATERA - Kontrol" (Qt): tombol mode kontrol PD / PD + CBF-QP, tombol W A S D B F O P,
+      dan kolom angka parameter (input utama). B = pasang setpoint roda di posisi sekarang, F = mode BEBAS
     - plot realtime: kurva sekarang + kurva PEMBANDING (pengujian terakhir tiap mode: PD ungu, PD+CBF biru)
     - keyboard di jendela PyBullet (input cadangan, tombolnya sama)
     - tampilan di jendela PyBullet: teks parameter dan bidang merah safety set
@@ -40,7 +40,7 @@ import pybullet_data
 
 import config
 import model
-from pd_control import MODE_GERAK, hitung_yaw
+from pd_control import MODE_BEBAS, MODE_DIAM, MODE_GERAK, hitung_yaw
 
 
 # Kalman dipakai langsung dari kalman.py milik robot (tanpa salinan). Dimuat lewat path karena folder robot juga
@@ -540,7 +540,7 @@ class JendelaKontrol:
     """Jendela Qt "ATERA - Kontrol":
         - paling atas : tombol mode kontrol PD (ungu) / PD + CBF-QP (biru) (keyboard 1 / 2), perekam perbandingan
                         (keyboard 3), dan kotak centang constraint CBF-QP yang dipakai (h1 .. h8)
-        - bagian atas : tombol W A S D, B, O P (bisa diklik / ditahan dengan mouse, atau ditekan di keyboard)
+        - bagian atas : tombol W A S D, B F, O P (bisa diklik / ditahan dengan mouse, atau ditekan di keyboard)
         - bagian bawah: kolom angka tiap parameter (dua blok: gain + lingkungan, dan Alpha). Kolom berwarna = beda dari config.py
 
     Nilai awal parameter dari config.py. Nilai di jendela ini TIDAK ditulis ke config.py; salin sendiri
@@ -555,11 +555,11 @@ class JendelaKontrol:
         # Tombol ditahan, dipisah menurut sumbernya. Ditahan = keyboard ATAU mouse.
         self.tahan_keyboard = {}
         self.tahan_mouse = {}
-        for huruf in ("w", "a", "s", "d", "o", "p", "b", "q", "r", "e", "t"):
+        for huruf in ("w", "a", "s", "d", "o", "p", "b", "f", "q", "r", "e", "t"):
             self.tahan_keyboard[huruf] = False
             self.tahan_mouse[huruf] = False
         self.tahan_terkirim = None
-        self.status = {"judul": "", "gerak": False, "tahan": {}, "dorong": "dorong: -", "arah_dorong": 0,
+        self.status = {"judul": "", "mode_gerak": MODE_DIAM, "tahan": {}, "dorong": "dorong: -", "arah_dorong": 0,
                        "komet": False, "mode_pengujian": False, "pengujian": "", "cbf_ada": True,
                        "pembanding": "", "mode_banding": False}
 
@@ -606,7 +606,7 @@ class JendelaKontrol:
         baris_mode.addStretch(1)
         susunan.addLayout(baris_mode)
 
-        # Kotak centang constraint CBF-QP (h1 .. h8): yang dicentang = dipakai CBF-QP (saat GERAK, h5 / h6 tetap
+        # Kotak centang constraint CBF-QP (h1 .. h8): yang dicentang = dipakai CBF-QP (saat GERAK / BEBAS, h5 / h6 tetap
         # dilepas, lihat atera_main.py). Centang awal dikirim simulasi (C_MODE[MODE_DIAM] di WORKPLACE cbf_qp.py).
         # Dua baris: h1 h2 h3 h4 / h5 h6 h7 h8 (CENTANG_PER_BARIS kotak per baris).
         kisi_centang = QtWidgets.QGridLayout()
@@ -635,12 +635,12 @@ class JendelaKontrol:
         kisi_tombol = QtWidgets.QGridLayout()
         susunan.addLayout(kisi_tombol)
         letak = {"w": (0, 1), "a": (1, 0), "s": (1, 1), "d": (1, 2),
-                 "b": (0, 4), "o": (1, 4), "p": (1, 5), "q": (0, 7), "r": (1, 7), "e": (0, 8), "t": (1, 8)}
+                 "b": (0, 4), "f": (0, 5), "o": (1, 4), "p": (1, 5), "q": (0, 7), "r": (1, 7), "e": (0, 8), "t": (1, 8)}
         keterangan = {"w": "W\nmaju", "a": "A\nkiri", "s": "S\nmundur", "d": "D\nkanan",
-                      "b": "B\nsetpoint", "o": "O\ndorong depan", "p": "P\ndorong belakang",
+                      "b": "B\nsetpoint", "f": "F\nmode BEBAS", "o": "O\ndorong depan", "p": "P\ndorong belakang",
                       "q": "Q\nkeluar + simpan", "r": "R\nreset robot", "e": "E\nsimpan data",
                       "t": "T\nmode pengujian"}
-        for huruf in ("w", "a", "s", "d", "b", "o", "p", "q", "r", "e", "t"):
+        for huruf in ("w", "a", "s", "d", "b", "f", "o", "p", "q", "r", "e", "t"):
             tombol = QtWidgets.QPushButton(keterangan[huruf])
             tombol.setFixedSize(92, 46)
             tombol.setFocusPolicy(QtCore.Qt.NoFocus)        # tombol tidak merebut keyboard
@@ -734,7 +734,7 @@ class JendelaKontrol:
         self.app.installEventFilter(self.saringan)
         self.kode_mode = {QtCore.Qt.Key_1: "mode_pd", QtCore.Qt.Key_2: "mode_cbf", QtCore.Qt.Key_3: "banding"}
         self.kode_tombol = {QtCore.Qt.Key_W: "w", QtCore.Qt.Key_A: "a", QtCore.Qt.Key_S: "s",
-                            QtCore.Qt.Key_D: "d", QtCore.Qt.Key_B: "b", QtCore.Qt.Key_O: "o",
+                            QtCore.Qt.Key_D: "d", QtCore.Qt.Key_B: "b", QtCore.Qt.Key_F: "f", QtCore.Qt.Key_O: "o",
                             QtCore.Qt.Key_P: "p", QtCore.Qt.Key_Q: "q",
                             QtCore.Qt.Key_R: "r", QtCore.Qt.Key_E: "e", QtCore.Qt.Key_T: "t"}
 
@@ -795,8 +795,8 @@ class JendelaKontrol:
         else:
             sebelumnya = self.tahan_keyboard[huruf] or self.tahan_mouse[huruf]
             self.tahan_mouse[huruf] = ditekan
-        # B O P Q R E T: dikirim sekali saat mulai ditekan
-        if ditekan and not sebelumnya and huruf in ("b", "o", "p", "q", "r", "e", "t"):
+        # B F O P Q R E T: dikirim sekali saat mulai ditekan
+        if ditekan and not sebelumnya and huruf in ("b", "f", "o", "p", "q", "r", "e", "t"):
             self.kirim(("tombol", huruf))
         self.kirim_tahan()
         self.tampilkan_status(self.status)
@@ -837,12 +837,12 @@ class JendelaKontrol:
 
     def tampilkan_status(self, status):
         """Nyalakan tombol dan tulis mode / gerak / dorongan.
-        status dari simulasi: judul, gerak (True = mode GERAK), tahan (gabungan Qt + keyboard PyBullet), dorong,
-        arah_dorong"""
+        status dari simulasi: judul, mode_gerak (MODE_DIAM / MODE_GERAK / MODE_BEBAS), tahan (gabungan Qt + keyboard
+        PyBullet), dorong, arah_dorong"""
         self.status = status
         if self.root is None and self.tombol == {}:
             return
-        gerak = status["gerak"]
+        mode_gerak = status["mode_gerak"]
         tahan = dict(status["tahan"])
         sendiri = self.tahan_sekarang()
         for huruf in sendiri:
@@ -850,6 +850,7 @@ class JendelaKontrol:
 
         for huruf in ("w", "a", "s", "d"):
             self.tombol[huruf].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white") if tahan[huruf] else "")
+        self.tombol["f"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_MODE, "white") if mode_gerak == MODE_BEBAS else "")
         menyala_o = tahan["o"] or status["arah_dorong"] > 0
         menyala_p = tahan["p"] or status["arah_dorong"] < 0
         self.tombol["o"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white") if menyala_o else "")
@@ -878,8 +879,9 @@ class JendelaKontrol:
             self.label_mode.setStyleSheet("font-weight: bold; color: %s"
                                           % (config.WARNA_QT_BANDING if mode_banding else config.WARNA_QT_UJI))
         else:
-            self.label_mode.setText("Mode kontrol: %s   |   %s" % (status["judul"], "GERAK (W / S ditahan)" if gerak
-                                    else "DIAM di setpoint"))
+            teks_gerak = {MODE_DIAM: "DIAM di setpoint", MODE_GERAK: "GERAK (W / S ditahan)",
+                          MODE_BEBAS: "BEBAS (tanpa PD heading, F untuk kembali)"}.get(mode_gerak, mode_gerak)
+            self.label_mode.setText("Mode kontrol: %s   |   %s" % (status["judul"], teks_gerak))
             self.label_mode.setStyleSheet("font-weight: bold")
         perintah = []
         if tahan["w"] and not tahan["s"]:
@@ -970,7 +972,7 @@ class Simulasi:
         p.setGravity(0.0, 0.0, -config.g)
         p.setPhysicsEngineParameter(fixedTimeStep=self.dt_fisika, numSolverIterations=50)
         if gui:
-            # Shortcut bawaan PyBullet dimatikan supaya tombol W A S D B O P tidak bentrok,
+            # Shortcut bawaan PyBullet dimatikan supaya tombol W A S D B F O P tidak bentrok,
             # dan panel kiri / kanan bawaan PyBullet disembunyikan.
             p.configureDebugVisualizer(p.COV_ENABLE_KEYBOARD_SHORTCUTS, 0)
             p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
@@ -1433,7 +1435,7 @@ class Simulasi:
     def baca_keyboard(self):
         """Baca tombol dari jendela Kontrol (utama) dan dari keyboard di jendela PyBullet (cadangan).
 
-        Mengembalikan daftar tombol yang baru ditekan: 'b', 'o', 'p', 'q', 'r', 'e', 't',
+        Mengembalikan daftar tombol yang baru ditekan: 'b', 'f', 'o', 'p', 'q', 'r', 'e', 't',
         'mode_pd' (tombol PD / keyboard 1), 'mode_cbf' (tombol PD + CBF-QP / keyboard 2),
         'banding' (perekam perbandingan / keyboard 3).
         Tombol gerak (ditahan) disimpan di:
@@ -1472,7 +1474,7 @@ class Simulasi:
         self.arah = int(self.ditahan["w"]) - int(self.ditahan["s"])
         self.belok = int(self.ditahan["d"]) - int(self.ditahan["a"])
 
-        for huruf in ("b", "o", "p", "q", "r", "e", "t"):
+        for huruf in ("b", "f", "o", "p", "q", "r", "e", "t"):
             if baru_ditekan(huruf) and huruf not in hasil:
                 hasil.append(huruf)
         for angka, kunci in (("1", "mode_pd"), ("2", "mode_cbf"), ("3", "banding")):
@@ -1694,7 +1696,7 @@ class Simulasi:
         """Perbarui semua tampilan. Dipanggil dari atera_main.py beberapa kali per detik.
 
         baris          : daftar teks parameter (ditulis di kiri atas jendela PyBullet)
-        mode_gerak     : MODE_DIAM atau MODE_GERAK (pd_control.py)
+        mode_gerak     : MODE_DIAM, MODE_GERAK, atau MODE_BEBAS (pd_control.py)
         komet          : True = KOMET, motor dimatikan (ditampilkan di jendela Kontrol)
         pengujian      : teks status mode pengujian / perekam perbandingan ("" = tidak dalam mode itu)
         banding        : True = perekam perbandingan (tombol 3) menyala
@@ -1728,7 +1730,7 @@ class Simulasi:
             else:
                 teks_dorong = "dorong: -"
                 arah_dorong = 0
-            self.kontrol.kirim_status({"judul": self.judul, "gerak": mode_gerak == MODE_GERAK,
+            self.kontrol.kirim_status({"judul": self.judul, "mode_gerak": mode_gerak,
                                        "tahan": dict(self.ditahan), "dorong": teks_dorong,
                                        "arah_dorong": arah_dorong, "komet": bool(komet),
                                        "mode_pengujian": pengujian != "", "pengujian": pengujian,

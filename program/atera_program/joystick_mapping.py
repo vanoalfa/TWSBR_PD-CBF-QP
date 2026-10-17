@@ -1,7 +1,9 @@
 """joystick_mapping.py - mapping dan pembaca joystick Fantech WGP-13s (evdev, non-blocking), dan keyboard terminal.
 
 Fungsi tombol (Konteks_ATERA.md, ditambah L3 / R3 untuk perekaman ISE):
-    Tombol A : (kosong, belum dipakai)
+    Tombol A : mode BEBAS nyala / mati (saat balancing). Seperti program lama: tanpa PD heading, Kp_theta, dan
+               constraint s, jadi robot bisa ditarik tali ke mana saja; belok D-Pad = selisih torsi TORSI_BELOK.
+               Saat dimatikan, setpoint roda dipasang di posisi itu.
     Tombol B : pasang setpoint roda di posisi sekarang (kapan saja): setpoint theta (titik nol s) + arah (yaw_ref).
                Kalibrasi untuk roda saja; Tombol Y untuk IMU + roda.
     Tombol X : matikan roda (percobaan disimpan)
@@ -60,8 +62,9 @@ DPAD_MAP = {
     17: {-1: "PAD Atas", 1: "PAD Bawah"},
 }
 
-# Aksi program untuk tiap tombol (Tombol A sengaja tidak dipakai)
+# Aksi program untuk tiap tombol
 AKSI = {
+    "Tombol A": "BEBAS",
     "Tombol B": "SETPOINT",
     "Tombol X": "RODA_MATI",
     "Tombol Y": "KALIBRASI",
@@ -87,7 +90,7 @@ BANTUAN = (
     "Tombol B : pasang setpoint roda di sini (s = 0 dan arah sekarang), kapan saja",
     "D-Pad    : atas / bawah = GERAK maju / mundur (Kvel), dilepas = DIAM dengan setpoint baru di titik itu",
     "           kiri / kanan = belok (tanpa atas / bawah: berputar di tempat). Analog kiri sama dengan D-Pad",
-    "Tombol A : (kosong)",
+    "Tombol A : mode BEBAS nyala / mati: tanpa PD heading, Kp_theta, constraint s (bisa ditarik tali)",
     "L3       : mulai PENGUJIAN %.0f s (dorong robot dengan tangan setelah menekan L3)" % config.DURASI_PENGUJIAN,
     "R3       : simpan PERCOBAAN sekarang, rekaman baru dimulai",
     "LT / RT  : halaman GUI",
@@ -101,6 +104,7 @@ TOMBOL_KEYBOARD = {
     "m": "MULAI", "\r": "MULAI", "\n": "MULAI",          # m atau Enter
     "x": "RODA_MATI", " ": "RODA_MATI",                   # x atau spasi
     "b": "SETPOINT",
+    "f": "BEBAS",                                          # F = free (A sudah dipakai W A S D)
     "1": "MODE_PD",
     "2": "MODE_PD_CBF",
     "t": "PENGUJIAN",
@@ -111,7 +115,7 @@ PANAH = {"C": "HALAMAN_KANAN", "D": "HALAMAN_KIRI"}      # ESC [ C / ESC [ D (at
 GERAK_KEYBOARD = {"w": ("arah", 1), "s": ("arah", -1), "a": ("belok", -1), "d": ("belok", 1)}
 
 BANTUAN_KEYBOARD = (
-    "Keyboard terminal: Y kalibrasi | M / Enter MULAI | X / Spasi roda mati | B setpoint di sini",
+    "Keyboard terminal: Y kalibrasi | M / Enter MULAI | X / Spasi roda mati | B setpoint di sini | F mode BEBAS",
     "  1 / 2 mode PD / PD+CBF | T PENGUJIAN | E simpan PERCOBAAN | Q keluar | Panah kiri / kanan halaman GUI",
     "  W / S maju / mundur, A / D belok (tahan, sama dengan D-Pad; dianggap lepas +-%.2f s setelah dilepas)"
     % config.KEYBOARD_TAHAN_ULANG_S,

@@ -38,8 +38,8 @@ Bagian safety filter selain constraint WORKPLACE:
     zeta (kemiringan bidang) dan psi_max (batas h1, h2) juga parameter: nilainya dibaca dari config.zeta dan
     config.psi_max tiap siklus, jadi bisa diubah saat program berjalan tanpa membangun ulang solver.
 
-Mode gerak (mode_cbf, pd_control.py): MODE_DIAM (D-Pad atas / bawah dilepas) dan MODE_GERAK (ditekan) memakai SATU
-solver yang sama. Setiap constraint diberi parameter mask m_k (1 = aktif, 0 = dilewati): c_k dipakai sebagai
+Mode gerak (mode_cbf, pd_control.py): MODE_DIAM (D-Pad atas / bawah dilepas), MODE_GERAK (ditekan), dan MODE_BEBAS
+(Tombol A) memakai SATU solver yang sama. Setiap constraint diberi parameter mask m_k (1 = aktif, 0 = dilewati): c_k dipakai sebagai
 m_k*c_k + (1 - m_k),  jadi constraint dengan m_k = 0 selalu terpenuhi dan tidak ikut membatasi u. Yang berganti saat
 mode berganti hanya mask, bukan solver, jadi aman berganti tiap siklus.
 
@@ -76,7 +76,7 @@ import numpy as np
 
 import config
 import model
-from pd_control import MODE_DIAM, MODE_GERAK
+from pd_control import MODE_BEBAS, MODE_DIAM, MODE_GERAK
 
 STATUS_AMAN = "AMAN"                # u = u* dari QP solver, semua constraint terpenuhi (slack = 0)
 STATUS_SLACK = "SLACK"              # QP selesai, tetapi constraint terpaksa dilonggarkan (slack > 0)
@@ -100,7 +100,7 @@ def workplace(x, u, f, g, zeta, psi_max):
         psi_max                   : batas psi [rad] (simbol, nilainya dari config.psi_max tiap siklus)
         lie(h, v)                 : turunan Lie, L_v h = (dh/dx) * v
         Alpha_1, Alpha_2, ...     : semua Alpha_<nomor> di config.py (otomatis, nilainya bisa diubah di jendela Kontrol)
-        MODE_DIAM, MODE_GERAK     : nama mode gerak (kunci C_MODE)
+        MODE_DIAM, MODE_GERAK, MODE_BEBAS : nama mode gerak (kunci C_MODE, ketiganya wajib ada)
         config.<nama>             : nilai lain dari config.py (dpsi_max, dtheta_max, s_max, MAX_CURRENT_A, ...)
     """
     theta = x[config.IDX_THETA]
@@ -146,20 +146,16 @@ def workplace(x, u, f, g, zeta, psi_max):
     # 2. Tulis constraint di bawah
     Lf_h1 = lie(h1, f)
     c_h1 = lie(Lf_h1, f) + lie(Lf_h1, g) * u + Alpha_1 * Lf_h1 + Alpha_2 * (Lf_h1 + Alpha_1 * h1)
-    #c_h1 = lie(h1, f) + lie(h1, g) * u + Alpha_1 * h1
     Lf_h2 = lie(h2, f)
     c_h2 = lie(Lf_h2, f) + lie(Lf_h2, g) * u + Alpha_1 * Lf_h2 + Alpha_2 * (Lf_h2 + Alpha_1 * h2)
-    #c_h2 = lie(h2, f) + lie(h2, g) * u + Alpha_1 * h2
 
     c_h3 = lie(h3, f) + lie(h3, g) * u + Alpha_3 * h3
     c_h4 = lie(h4, f) + lie(h4, g) * u + Alpha_3 * h4
 
     Lf_h5 = lie(h5, f)
-    #c_h5 = lie(Lf_h5, f) + lie(Lf_h5, g) * u + Alpha_4 * Lf_h5 + Alpha_5 * (Lf_h5 + Alpha_4 * h5)
-    c_h5 = lie(h5, f) + lie(h5, g) * u + Alpha_4 * h5
+    c_h5 = lie(Lf_h5, f) + lie(Lf_h5, g) * u + Alpha_4 * Lf_h5 + Alpha_5 * (Lf_h5 + Alpha_4 * h5)
     Lf_h6 = lie(h6, f)
-    #c_h6 = lie(Lf_h6, f) + lie(Lf_h6, g) * u + Alpha_4 * Lf_h6 + Alpha_5 * (Lf_h6 + Alpha_4 * h6)
-    c_h6 = lie(h6, f) + lie(h6, g) * u + Alpha_4 * h6
+    c_h6 = lie(Lf_h6, f) + lie(Lf_h6, g) * u + Alpha_4 * Lf_h6 + Alpha_5 * (Lf_h6 + Alpha_4 * h6)
 
     c_h7 = lie(h7, f) + lie(h7, g) * u + Alpha_6 * h7
     c_h8 = lie(h8, f) + lie(h8, g) * u + Alpha_6 * h8
@@ -171,6 +167,7 @@ def workplace(x, u, f, g, zeta, psi_max):
     C_MODE = {
         MODE_DIAM:  [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6, c_h7, c_h8],
         MODE_GERAK: [c_h1, c_h2, c_h3, c_h4, c_h7, c_h8],      # tanpa h5, h6 (barrier jarak s)
+        MODE_BEBAS: [c_h1, c_h2, c_h3, c_h4, c_h7, c_h8],      # tanpa h5, h6 (barrier jarak s)
     }
 
     # =========================================================================================
@@ -226,7 +223,7 @@ def _cbf_expressions():
 def _mask_tiap_mode(daftar_c, c_mode):
     """Mask 0 / 1 tiap mode: 1 bila constraint di DAFTAR_C ikut di daftar C_MODE mode itu."""
     mask = {}
-    for mode in (MODE_DIAM, MODE_GERAK):
+    for mode in (MODE_DIAM, MODE_GERAK, MODE_BEBAS):
         if mode not in c_mode or len(c_mode[mode]) == 0:
             raise RuntimeError("C_MODE di WORKPLACE PROGRAM belum memuat constraint untuk mode %s." % mode)
         mask[mode] = np.zeros(len(daftar_c))
@@ -463,7 +460,7 @@ class CBFQP:
 
     # ------------------------------------------------------------------ mode
     def mode_cbf(self, mode: str) -> None:
-        """Pilih constraint CBF sesuai mode gerak: constraint di C_MODE[mode] (MODE_DIAM atau MODE_GERAK).
+        """Pilih constraint CBF sesuai mode gerak: constraint di C_MODE[mode] (MODE_DIAM, MODE_GERAK, MODE_BEBAS).
         Solver tidak dibangun ulang: hanya mask-nya yang berganti. Aman dipanggil tiap siklus.
         """
         if mode == self.mode:
@@ -728,7 +725,7 @@ if __name__ == "__main__":
     print("QP solver: %s | slack %s (rho %s) | DOB %s | margin psi %.1f deg"
           % (cbf.plugin, "AKTIF" if config.CBF_SLACK_AKTIF else "MATI", " ".join("%.0e" % r for r in cbf.rho),
              "AKTIF" if config.DOB_AKTIF else "MATI (hanya dicatat)", config.CBF_MARGIN_DEG))
-    for mode in (MODE_DIAM, MODE_GERAK):
+    for mode in (MODE_DIAM, MODE_GERAK, MODE_BEBAS):
         cbf.mode_cbf(mode)
         print("mode %s | constraint aktif: %d dari %d | Alpha yang dipakai: %s"
               % (mode, int(cbf.mask.sum()), cbf.NH, [cbf.nama_alpha[i] for i in cbf.alpha_dipakai]))

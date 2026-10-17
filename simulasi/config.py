@@ -10,10 +10,12 @@ Konvensi tanda (dipakai model.py dan semua file lain):
     u     > 0 : torsi motor SATU roda, mendorong roda ke DEPAN (reaksinya mendorong badan ke belakang)
             kedua roda diberi u yang sama, jadi torsi total = N_WHEEL*u
 
-Mode gerak otomatis (pd_control.py: MODE_DIAM, MODE_GERAK), tanpa tombol mode:
+Mode gerak (pd_control.py: MODE_DIAM, MODE_GERAK, MODE_BEBAS):
     DIAM  : W / S tidak ditahan. Robot ditahan di setpoint theta (Kp_theta), constraint s dan KOMET s aktif.
     GERAK : W / S ditahan. Kp_theta dan constraint s diabaikan, Kvel*arah menggerakkan robot.
-Setpoint theta (titik nol jarak s, s = R*theta) dipasang saat W / S dilepas, dan oleh tombol B.
+    BEBAS : tombol F (toggle, robot fisik: Tombol A). Tanpa PD heading, Kp_theta dan constraint s diabaikan, belok =
+            selisih torsi TORSI_BELOK (seperti program lama).
+Setpoint theta (titik nol jarak s, s = R*theta) dipasang saat W / S dilepas, oleh tombol B, dan saat BEBAS dimatikan.
 """
 
 import math
@@ -78,8 +80,8 @@ s_min = -s_max
 
 # KOMET = kondisi robot yang sudah tidak tertolong, berlaku di mode PD maupun PD+CBF. Roda dimatikan.
 #   Jatuh    : |psi| > SAFE_TILT_DEG                (semua mode gerak)
-#   Lari     : |s|   > S_KOMET                      (hanya mode DIAM; saat GERAK robot memang berjalan jauh)
-#   Berputar : |yaw - yaw_ref| > YAW_KOMET_DEG      (semua mode gerak)
+#   Lari     : |s|   > S_KOMET                      (hanya mode DIAM; saat GERAK / BEBAS robot memang berjalan jauh)
+#   Berputar : |yaw - yaw_ref| > YAW_KOMET_DEG      (mode DIAM dan GERAK; di mode BEBAS yaw memang bebas)
 SAFE_TILT_DEG = 40.0                # [deg]  ASUMSI: dipilih pengguna (20261014)
 S_KOMET = 2.0                       # [m]
 # KOMET berputar: s memakai RATA-RATA kedua roda, jadi robot yang berputar di tempat tidak pernah mencapai
@@ -94,10 +96,10 @@ YAW_KOMET_DEG = 90.0                # [deg]
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
 Kp_psi = 10.91       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
 Kd_psi = 02.31       #5.2                # [N m s/rad]
-Kp_theta = 0.10      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK)
+Kp_theta = 0.10      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
 Kd_theta = 0.13      #0.41             # [N m s/rad]
-# Kvel*arah hanya mode GERAK. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta -> Kvel NEGATIF supaya W maju
-# (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s).
+# Kvel*arah hanya mode GERAK / BEBAS. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
+# -> Kvel NEGATIF supaya W maju (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s).
 # ASUMSI: -0.52 (0.20 m/s), sama dengan robot fisik.
 Kvel = -0.52                # [N m]
 
@@ -119,13 +121,15 @@ Kd_yaw = 0.10                       # [N m s/rad]
 YAW_RATE_BELOK = 1.0                # [rad/s] kecepatan belok A / D
 A_YAW_MAKS = 3.0                    # [rad/s^2]
 YAW_TORSI_MAKS = 0.40               # [N m]
+# Mode BEBAS (tombol F): PD heading mati, belok A / D = selisih torsi tetap (= robot fisik 4b). ASUMSI: 0.02 N m.
+TORSI_BELOK = 0.02                  # [N m]
 
 # =============================================================================
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 25.8600 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 25.8900 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_1 = 54.73 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 44.85 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
 Alpha_3 = 55.32 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
 Alpha_4 = 33.34 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
 Alpha_5 = 80.97 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
@@ -350,6 +354,7 @@ PLOT_BACKEND = ["QtAgg", "Qt5Agg", "TkAgg"]
 
 # Jendela Kontrol (Qt)
 WARNA_QT_TEKAN = "#1d9e5a"       # tombol sedang ditekan
+WARNA_QT_MODE = "#544bb8"        # mode BEBAS sedang aktif (tombol F)
 WARNA_QT_UJI = "#c26a00"         # mode pengujian aktif
 WARNA_QT_PD = "#9467bd"          # tombol mode kontrol PD aktif (= tab:purple)
 WARNA_QT_PD_CBF = "#1f77b4"      # tombol mode kontrol PD + CBF-QP aktif (= tab:blue)
@@ -370,8 +375,14 @@ DESIMAL_ALPHA = 2
 #   CBFQP_S       Alpha_4, Alpha_5           barrier h1 .. h6
 #   CBFQP_DTHETA  Alpha_6                    barrier h1 .. h8
 # Nilai yang tidak dituning di satu tahap SELALU diambil dari config.py: salin hasil tiap tahap ke config.py
-# sebelum menjalankan tahap berikutnya. Study sebuah tahap tidak boleh dilanjutkan bila nilai-nilai yang dikunci
-# (atau skenario di bawah) berubah; tuning_optuna.py menghentikan program dan menjelaskan bedanya.
+# sebelum menjalankan tahap berikutnya.
+# Tuning GABUNGAN (tahap SEMUA, terpisah dari tahap bertahap di atas): Kp_psi, Kd_psi, Kp_theta, Kd_theta,
+#   Alpha_1 .. Alpha_6 dituning SEKALIGUS dengan barrier h1 .. h8; skor seperti tahap PD (gaya lolos tertinggi + ISE),
+#   tetapi dengan CBF-QP aktif.
+#   Bandingkan hasilnya dengan hasil bertahap pada skenario yang sama:
+#       python3 tuning_optuna.py --profil <PROFIL> --banding
+# Study sebuah tahap tidak boleh dilanjutkan bila nilai-nilai yang dikunci (atau skenario di bawah) berubah;
+# tuning_optuna.py menghentikan program dan menjelaskan bedanya.
 #
 # SATU PENGUJIAN = OPTUNA_ULANGAN kali skenario berikut, robot di-reset di awal tiap ulangan (lantai
 # OPTUNA_ZETA_DEG, mode DIAM). Di dalam satu ulangan tidak ada reset:
@@ -390,13 +401,14 @@ DESIMAL_ALPHA = 2
 # Skor satu pengujian (makin kecil makin baik), dari state yang dibaca kontrol (psi hasil Kalman):
 #   skor = integral[(psi/psi_max)^2 + (s/s_max)^2] dt                       [sejak dorongan pertama tiap ulangan]
 #        + OPTUNA_PENALTI_JARAK x lama |s| > s_max                         [per detik, tahap dengan "penalti_jarak"]
-#        + OPTUNA_PENALTI_GAGAL x lama status CBF bukan AMAN               [per detik, hanya tahap CBFQP_*]
+#        + OPTUNA_PENALTI_GAGAL x lama status CBF bukan AMAN               [per detik, tahap CBFQP_* dan SEMUA]
 #        + OPTUNA_PENALTI_KOMET x (1 + sisa waktu / waktu total)   bila KOMET (pengujian langsung berhenti; sisa dihitung dari seluruh ulangan)
 # Tidak stabil TIDAK diberi penalti: hanya dicatat di detail. ISE sudah lebih besar bila robot lambat pulih,
 # dan robot yang cepat stabil setelah dorongan terakhir mengakhiri ulangan (dan ISE-nya) lebih awal.
 #
 # Gaya dorong:
-#   Tahap dengan "cari_gaya" (PD): satu trial mencari gaya TERTINGGI yang masih lolos satu pengujian (tanpa komet),
+#   Tahap dengan "cari_gaya" (PD dan SEMUA): satu trial mencari gaya TERTINGGI yang masih lolos satu pengujian
+#     (tanpa komet),
 #     dengan bisection pada kisi gaya_dorong .. OPTUNA_GAYA_MAKS berjarak OPTUNA_GAYA_LANGKAH (gaya_dorong dari profil).
 #     ASUMSI bisection: robot yang lolos pada gaya F juga lolos pada gaya yang lebih kecil.
 #       skor trial = -OPTUNA_BOBOT_GAYA x gaya_lolos + skor pengujian pada gaya_lolos
@@ -409,8 +421,9 @@ DESIMAL_ALPHA = 2
 #   Angka besar (puluhan per detik) = kontrol bang-bang. Tidak masuk skor.
 # Tahap dengan "skor_s": False menghapus suku s, penalti jarak, dan komet |s|: yang dinilai hanya psi.
 OPTUNA_TRIAL_PD = 163221013                 # jumlah trial tahap PD (bisa diubah per tahap di OPTUNA_TAHAP)
-OPTUNA_TRIAL_CBFQP = 16221013              # jumlah trial tahap CBFQP_* (bisa diubah per tahap di OPTUNA_TAHAP)
-OPTUNA_LANGKAH = 0.01                 # 2 angka di belakang koma
+OPTUNA_TRIAL_CBFQP = 163221013              # jumlah trial tahap CBFQP_* (bisa diubah per tahap di OPTUNA_TAHAP)
+OPTUNA_TRIAL_SEMUA = 163221013              # jumlah trial tahap SEMUA (tuning gabungan 10 variabel)
+OPTUNA_LANGKAH = 0.001                 # 2 angka di belakang koma
 
 # Batas pencarian PER PROFIL: OPTUNA_BATAS[profil][nama] = (batas bawah, batas atas). Edit sebelum tuning.
 # Batas tidak termasuk pemeriksaan skenario: mengubahnya tidak membuat study ditolak (trial lama tetap tersimpan).
@@ -446,10 +459,12 @@ OPTUNA_BATAS = {
         "Alpha_6":  (11.00, 100.0),
     },
     "DATASHEET": {
-        "Kp_psi":   (5.0, 80.0),
-        "Kd_psi":   (0.5, 100.0),
-        "Kp_theta": (0.0, 1.0),
-        "Kd_theta": (0.0, 100.0),
+        # ASUMSI batas PD DATASHEET (dari tabel di atas + margin; gain sekarang Kp_psi 10.91, Kd_psi 2.31,
+        # Kp_theta 0.10, Kd_theta 0.13 ada di dalamnya). Dibutuhkan tahap PD dan SEMUA.
+        "Kp_psi":   (0.0, 30.0),
+        "Kd_psi":   (0.3, 100.0),
+        "Kp_theta": (0.0, 1.5),
+        "Kd_theta": (0.0, 100.6),
         "Alpha_1": (25.77, 54.77),
         "Alpha_2": (25.77, 54.77),
         "Alpha_3": (30.00, 150.0),
@@ -476,6 +491,11 @@ OPTUNA_TAHAP = {
     "CBFQP_DPSI":   {"variabel": ["Alpha_3"], "trial": OPTUNA_TRIAL_CBFQP, "barrier": [1, 2, 3, 4]},
     "CBFQP_S":      {"variabel": ["Alpha_4", "Alpha_5"], "trial": OPTUNA_TRIAL_CBFQP, "barrier": [1, 2, 3, 4, 5, 6]},
     "CBFQP_DTHETA": {"variabel": ["Alpha_6"], "trial": OPTUNA_TRIAL_CBFQP, "barrier": [1, 2, 3, 4, 5, 6, 7, 8]},
+    # Tuning gabungan (bukan bagian urutan bertahap): skor sama dengan tahap PD, tetapi CBF-QP h1 .. h8 aktif.
+    "SEMUA":        {"variabel": ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta",
+                                  "Alpha_1", "Alpha_2", "Alpha_3", "Alpha_4", "Alpha_5", "Alpha_6"],
+                     "trial": OPTUNA_TRIAL_SEMUA, "barrier": [1, 2, 3, 4, 5, 6, 7, 8], "penalti_jarak": False,
+                     "cari_gaya": True},
 }
 
 # Profil optimasi. Tiap profil punya study Optuna sendiri (hasilnya tidak tercampur):
@@ -533,9 +553,11 @@ OPTUNA_PENALTI_GAGAL = 10.0         # [per detik]
 OPTUNA_PRUNER_STARTUP = 10
 OPTUNA_PRUNER_WARMUP_S = 5
 # AUTO-EXIT STAGNAN (early stopping seluruh study, berbeda dengan pruning yang hanya menghentikan satu trial):
-# tuning satu tahap berhenti sendiri bila skor terbaik tidak MEMBAIK selama OPTUNA_STAGNANT trial selesai berturut-turut,
-# lalu langsung lanjut ke laporan (nilai untuk config.py, CSV, PNG) seperti biasa. Membaik = skor turun lebih dari
-#   OPTUNA_STAGNANT_MIN x max(1, |skor terbaik acuan|)        (relatif; tahap PD: kenaikan gaya lolos 0.5 N selalu terhitung)
+# tuning satu tahap berhenti sendiri bila skor terbaik tidak MEMBAIK selama OPTUNA_STAGNANT trial selesai
+# berturut-turut, lalu langsung lanjut ke laporan (nilai untuk config.py, CSV, PNG) seperti biasa.
+# Membaik = skor turun lebih dari
+#   OPTUNA_STAGNANT_MIN x max(1, |skor terbaik acuan|)
+#   (relatif; tahap PD dan SEMUA: kenaikan gaya lolos 0.5 N selalu terhitung)
 # Trial pruned tidak dihitung. Riwayat study di database ikut dihitung, jadi study yang dilanjutkan tidak mulai dari 0.
 # 0 = auto-exit mati. Bisa diganti per tahap (kunci "stagnant" di OPTUNA_TAHAP) atau saat menjalankan: --stagnant N.
 # ASUMSI: 300 trial dan 0.1 %. Mengubahnya TIDAK membuat study ditolak (bukan bagian skenario).
