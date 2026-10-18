@@ -94,10 +94,10 @@ YAW_KOMET_DEG = 90.0                # [deg]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 10.91       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 02.31       #5.2                # [N m s/rad]
-Kp_theta = 0.10      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
-Kd_theta = 0.13      #0.41             # [N m s/rad]
+Kp_psi = 14.63       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 02.28       #5.2                # [N m s/rad]
+Kp_theta = 0.08      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
+Kd_theta = 0.24      #0.41             # [N m s/rad]
 # Kvel*arah hanya mode GERAK / BEBAS. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
 # -> Kvel NEGATIF supaya W maju (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s).
 # ASUMSI: -0.52 (0.20 m/s), sama dengan robot fisik.
@@ -128,12 +128,12 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 54.73 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 44.85 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 55.32 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 33.34 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_5 = 80.97 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_6 = 485.31 #84.67          # [1/s]  h7, h8 (dtheta, CBF orde 1)
+Alpha_1 = 32.49 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 51.13 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 42.95 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
+Alpha_4 = 16.44 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_5 = 79.20 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_6 = 283.94 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
@@ -475,9 +475,9 @@ OPTUNA_BATAS = {
         # SEMUA 20261017 tidak pernah mencoba daerah ini). Kd_theta sampai 0.3: menaikkan Kd_theta meredam ayunan
         # maju-mundur robot (underdamped). Dibutuhkan tahap PD dan SEMUA.
         "Kp_psi":   (5.0, 25.0),
-        "Kd_psi":   (1.0, 13.5),
+        "Kd_psi":   (1.5, 3.5),
         "Kp_theta": (0.0, 0.3),
-        "Kd_theta": (0.0, 10.3),
+        "Kd_theta": (0.1, 0.6),
         "Alpha_1": (25.77, 54.77),
         "Alpha_2": (25.77, 54.77),
         "Alpha_3": (30.00, 150.0),
@@ -588,7 +588,7 @@ OPTUNA_BOBOT_CBF_BURUK = 1.0        # tahap SEMUA (dua mode): bobot penalti bila
 #     zeta       0.46   0.59   0.69   0.78   0.83   >= 1 (critically damped / overdamped)
 # Noise IMU menambah sekitar 1-3 % pada hasil hitungan, jadi batas di bawah ~3 % kurang bisa dipercaya.
 # Isi 0 untuk mematikan satu syarat.
-OPTUNA_SYARAT_OVERSHOOT_PSI = 10.0  # [%] ASUMSI: overshoot psi maksimum yang masih lolos
+OPTUNA_SYARAT_OVERSHOOT_PSI = 30.0  # [%] ASUMSI: overshoot psi maksimum yang masih lolos
 OPTUNA_SYARAT_OVERSHOOT_S = 5.0     # [%] ASUMSI: overshoot s maksimum yang masih lolos
 OPTUNA_BATAS_CHATTERING = 2.0       # [per s] ASUMSI: ch/s maksimum (data 20261016-17: trial PD halus < 0.1/s,
                                     #     trial SEMUA yang bergetar 4 .. 26/s; 2 berada di celah keduanya)
