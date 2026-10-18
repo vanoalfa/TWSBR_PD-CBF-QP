@@ -294,7 +294,25 @@ SIM_ACC_NOISE_DEG = 0.14            # [deg]   simpangan baku sudut akselerometer
 # =============================================================================
 SUBSTEP = 5                 # jumlah langkah fisika dalam satu siklus kontrol (DT)
 GAYA_DORONG_AWAL = 5.0      # [N] besar gaya dorongan (tombol O / P dan tuning_optuna.py), bisa diubah di jendela Kontrol
-LAMA_DORONG = 0.10          # [s] lama gaya dorongan bekerja
+
+# >>>>>>>>>> DORONGAN = PUKULAN BANDUL (UBAH DI SINI) <<<<<<<<<<
+# Simulasi memberi gaya konstan GAYA selama LAMA_DORONG, jadi impuls ke robot J = GAYA x LAMA_DORONG [N s].
+# Konversi dari pengujian bandul fisik ke gaya simulasi:
+#     dz  = l_bd * (1 - cos(phi_0))              tinggi jatuh titik berat bandul [m]
+#     v_1 = sqrt(2 * g * dz)                     kecepatan bandul sesaat sebelum memukul [m/s]
+#     v_2 = +/- sqrt(2 * g * l_bd * (1 - cos(phi_1)))   sesaat sesudah memukul (+ terus maju, - memantul) [m/s]
+#     J_bd = m_bd * (v_1 - v_2)                  impuls yang diterima robot [N s]
+#     F_bd = J_bd / LAMA_DORONG                  gaya simulasi (gaya_dorong) yang setara [N]
+#   m_bd  : massa bandul [kg]                    l_bd  : panjang tali, titik gantung ke titik berat bandul [m]
+#   phi_0 : sudut lepas dari vertikal [rad]      phi_1 : sudut ayun bandul setelah memukul (dari video) [rad]
+# Contoh: m_bd 2 kg, l_bd 0.5125 m, phi_0 30 deg -> v_1 = 1.161 m/s; bila phi_1 = 17 deg (terus maju)
+#         v_2 = 0.663 m/s, J_bd = 1.00 N s, F_bd = 1.00 / 0.015 = 66.4 N.
+# ASUMSI: lama kontak pukulan bandul ~15 ms (tidak diukur). Boleh dipakai karena jauh lebih singkat dari skala
+# waktu jatuh badan sqrt((m_b L^2 + j_psi) / (m_b g L)) ~ 0.145 s, sehingga yang menentukan robot jatuh hanya J.
+# Rujukan: OpenStax University Physics Vol. 1 bab 9.2 (J = F_rata-rata x dt); Hessel dkk. 2006 dan Nikolov 2020
+# (lama kontak tumbukan dalam orde milidetik). Nilai lama 0.10 s memberi batas ~12.5 N (= 1.25 N s).
+LAMA_DORONG = 0.015         # [s] lama gaya dorongan bekerja (= lama kontak pukulan bandul)
+
 # Titik dorong: bidang DORONG_SISI x DORONG_SISI di sisi luar bagian ATAS badan.
 #   - tepi atas bidang = permukaan teratas badan (dihitung otomatis dari robot.urdf)
 #   - jarak bidang dari garis tengah badan = JARAK_IMU_KE_SISI_LUAR (sisi luar badan)
@@ -556,7 +574,11 @@ OPTUNA_SEED = 1                     # seed sampler Optuna dan noise IMU ulangan 
 OPTUNA_ULANGAN = 2                  # jumlah ulangan skenario (dengan reset) dalam satu pengujian
 OPTUNA_GESER_DORONG = 0.13          # [s] ASUMSI: pergeseran waktu dorong per ulangan (~setengah periode osilasi
                                     #     3.8 Hz yang teramati di simulasi 20261012)
-OPTUNA_GAYA_MAKS = 25.0             # [N] gaya tertinggi yang dicoba tahap PD
+                                    
+OPTUNA_GAYA_MAKS = 100.0            # [N] gaya tertinggi yang dicoba tahap PD dan SEMUA. Dengan LAMA_DORONG 0.015 s
+                                    #     100 N = 1.5 N s, di atas batas robot (~1.0 N s, model planar, ~65-75 N).
+                                    #     Nilai lama 25 N hanya cocok untuk LAMA_DORONG 0.10 s.
+
 OPTUNA_GAYA_LANGKAH = 0.5           # [N] ketelitian pencarian gaya tahap PD
 OPTUNA_BOBOT_GAYA = 1000.0          # [per N] bobot gaya lolos di skor tahap PD (jauh lebih besar dari ISE)
 OPTUNA_GAYA_CBF_FRAKSI = [0.50, 0.75, 1.0, 1.01, 1.15, 1.25, 1.5, 1.75, 2]   # tahap CBFQP_*: gaya = fraksi x gaya_pd_terbaik (boleh > 1)
