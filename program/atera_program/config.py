@@ -55,14 +55,14 @@ dpsi_setpoint = 0.0                 # [rad/s]
 # =============================================================================
 #                              3. SAFETY SET DAN KOMET
 # =============================================================================
-psi_max_DEG = 15.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
+psi_max_DEG = 8.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
 psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
-dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
+dpsi_max = 1.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
 # Sedikit di bawah batas motor (no-load DDSM115 200 rpm = 20.9 rad/s; data robot 20261015: |dtheta| tidak pernah
 # > ~21 rad/s). Uji model planar 16-10: dengan 13 rad/s, h7/h8 melarang roda mengejar badan setelah dorongan ~10 N
 # (PD butuh ~19 rad/s) sehingga robot jatuh; dengan 20 rad/s tidak.
 dtheta_max = 20.0                   # [rad/s]  |dtheta| <= dtheta_max
-s_max = 1.0                         # [m]      |s| <= s_max, s = R*theta dari titik nol s
+s_max = 0.5                         # [m]      |s| <= s_max, s = R*theta dari titik nol s
 psi_min, dpsi_min, dtheta_min, s_min = -psi_max, -dpsi_max, -dtheta_max, -s_max
 
 # KOMET = robot tidak tertolong, roda dimatikan (sama dengan simulasi):
