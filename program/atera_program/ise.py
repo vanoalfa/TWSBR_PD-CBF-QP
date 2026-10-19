@@ -53,6 +53,8 @@ import multiprocessing
 import os
 import re
 import socket
+import subprocess
+import sys
 import time
 from datetime import datetime
 
@@ -614,6 +616,43 @@ KONFIG_PLOT = ["psi_max", "psi_max_DEG", "dpsi_max", "dtheta_max", "s_max", "SAF
                "MAX_CURRENT_A"]
 
 
+def _pilih_jendela():
+    """Backend matplotlib (+ platform Qt) yang bisa membuka jendela di laptop ini. Tiap pilihan dicoba di PROSES
+    TERPISAH, karena Qt yang gagal memuat platform-nya langsung menghentikan proses (Aborted / core dumped) tanpa
+    bisa ditangkap Python. Di WSL (WSLg) platform Qt "wayland" dicoba sebelum "xcb", karena xcb (X11) sering gagal di
+    WSL: butuh pustaka libxcb tambahan (sama dengan simulasi/simulasi.py pilihan_platform_qt()).
+    Mengembalikan (backend, platform Qt atau None, catatan kegagalan)."""
+    platform_qt = []
+    if os.environ.get("QT_QPA_PLATFORM"):
+        platform_qt.append(os.environ["QT_QPA_PLATFORM"])          # pilihan pengguna sendiri didahulukan
+    if os.environ.get("WAYLAND_DISPLAY") and "wayland" not in platform_qt:
+        platform_qt.append("wayland")
+    if "xcb" not in platform_qt:
+        platform_qt.append("xcb")
+    calon = []
+    for backend in config.PLOT_BACKEND:
+        if backend.lower().startswith("qt"):
+            calon += [(backend, platform) for platform in platform_qt]
+        else:
+            calon.append((backend, None))
+    uji = ("import matplotlib; matplotlib.use(%r); import matplotlib.pyplot as plt; "
+           "fig = plt.figure(); fig.canvas.draw(); plt.close(fig)")
+    catatan = []
+    for backend, platform in calon:
+        env = dict(os.environ)
+        if platform:
+            env["QT_QPA_PLATFORM"] = platform
+        try:
+            hasil = subprocess.run([sys.executable, "-c", uji % backend], env=env, capture_output=True, timeout=60)
+            kode = hasil.returncode
+        except subprocess.TimeoutExpired:
+            kode = "tidak menjawab"
+        if kode == 0:
+            return backend, platform, catatan
+        catatan.append("%s%s: %s" % (backend, "/" + platform if platform else "", kode))
+    return None, None, catatan
+
+
 def plot_realtime(ip_raspi, port=None):
     """Jendela plot realtime robot fisik, dijalankan DI LAPTOP. Menyambung ke atera_main.py --plot di Raspi lewat TCP
     (otomatis mencoba lagi bila Raspi belum jalan / terputus). Tiap baris dari Raspi = JSON list kiriman:
@@ -626,17 +665,18 @@ def plot_realtime(ip_raspi, port=None):
     Ctrl+C untuk berhenti."""
     import numpy as np
     port = int(port or config.PLOT_PORT)
-    berhasil = ""
-    for backend in config.PLOT_BACKEND:
-        try:
-            plt.switch_backend(backend)
-            berhasil = backend
-            break
-        except Exception:
-            pass
-    if not berhasil:
-        print("matplotlib tidak punya backend jendela: pip install PyQt5, atau sudo apt install python3-tk")
+    print("Mencari cara membuka jendela plot (%s) ..." % ", ".join(config.PLOT_BACKEND), flush=True)
+    backend, platform, catatan = _pilih_jendela()
+    if backend is None:
+        print("Jendela plot tidak bisa dibuka (%s)." % " | ".join(catatan))
+        print("Cek: pip install PyQt5, atau sudo apt install python3-tk. Untuk Qt xcb: sudo apt install "
+              "libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 "
+              "libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xfixes0")
         return 1
+    if platform:
+        os.environ["QT_QPA_PLATFORM"] = platform             # dibaca Qt saat jendela pertama dibuat
+    plt.switch_backend(backend)
+    berhasil = backend + (" / Qt " + platform if platform else "")
 
     fig = plt.figure(figsize=(10.0, 9.0))
     kisi = fig.add_gridspec(3, 2, height_ratios=[1.6, 0.5, 0.9])
