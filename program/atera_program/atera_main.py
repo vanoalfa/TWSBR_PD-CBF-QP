@@ -1,8 +1,10 @@
 """atera_main.py - program utama ATERA (robot fisik) + GUI terminal.
 
 Jalankan di Raspberry Pi 5, dari folder atera_program:   python3 atera_main.py
-    tambahkan --plot untuk jendela plot realtime (sama dengan simulasi). Butuh layar di Pi: monitor, VNC, atau
-    ssh -X. Tanpa layar, plot dilewati dan robot tetap jalan.
+    tambahkan --plot untuk plot realtime DI LAPTOP: Raspi membuka port config.PLOT_PORT (TCP) dan mengirim data plot
+    ke laptop yang tersambung. Di laptop (satu WiFi / hotspot dengan Raspi), dari folder atera_program:
+        python3 ise.py --plot-realtime <IP Raspi>
+    IP Raspi tampil di baris "Plot realtime" GUI ini. Laptop belum / tidak tersambung -> robot tetap jalan.
 
 Kontrolnya sama dengan simulasi (simulasi/atera_main.py), hanya sumber state dan tujuan torsinya yang berbeda.
 Tiap siklus (langkah_kontrol_inti):
@@ -34,12 +36,13 @@ Tombol: joystick, atau keyboard di terminal ini (juga lewat SSH). Lihat joystick
 Log: config.LOG_FILE.
 """
 
+import json
 import logging
 import math
-import multiprocessing
 import os
 import shutil
 import signal
+import socket
 import sys
 import textwrap
 import time
@@ -78,6 +81,19 @@ def jepit(u):
     return max(config.u_min, min(config.u_max, u))
 
 
+def ip_raspi():
+    """IP Raspi di jaringan WiFi / hotspot (untuk ditampilkan di GUI). Tidak mengirim paket apa pun: connect() UDP
+    hanya memilih kartu jaringan yang dipakai menuju alamat itu."""
+    uji = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        uji.connect(("10.255.255.255", 1))
+        return uji.getsockname()[0]
+    except OSError:
+        return "<IP Raspi: cek dengan hostname -I>"
+    finally:
+        uji.close()
+
+
 class Atera:
     def __init__(self, plot=False):
         self.motors = DualDDSM115()
@@ -114,10 +130,11 @@ class Atera:
         self.t_komet = -math.inf                     # waktu KOMET terakhir (pengereman aktif)
         self.rem_status = "-"                        # teks pengereman untuk GUI
 
-        # Plot realtime (--plot): proses terpisah (ise.proses_plot), data dikirim lewat antrean
+        # Plot realtime (--plot): data dikirim lewat TCP ke laptop (ise.py --plot-realtime), lihat buat_plot()
         self.pakai_plot = plot
-        self.plot = None
-        self.plot_antrean = self.plot_berhenti = None
+        self.plot_server = None                      # socket yang menunggu laptop di config.PLOT_PORT
+        self.plot_klien = []                         # laptop tersambung: [socket, IP, data yang belum terkirim]
+        self.plot_ip = "<IP Raspi>"
         self.plot_kiriman = []
         self.plot_status = "mati (jalankan dengan --plot)" if not plot else "belum dibuka"
         self.plot_t0 = time.monotonic()
@@ -148,7 +165,7 @@ class Atera:
             LOGGER.exception("CBF-QP")
             self.cbf_alasan = "%s: %s" % (type(exc).__name__, exc)
         if self.pakai_plot:
-            self.atur_pesan("Membuka plot realtime ...")
+            self.atur_pesan("Menyiapkan plot realtime untuk laptop ...")
             self.render()
             self.buat_plot()
         error = [m for m in self.masalah() if m[0] == ERROR]
@@ -162,46 +179,38 @@ class Atera:
         ise.tunggu_simpan()
         for alat in (self.motors, self.joystick, self.keyboard, self.imu):
             alat.close()
-        if self.plot is not None:
-            self.plot_berhenti.set()
-            self.plot.join(timeout=2.0)
+        for klien in list(self.plot_klien):
+            self.putus_laptop(klien, None)
+        if self.plot_server is not None:
+            self.plot_server.close()
+            self.plot_server = None
 
-    # --------------------------------------------------------- plot realtime
+    # --------------------------------------------------------- plot realtime (di laptop)
     def buat_plot(self):
-        """Nyalakan proses jendela plot realtime (ise.proses_plot). Gagal -> robot tetap jalan tanpa plot."""
-        if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
-            self.plot_status = "tidak ada layar (DISPLAY kosong): pakai monitor / VNC / ssh -X"
-            LOGGER.warning("plot realtime: %s", self.plot_status)
-            return
-        konteks = multiprocessing.get_context("spawn")
-        self.plot_antrean = konteks.Queue()
-        jawaban = konteks.Queue()
-        self.plot_berhenti = konteks.Event()
-        self.plot = konteks.Process(target=ise.proses_plot, daemon=True,
-                                    args=(self.plot_antrean, jawaban, self.plot_berhenti, config.PLOT_BACKEND))
-        self.plot.start()
-        hasil = ("gagal", "proses plot tidak menjawab")
-        batas_waktu = time.monotonic() + 30.0
-        while time.monotonic() < batas_waktu:
-            try:
-                hasil = jawaban.get(timeout=0.3)
-                break
-            except Exception:
-                if not self.plot.is_alive():
-                    hasil = ("gagal", "proses plot berhenti (exit code %s)" % self.plot.exitcode)
-                    break
-        if hasil[0] != "siap":
-            self.plot_berhenti.set()
-            self.plot.join(timeout=1.0)
-            self.plot = None
-            self.plot_status = "gagal: %s" % hasil[1]
+        """Buka port config.PLOT_PORT (TCP) untuk laptop. Plot digambar DI LAPTOP oleh ise.py --plot-realtime, Raspi
+        hanya mengirim data. Gagal membuka port -> robot tetap jalan tanpa plot."""
+        self.plot_ip = ip_raspi()
+        server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            server.bind(("", config.PLOT_PORT))
+            server.listen(1)
+            server.setblocking(False)              # accept() tidak pernah menahan loop kontrol
+        except OSError as exc:
+            server.close()
+            self.plot_status = "gagal membuka port %d: %s" % (config.PLOT_PORT, exc)
             LOGGER.warning("plot realtime %s", self.plot_status)
             return
-        self.plot_status = "aktif (%s)" % hasil[1]
-        self.perbarui_plot_mode()
+        self.plot_server = server
+        self.plot_status = self.teks_tunggu_laptop()
+        LOGGER.info("plot realtime: menunggu laptop di %s:%d", self.plot_ip, config.PLOT_PORT)
+
+    def teks_tunggu_laptop(self):
+        return ("menunggu laptop | di laptop: python3 ise.py --plot-realtime %s  (port %d)"
+                % (self.plot_ip, config.PLOT_PORT))
 
     def kirim_plot(self, isi):
-        if self.plot is not None:
+        if self.plot_klien:                                # tanpa laptop, data plot tidak dikumpulkan
             self.plot_kiriman.append(isi)
 
     def putus_plot(self):
@@ -213,7 +222,7 @@ class Atera:
         """Judul / warna plot (mode kontrol, mode gerak) dan barrier merah = constraint CBF-QP mode gerak sekarang
         (C_MODE di WORKPLACE cbf_qp.py), juga di mode PD supaya safety set yang sama terlihat untuk dibandingkan.
         Hanya dikirim bila berubah, jadi aman dipanggil tiap siklus."""
-        if self.plot is None:
+        if not self.plot_klien:
             return
         mode = (self.mode_kontrol, self.pd.mode_gerak)
         if mode != self.plot_mode:
@@ -224,16 +233,76 @@ class Atera:
             self.plot_mask = mask
             self.kirim_plot(("MASK", mask))
 
+    def sambung_laptop(self, sok, alamat):
+        """Laptop baru tersambung. Laptop itu dikirimi dulu nilai config Raspi yang dipakai gambar (supaya garis batas
+        di laptop sama dengan robot walau config.py laptop berbeda), lalu mode dan barrier sekarang. Boleh lebih dari
+        satu laptop; koneksi lama yang mati diputus sendiri oleh gambar_plot()."""
+        sok.setblocking(False)
+        sok.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        self.plot_mode = (self.mode_kontrol, self.pd.mode_gerak)
+        self.plot_mask = None if self.cbf is None else [bool(m) for m in self.cbf.mask_mode[self.pd.mode_gerak]]
+        awal = [("KONFIG", {nama: float(getattr(config, nama)) for nama in ise.KONFIG_PLOT}),
+                ("MODE",) + self.plot_mode, ("MASK", self.plot_mask)]
+        self.plot_klien.append([sok, alamat[0], (json.dumps(awal) + "\n").encode()])
+        self.plot_status = "terhubung ke laptop %s" % ", ".join(k[1] for k in self.plot_klien)
+        LOGGER.info("plot realtime: laptop %s tersambung", alamat[0])
+
+    def putus_laptop(self, klien, sebab):
+        try:
+            klien[0].close()
+        except OSError:
+            pass
+        self.plot_klien.remove(klien)
+        if not self.plot_klien:
+            self.plot_kiriman = []
+        if sebab is None:
+            return
+        LOGGER.info("plot realtime: laptop %s terputus (%s)", klien[1], sebab)
+        if self.plot_klien:
+            self.plot_status = "terhubung ke laptop %s" % ", ".join(k[1] for k in self.plot_klien)
+        else:
+            self.plot_status = "laptop %s terputus (%s) | %s" % (klien[1], sebab, self.teks_tunggu_laptop())
+
     def gambar_plot(self):
-        """Kirim data yang terkumpul ke proses plot (dipanggil dengan kecepatan GUI)."""
-        if self.plot is None or not self.plot_kiriman:
+        """Dipanggil dengan kecepatan GUI (config.UI_HZ). Terima laptop baru, lalu kirim data yang terkumpul.
+        Semua socket non-blocking: jaringan lambat / putus tidak pernah menahan loop kontrol."""
+        if self.plot_server is None:
             return
-        if not self.plot.is_alive():
-            self.plot = None
-            self.plot_status = "jendela plot ditutup"
-            return
-        self.plot_antrean.put(self.plot_kiriman)
-        self.plot_kiriman = []
+        while True:
+            try:
+                sok, alamat = self.plot_server.accept()
+            except (BlockingIOError, InterruptedError):
+                break
+            except OSError as exc:
+                LOGGER.warning("plot realtime accept: %s", exc)
+                break
+            self.sambung_laptop(sok, alamat)
+        baris = b""
+        if self.plot_kiriman:
+            baris = (json.dumps(self.plot_kiriman) + "\n").encode()
+            self.plot_kiriman = []
+        for klien in list(self.plot_klien):
+            sok = klien[0]
+            try:
+                if sok.recv(1024) == b"":                  # laptop tidak pernah mengirim; b"" = koneksi ditutup
+                    self.putus_laptop(klien, "jendela plot ditutup")
+                    continue
+            except (BlockingIOError, InterruptedError):
+                pass
+            except OSError as exc:
+                self.putus_laptop(klien, type(exc).__name__)
+                continue
+            klien[2] += baris
+            if len(klien[2]) > config.PLOT_TUNGGU_MAKS:     # koneksi mati diam-diam atau jaringan terlalu lambat
+                self.putus_laptop(klien, "jaringan terlalu lambat / putus")
+                continue
+            try:
+                if klien[2]:
+                    klien[2] = klien[2][sok.send(klien[2]):]
+            except (BlockingIOError, InterruptedError):
+                pass
+            except OSError as exc:
+                self.putus_laptop(klien, type(exc).__name__)
 
     def atur_pesan(self, teks):
         self.pesan = teks
@@ -487,7 +556,7 @@ class Atera:
 
     def langkah_kontrol(self, dt):
         self.langkah_kontrol_inti(dt)
-        if self.plot is not None:                          # satu titik plot tiap PLOT_KIRIM_SETIAP siklus
+        if self.plot_klien:                                # satu titik plot tiap PLOT_KIRIM_SETIAP siklus
             self.plot_siklus += 1
             if self.plot_siklus >= config.PLOT_KIRIM_SETIAP:
                 self.plot_siklus = 0
@@ -682,7 +751,7 @@ class Atera:
                     self.joystick.name if self.joystick.connected else "TIDAK ADA",
                     "aktif" if self.keyboard.aktif else "tidak")]
         baris += self.bungkus("Pesan: ", self.pesan)
-        baris += self.bungkus("Plot realtime: ", self.plot_status, 1)
+        baris += self.bungkus("Plot realtime: ", self.plot_status, 2)    # 2 baris: perintah laptop + IP selalu utuh
         masalah = [m for m in self.masalah() if m[0] != INFO]
         if masalah:
             for tingkat, sumber, teks in masalah[:3]:
@@ -814,7 +883,8 @@ class Atera:
                    "  python3 ise.py --daftar                     daftar dan metrik percobaan",
                    "  python3 ise.py --bandingkan --pd 3 --cbf 5   PD KE-03 vs PD+CBF KE-05 (folder BANDING)",
                    "  tambahkan --pengujian untuk hasil PENGUJIAN (L3)",
-                   "", "Plot realtime: python3 atera_main.py --plot  (butuh layar Pi: monitor / VNC / ssh -X)",
+                   "", "Plot realtime di laptop: Raspi  python3 atera_main.py --plot",
+                   "  laptop (satu WiFi, folder atera_program)  python3 ise.py --plot-realtime %s" % self.plot_ip,
                    "  merah = barrier CBF mode gerak ini, abu-abu = tidak dipakai, hitam = KOMET, "
                    "kuning / oranye = |psi| 5 / 10 deg"])
 

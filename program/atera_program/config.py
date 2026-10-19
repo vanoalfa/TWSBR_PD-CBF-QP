@@ -93,16 +93,18 @@ KOMET_REM_SELESAI = 0.5             # [rad/s]
 # =============================================================================
 #                              4. PD  (= simulasi)
 # =============================================================================
-# u_PD = Kp_psi*psi + Kd_psi*dpsi + Kp_theta*theta + Kd_theta*dtheta + Kvel*arah   (torsi SATU roda, pd_control.py)
-Kp_psi = 10.91          # [N m/rad]
-Kd_psi = 2.31           # [N m s/rad]
-Kp_theta = 0.10         # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
-Kd_theta = 0.13         # [N m s/rad]
+# u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
+#                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
+# error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
+Kp_psi = 09.69       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 01.83       #5.2                # [N m s/rad]
+Kp_theta = 0.03      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
+Kd_theta = 0.25      #0.41             # [N m s/rad]
 # Kvel*arah hanya mode GERAK / BEBAS (arah +1 = D-Pad atas, -1 = D-Pad bawah). Kecepatan tunak di lantai datar:
 #     v = -R*Kvel*arah/Kd_theta      -> Kvel NEGATIF supaya D-Pad atas berjalan ke DEPAN
 #     (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s; no-load DDSM115 1.05 m/s)
 # ASUMSI: -0.52 (0.20 m/s). Nilai sebelumnya +0.05 membuat D-Pad atas berjalan MUNDUR ~0.02 m/s.
-Kvel = -0.52            # [N m]
+Kvel = -0.88            # [N m]
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan simulasi/config.py). Tanpa ini pd_control.py juga memakai -1.
 BALANCE_DIRECTION_SIGN = -1.0
@@ -132,12 +134,13 @@ TORSI_BELOK = 0.02                  # [N m]
 # =============================================================================
 #                              5. CBF-QP  (= simulasi)
 # =============================================================================
-Alpha_1 = 54.73         # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 44.85         # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 55.32         # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 33.34         # [1/s]  h5, h6 (jarak s, HOCBF orde 2), hanya mode DIAM
-Alpha_5 = 80.97         # [1/s]  h5, h6 (jarak s, HOCBF orde 2), hanya mode DIAM
-Alpha_6 = 485.31        # [1/s]  h7, h8 (dtheta, CBF orde 1)
+# Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
+Alpha_1 = 35.15 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 52.64 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 46.67 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
+Alpha_4 = 36.95 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_5 = 50.18 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_6 = 223.09 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Semua Alpha_<nomor> berurutan di atas (otomatis dipakai cbf_qp.py dan ise.py).
 NAMA_ALPHA = []
@@ -272,11 +275,16 @@ PLOT_NONAKTIF_WARNA = "0.6"
 PLOT_WARNA_PD = "tab:purple"        # kurva mode PD (ungu)
 PLOT_WARNA_PD_CBF = "tab:blue"      # kurva mode PD + CBF-QP (biru)
 
-# Plot realtime (python3 atera_main.py --plot): jendela matplotlib di layar Raspberry Pi (monitor, VNC, atau ssh -X)
+# Plot realtime DI LAPTOP (laptop dan Raspi satu WiFi / hotspot):
+#   Raspi  : python3 atera_main.py --plot              membuka PLOT_PORT dan mengirim data plot (TCP, JSON per baris)
+#   laptop : python3 ise.py --plot-realtime <IP Raspi> jendela matplotlib di laptop (bisa dari WSL), IP tampil di GUI
+PLOT_PORT = 5005                    # ASUMSI: port TCP bebas di Raspi (ubah bila bentrok; laptop: --port <nomor>)
+PLOT_TUNGGU_MAKS = 200000           # [byte] data belum terkirim (~20 s data). Lebih dari ini = jaringan terlalu lambat:
+                                    #     laptop diputus, lalu laptop menyambung lagi otomatis
 PLOT_RENTANG = 10.0                 # [s] lebar jendela waktu yang ditampilkan
 PLOT_KIRIM_SETIAP = 2               # satu titik plot tiap sekian siklus kontrol (200 Hz / 2 = 100 titik per detik)
-PLOT_HZ = 10.0                      # [Hz] kecepatan gambar ulang jendela plot
-PLOT_BACKEND = ["QtAgg", "Qt5Agg", "TkAgg"]   # dicoba berurutan (pip install PyQt5, atau sudo apt install python3-tk)
+PLOT_HZ = 10.0                      # [Hz] kecepatan gambar ulang jendela plot (laptop)
+PLOT_BACKEND = ["QtAgg", "Qt5Agg", "TkAgg"]   # di LAPTOP, dicoba berurutan (pip install PyQt5, atau sudo apt install python3-tk)
 
 # =============================================================================
 # Turunan (jangan diubah)

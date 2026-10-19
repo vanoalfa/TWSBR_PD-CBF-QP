@@ -36,17 +36,24 @@ Perintah (tambahkan --pengujian untuk hasil PENGUJIAN):
     python3 ise.py --bandingkan --pd 3 --cbf 5 [--tanggal YYYYMMDD] PD KE-03 vs PD+CBF KE-05
     python3 ise.py --gambar-ulang                                   buat ulang PNG + EPS semua CSV (format terbaru)
 
-Plot realtime (python3 atera_main.py --plot): proses_plot() di bawah, berjalan di proses terpisah. Isinya sama dengan
-plot realtime simulasi: Gambar 1 psi - dpsi, Gambar 2 theta - dtheta, Gambar 3 s, dan arus terhadap waktu.
+Plot realtime DI LAPTOP (plot_realtime() di bawah), laptop dan Raspi satu WiFi / hotspot:
+    Raspi  : python3 atera_main.py --plot             Raspi membuka port config.PLOT_PORT dan mengirim data
+    laptop : python3 ise.py --plot-realtime <IP Raspi> dari folder atera_program (IP tampil di GUI atera_main.py)
+Laptop yang menyambung ke Raspi (bukan sebaliknya), jadi bisa dari WSL tanpa membuka port di Windows. Isinya sama
+dengan plot realtime simulasi: Gambar 1 psi - dpsi, Gambar 2 theta - dtheta, Gambar 3 s, dan arus terhadap waktu.
+Garis batas memakai nilai config.py RASPI (dikirim saat tersambung), bukan config.py laptop.
 """
 
 import argparse
 import csv
+import json
 import logging
 import math
 import multiprocessing
 import os
 import re
+import socket
+import time
 from datetime import datetime
 
 import matplotlib
@@ -602,90 +609,139 @@ def _gambar_barrier(gambar1, gambar2, gambar3, mask):
     return [g for ax in sebelum for g in ax.lines if g not in sebelum[ax]]
 
 
-def proses_plot(antrean, jawaban, berhenti, daftar_backend):
-    """Isi proses jendela plot realtime robot fisik. Kiriman dari atera_main.py (list per kiriman):
-        (t, theta, dtheta, psi, dpsi, arus)   satu titik data (NaN = garis diputus)
-        ("RESET",)                            data dikosongkan (MULAI)
-        ("MODE", mode_kontrol, mode_gerak)    warna kurva (PD ungu, PD+CBF biru) dan judul
-        ("MASK", mask atau None)              constraint CBF aktif: barrier merah, lainnya abu-abu
-    Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang."""
-    import time
+# Nilai config.py Raspi yang dipakai plot realtime; dikirim atera_main.py saat laptop tersambung ("KONFIG").
+KONFIG_PLOT = ["psi_max", "psi_max_DEG", "dpsi_max", "dtheta_max", "s_max", "SAFE_TILT_DEG", "S_KOMET", "R",
+               "MAX_CURRENT_A"]
+
+
+def plot_realtime(ip_raspi, port=None):
+    """Jendela plot realtime robot fisik, dijalankan DI LAPTOP. Menyambung ke atera_main.py --plot di Raspi lewat TCP
+    (otomatis mencoba lagi bila Raspi belum jalan / terputus). Tiap baris dari Raspi = JSON list kiriman:
+        [t, theta, dtheta, psi, dpsi, arus]   satu titik data (NaN = garis diputus)
+        ["RESET"]                             data dikosongkan (MULAI)
+        ["MODE", mode_kontrol, mode_gerak]    warna kurva (PD ungu, PD+CBF biru) dan judul
+        ["MASK", mask atau null]              constraint CBF aktif: barrier merah, lainnya abu-abu
+        ["KONFIG", {nama: nilai}]             nilai config.py Raspi (KONFIG_PLOT) untuk garis batas
+    Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang. Tutup jendela atau
+    Ctrl+C untuk berhenti."""
     import numpy as np
-    try:
-        berhasil = ""
-        for backend in daftar_backend:
-            try:
-                plt.switch_backend(backend)
-                berhasil = backend
-                break
-            except Exception:
-                pass
-        if not berhasil:
-            jawaban.put(("gagal", "matplotlib tidak punya backend jendela (pip install PyQt5 / sudo apt install "
-                                  "python3-tk)"))
-            return
-        fig = plt.figure(figsize=(10.0, 9.0))
-        kisi = fig.add_gridspec(3, 2, height_ratios=[1.6, 0.5, 0.9])
-        gambar1 = fig.add_subplot(kisi[0, 0])
-        gambar2 = fig.add_subplot(kisi[0, 1])
-        gambar3 = fig.add_subplot(kisi[1, :])
-        ax_arus = fig.add_subplot(kisi[2, :])
-        warna = {MODE_PD: config.PLOT_WARNA_PD, MODE_PD_CBF: config.PLOT_WARNA_PD_CBF}
-        keadaan = {"mode": MODE_PD, "gerak": "", "mask": None}
+    port = int(port or config.PLOT_PORT)
+    berhasil = ""
+    for backend in config.PLOT_BACKEND:
+        try:
+            plt.switch_backend(backend)
+            berhasil = backend
+            break
+        except Exception:
+            pass
+    if not berhasil:
+        print("matplotlib tidak punya backend jendela: pip install PyQt5, atau sudo apt install python3-tk")
+        return 1
 
-        garis_psi, = gambar1.plot([], [], color=warna[MODE_PD], linewidth=1.4, zorder=2)
-        titik_psi, = gambar1.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
-        garis_theta, = gambar2.plot([], [], color=warna[MODE_PD], linewidth=1.4, zorder=2)
-        titik_theta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
-        garis_s, = gambar3.plot([], [], color=warna[MODE_PD], linewidth=2.0, zorder=2)
-        titik_s, = gambar3.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
-        garis_arus, = ax_arus.plot([], [], color="tab:green")
-        ax_arus.axhline(config.MAX_CURRENT_A, color="black", linewidth=1.0, linestyle=":")
-        ax_arus.axhline(-config.MAX_CURRENT_A, color="black", linewidth=1.0, linestyle=":")
-        ax_arus.set_ylim(-1.2 * config.MAX_CURRENT_A, 1.2 * config.MAX_CURRENT_A)
-        ax_arus.set(xlabel="waktu [s]", ylabel="arus per motor [A]")
-        gambar1.set(xlabel="psi [rad]", ylabel="dpsi [rad/s]")
-        gambar2.set(xlabel="theta [rad]   (s = R*theta)", ylabel="dtheta [rad/s]")
-        gambar2.set_title("Gambar 2", fontsize=10)
-        gambar3.axhline(0.0, color="gray", linewidth=0.6, zorder=1.0)
-        gambar3.set_ylim(-1.0, 1.0)
-        gambar3.set_yticks([0.0])
-        gambar3.set_xlabel("s = R*theta [m]   (dari titik nol Y / B)")
-        gambar3.set_title("Gambar 3", fontsize=10)
-        for ax in (gambar1, gambar2, ax_arus):
-            ax.grid(True, color="0.85")
-        gambar3.grid(True, axis="x", color="0.85")
-        batas = _gambar_barrier(gambar1, gambar2, gambar3, None)
+    fig = plt.figure(figsize=(10.0, 9.0))
+    kisi = fig.add_gridspec(3, 2, height_ratios=[1.6, 0.5, 0.9])
+    gambar1 = fig.add_subplot(kisi[0, 0])
+    gambar2 = fig.add_subplot(kisi[0, 1])
+    gambar3 = fig.add_subplot(kisi[1, :])
+    ax_arus = fig.add_subplot(kisi[2, :])
+    warna = {MODE_PD: config.PLOT_WARNA_PD, MODE_PD_CBF: config.PLOT_WARNA_PD_CBF}
+    keadaan = {"mode": MODE_PD, "gerak": "", "mask": None, "sambungan": "menunggu Raspi %s:%d" % (ip_raspi, port)}
 
-        def tulisan():
-            gambar1.set_title("Gambar 1   (psi_max = %g deg)%s" % (config.psi_max_DEG, (
-                "   CBF aktif: " + teks_mask(keadaan["mask"])) if keadaan["mask"] is not None else ""), fontsize=10)
-            fig.suptitle("ATERA robot fisik | kontrol %s | %s | data %.0f s terakhir"
-                         % (keadaan["mode"], keadaan["gerak"] or "-", config.PLOT_RENTANG), fontsize=9, color="gray")
-            for ax in (gambar1, gambar2, gambar3):
-                _legenda(ax)
-            try:
-                fig.canvas.manager.set_window_title("ATERA - plot realtime robot (%s)" % keadaan["mode"])
-            except Exception:
-                pass
+    garis_psi, = gambar1.plot([], [], color=warna[MODE_PD], linewidth=1.4, zorder=2)
+    titik_psi, = gambar1.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
+    garis_theta, = gambar2.plot([], [], color=warna[MODE_PD], linewidth=1.4, zorder=2)
+    titik_theta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
+    garis_s, = gambar3.plot([], [], color=warna[MODE_PD], linewidth=2.0, zorder=2)
+    titik_s, = gambar3.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
+    garis_arus, = ax_arus.plot([], [], color="tab:green")
+    arus_atas = ax_arus.axhline(config.MAX_CURRENT_A, color="black", linewidth=1.0, linestyle=":")
+    arus_bawah = ax_arus.axhline(-config.MAX_CURRENT_A, color="black", linewidth=1.0, linestyle=":")
+    ax_arus.set_ylim(-1.2 * config.MAX_CURRENT_A, 1.2 * config.MAX_CURRENT_A)
+    ax_arus.set(xlabel="waktu [s]", ylabel="arus per motor [A]")
+    gambar1.set(xlabel="psi [rad]", ylabel="dpsi [rad/s]")
+    gambar2.set(xlabel="theta [rad]   (s = R*theta)", ylabel="dtheta [rad/s]")
+    gambar2.set_title("Gambar 2", fontsize=10)
+    gambar3.axhline(0.0, color="gray", linewidth=0.6, zorder=1.0)
+    gambar3.set_ylim(-1.0, 1.0)
+    gambar3.set_yticks([0.0])
+    gambar3.set_xlabel("s = R*theta [m]   (dari titik nol Y / B)")
+    gambar3.set_title("Gambar 3", fontsize=10)
+    for ax in (gambar1, gambar2, ax_arus):
+        ax.grid(True, color="0.85")
+    gambar3.grid(True, axis="x", color="0.85")
+    batas = [_gambar_barrier(gambar1, gambar2, gambar3, None)]
 
+    def gambar_ulang_batas():
+        for garis in batas[0]:
+            garis.remove()
+        batas[0] = _gambar_barrier(gambar1, gambar2, gambar3, keadaan["mask"])
+
+    def tulisan():
+        gambar1.set_title("Gambar 1   (psi_max = %g deg)%s" % (config.psi_max_DEG, (
+            "   CBF aktif: " + teks_mask(keadaan["mask"])) if keadaan["mask"] is not None else ""), fontsize=10)
+        fig.suptitle("ATERA robot fisik | %s | kontrol %s | %s | data %.0f s terakhir"
+                     % (keadaan["sambungan"], keadaan["mode"], keadaan["gerak"] or "-", config.PLOT_RENTANG),
+                     fontsize=9, color="gray")
+        for ax in (gambar1, gambar2, gambar3):
+            _legenda(ax)
+        try:
+            fig.canvas.manager.set_window_title("ATERA - plot realtime robot (%s)" % keadaan["mode"])
+        except Exception:
+            pass
+
+    def ganti_sambungan(teks):
+        keadaan["sambungan"] = teks
+        print(teks, flush=True)
         tulisan()
-        fig.tight_layout()
-        fig.show()
-        jawaban.put(("siap", berhasil))
+        fig.canvas.draw_idle()
 
-        data = {k: [] for k in ("t", "theta", "dtheta", "psi", "dpsi", "arus")}
-        while not berhenti.is_set() and plt.fignum_exists(fig.number):
-            ada_baru = False
-            while True:
+    tulisan()
+    fig.tight_layout()
+    fig.show()
+    print("Plot realtime (backend %s): menyambung ke Raspi %s:%d. Tutup jendela atau Ctrl+C untuk berhenti."
+          % (berhasil, ip_raspi, port), flush=True)
+
+    kolom = ("t", "theta", "dtheta", "psi", "dpsi", "arus")
+    data = {k: [] for k in kolom}
+    sambungan = None
+    sisa = b""
+    coba_lagi = 0.0
+    try:
+        while plt.fignum_exists(fig.number):
+            sekarang = time.monotonic()
+            if sambungan is None and sekarang >= coba_lagi:
+                coba_lagi = sekarang + 1.0
                 try:
-                    kiriman = antrean.get_nowait()
-                except Exception:
-                    break
-                ada_baru = True
+                    sambungan = socket.create_connection((ip_raspi, port), timeout=0.5)
+                    sambungan.setblocking(False)
+                    sisa = b""
+                    data = {k: [] for k in kolom}
+                    ganti_sambungan("terhubung ke Raspi %s" % ip_raspi)
+                except OSError:
+                    sambungan = None
+            kiriman_baru = []
+            if sambungan is not None:
+                try:
+                    while True:
+                        potongan = sambungan.recv(65536)
+                        if not potongan:
+                            raise ConnectionError("Raspi menutup koneksi")
+                        sisa += potongan
+                except (BlockingIOError, InterruptedError):
+                    pass
+                except OSError as exc:
+                    sambungan.close()
+                    sambungan = None
+                    ganti_sambungan("terputus (%s), mencoba lagi ke %s:%d" % (exc, ip_raspi, port))
+                *baris, sisa = sisa.split(b"\n")
+                for satu in baris:
+                    if satu.strip():
+                        kiriman_baru.append(json.loads(satu))
+
+            for kiriman in kiriman_baru:
                 for isi in kiriman:
                     if isi[0] == "RESET":
-                        data = {k: [] for k in data}
+                        data = {k: [] for k in kolom}
                     elif isi[0] == "MODE":
                         keadaan["mode"], keadaan["gerak"] = isi[1], isi[2]
                         for garis in (garis_psi, garis_theta, garis_s):
@@ -693,14 +749,20 @@ def proses_plot(antrean, jawaban, berhenti, daftar_backend):
                         tulisan()
                     elif isi[0] == "MASK":
                         keadaan["mask"] = isi[1]
-                        for garis in batas:
-                            garis.remove()
-                        batas = _gambar_barrier(gambar1, gambar2, gambar3, isi[1])
+                        gambar_ulang_batas()
+                        tulisan()
+                    elif isi[0] == "KONFIG":
+                        for nama, nilai in isi[1].items():
+                            setattr(config, nama, nilai)
+                        for garis, tanda in ((arus_atas, 1.0), (arus_bawah, -1.0)):
+                            garis.set_ydata([tanda * config.MAX_CURRENT_A] * 2)
+                        ax_arus.set_ylim(-1.2 * config.MAX_CURRENT_A, 1.2 * config.MAX_CURRENT_A)
+                        gambar_ulang_batas()
                         tulisan()
                     else:
-                        for k, v in zip(("t", "theta", "dtheta", "psi", "dpsi", "arus"), isi):
-                            data[k].append(v)
-            if ada_baru:
+                        for k, v in zip(kolom, isi):
+                            data[k].append(float(v))
+            if kiriman_baru:
                 t = data["t"]
                 buang = 0
                 while buang < len(t) and t[buang] < t[-1] - config.PLOT_RENTANG:
@@ -723,11 +785,10 @@ def proses_plot(antrean, jawaban, berhenti, daftar_backend):
             time.sleep(1.0 / config.PLOT_HZ)
     except KeyboardInterrupt:
         pass
-    except Exception as exc:
-        try:
-            jawaban.put(("gagal", "%s: %s" % (type(exc).__name__, exc)))
-        except Exception:
-            pass
+    finally:
+        if sambungan is not None:
+            sambungan.close()
+    return 0
 
 
 # =============================================================================
@@ -857,8 +918,13 @@ def main():
     parser.add_argument("--pd", type=int, default=None, help="nomor KE percobaan PD")
     parser.add_argument("--cbf", type=int, default=None, help="nomor KE percobaan PD+CBF")
     parser.add_argument("--tanggal", type=str, default=None, help="YYYYMMDD")
+    parser.add_argument("--plot-realtime", metavar="IP_RASPI", default=None,
+                        help="DI LAPTOP: plot realtime dari Raspi (atera_main.py --plot), contoh 192.168.1.23")
+    parser.add_argument("--port", type=int, default=None, help="port plot realtime (default config.PLOT_PORT)")
     pilihan = parser.parse_args()
     jenis = JENIS_PENGUJIAN if pilihan.pengujian else JENIS_PERCOBAAN
+    if pilihan.plot_realtime:
+        return plot_realtime(pilihan.plot_realtime, pilihan.port)
     if pilihan.daftar:
         perintah_daftar(jenis)
     elif pilihan.bandingkan:
