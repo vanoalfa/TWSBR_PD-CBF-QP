@@ -62,6 +62,3 @@ acados/
 
 # RPi-specific
 *.pid
-
-# Optuna
-atera_optuna.db

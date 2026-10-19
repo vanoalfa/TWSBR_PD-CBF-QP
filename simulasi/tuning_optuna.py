@@ -818,7 +818,9 @@ class Penguji:
 # =============================================================================
 def buat_study(tahap, profil):
     os.makedirs(FOLDER_HASIL, exist_ok=True)
-    sampler = optuna.samplers.TPESampler(seed=config.OPTUNA_SEED)
+    # multivariate=True: TPE mempelajari semua variabel BERSAMAAN (pasangan yang saling terkait seperti Kp_psi-Kd_psi,
+    # Alpha_1-Alpha_2, Alpha_4-Alpha_5), bukan satu per satu. Optuna menampilkan ExperimentalWarning, itu normal.
+    sampler = optuna.samplers.TPESampler(seed=config.OPTUNA_SEED, multivariate=True)
     pruner = optuna.pruners.MedianPruner(n_startup_trials=config.OPTUNA_PRUNER_STARTUP,
                                          n_warmup_steps=config.OPTUNA_PRUNER_WARMUP_S)
     return optuna.create_study(study_name=nama_study(tahap, profil), storage=DATABASE, direction="minimize",
