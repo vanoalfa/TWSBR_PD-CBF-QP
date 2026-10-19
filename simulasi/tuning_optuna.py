@@ -52,14 +52,24 @@ TAHAP SEMUA DUA MODE: gain PD dan Alpha yang SAMA diuji PD saja (CBF-QP mati) la
     bagus sendirian, dan trial yang PD + CBF-QP-nya lebih buruk dari PD saja dihukum, sehingga Optuna mencari Alpha
     yang membuat CBF-QP tidak memperburuk PD.
 
+SKENARIO S1 S2 S3 (tahap dengan "miring": True, yaitu SEMUA; config.py blok "SKENARIO S1 S2 S3"). Tiap mode:
+    S1 dorongan di lantai datar   : gaya dorong dinaikkan sampai gagal (bisection, seperti tahap PD) -> gaya_lolos
+    S2 bidang miring tanpa dorongan: kemiringan dinaikkan OPTUNA_MIRING_LANGKAH tiap berhasil (bisection) ->
+                                    miring_lolos. Berhasil = tidak jatuh, |s| <= s_max, ch/s <= batas, selama
+                                    OPTUNA_MIRING_LAMA detik tiap ulangan (uji_miring)
+    S3 dorongan di bidang miring  : gaya_lolos S1 di kemiringan miring_lolos S2 (skenario dan syarat lolos S1)
+    skor mode = skor S1 - OPTUNA_BOBOT_MIRING x miring_lolos - (OPTUNA_BOBOT_S3 bila S3 lolos)
+    S2 dan S3 baru dijalankan bila S1 punya gaya lolos (> 0); S3 butuh miring_lolos > 0.
+
 Dua jenis penghentian otomatis:
     pruning   : satu TRIAL dihentikan bila skor sementaranya (dilaporkan tiap 1 detik simulasi) lebih buruk dari
                 median trial sebelumnya pada detik yang sama (MedianPruner, hanya tahap CBFQP_*).
     stagnan   : seluruh TAHAP berhenti sendiri bila skor terbaik tidak membaik selama OPTUNA_STAGNANT trial selesai
                 berturut-turut (PenjagaStagnan), lalu laporan dibuat seperti biasa. Lihat config.py bagian 13.
 
-Log terminal tiap trial: trial | status | skor | waktu nyata | terbaik | gaya | ch/s | psimaks | gagal | detail
+Log terminal tiap trial: trial | status | skor | waktu nyata | terbaik | gaya | miring | ch/s | psimaks | gagal | detail
     gaya    = gaya lolos tertinggi [N] (tanpa komet), "-" bila gaya terendah pun komet
+    miring  = kemiringan lolos S2 [deg] (tahap "miring"; dua mode: mode PD + CBF-QP), "-" bila tidak ada
     ch/s    = chattering per detik: berapa kali u berbalik dari >= +a ke <= -a (atau sebaliknya),
               a = OPTUNA_AMBANG_CHATTERING x u_max. Getaran kecil di sekitar 0 (noise) tidak dihitung.
               ch/s > OPTUNA_BATAS_CHATTERING = pengujian dianggap KOMET (kontrol bergetar tidak boleh dianggap lolos).
@@ -88,6 +98,13 @@ Hasil (folder OPTUNA):
     (untuk profil DATASHEET: ..._DATASHEET, diberi label BELUM TERVERIFIKASI)
 Nilai terbaik dicetak di terminal dalam format config.py (termasuk gaya_pd_terbaik untuk tahap PD). Salin sendiri
 ke config.py.
+
+SAMA DENGAN ROBOT FISIK (supaya hasil tuning langsung disalin ke program/atera_program/config.py):
+    - CBF-QP tidak diberi tahu kemiringan lantai (config.CBF_TAHU_ZETA = False, model CBF zeta = 0, seperti robot
+      dengan zeta_DEG = 0); gangguan kemiringan, dorongan, dan selisih model ditaksir DOB.
+    - DOB dijalankan tiap siklus dengan urutan robot: DOB perbarui -> PD -> CBF-QP -> DOB catat u, dan dikosongkan
+      di awal tiap ulangan (robot: saat MULAI).
+    - safety set, Alpha, gain, slack, margin, dan DOB dibaca dari config.py simulasi yang nilainya = config.py robot.
 
 Butuh: pip install optuna
 Nama file sengaja BUKAN optuna.py: file bernama optuna.py akan menutupi library optuna saat "import optuna".
@@ -125,7 +142,8 @@ TAHAP_GABUNGAN = "SEMUA"
 FISIKA_SKENARIO = ["CONTROL_HZ", "SIM_JEDA_TORSI", "SIM_BATAS_KECEPATAN", "MOTOR_NO_LOAD_SPEED_RPM",
                    "MOTOR_STALL_CURRENT_A", "MOTOR_KT", "MAX_CURRENT_A", "SIM_MODEL_IMU", "SIM_GYRO_NOISE_DEG_S",
                    "SIM_ACC_NOISE_DEG", "LAMA_DORONG", "DORONG_SISI", "DORONG_GESER_SAMPING", "SAFE_TILT_DEG",
-                   "S_KOMET", "psi_max", "dpsi_max", "s_max"]
+                   "S_KOMET", "psi_max", "dpsi_max", "s_max",
+                   "CBF_TAHU_ZETA", "DOB_AKTIF", "DOB_TAU_S", "DOB_BATAS", "CBF_MARGIN_DEG"]
 TEKS_ARAH = {1: "depan", -1: "belakang"}
 STATUS_SELESAI = "selesai"
 STATUS_KOMET = "komet"
@@ -149,11 +167,16 @@ KOLOM_DIAG = (["gaya_N", "chattering_per_s", "psi_maks_deg", "dpsi_maks_rad_s", 
 # Tahap SEMUA dua mode (atribut trial dan kolom CSV): gaya lolos dan skor PD saja, skor PD + CBF-QP, dan penalti
 # bila PD + CBF-QP lebih buruk dari PD saja (selisih skor, sebelum dikali OPTUNA_BOBOT_CBF_BURUK).
 KOLOM_DUA = ["gaya_pd_saja_N", "skor_pd_saja", "skor_pd_cbf", "cbf_lebih_buruk"]
+# Skenario S1 S2 S3 (tahap "miring", atribut trial dan kolom CSV). Dua mode: tanpa akhiran = mode PD + CBF-QP,
+# akhiran _pd_saja = mode PD saja. miring_deg = kemiringan lolos S2 [deg], s3_lolos = 1 (lolos) / 0 (gagal atau tidak
+# dijalankan), miring_s_maks_m = puncak |s| pengujian S2 yang lolos pada miring_deg.
+KOLOM_MIRING = ["miring_deg", "s3_lolos", "miring_s_maks_m", "miring_pd_saja_deg", "s3_pd_saja_lolos",
+                "miring_s_maks_pd_saja_m"]
 
 # Baris log terminal (lihat docstring): header dan isi memakai lebar kolom yang sama.
-JUDUL_KOLOM = ("trial", "status", "skor", "waktu", "terbaik", "gaya", "ch/s", "psimaks", "gagal", "detail")
-FORMAT_HEADER = "%5s | %-7s | %11s | %7s | %-18s | %6s | %7s | %7s | %6s | %s"
-FORMAT_BARIS = "%5d | %-7s | %11s | %5.1f s | %-18s | %6s | %7.1f | %7.1f | %6s | %s"
+JUDUL_KOLOM = ("trial", "status", "skor", "waktu", "terbaik", "gaya", "miring", "ch/s", "psimaks", "gagal", "detail")
+FORMAT_HEADER = "%5s | %-7s | %11s | %7s | %-18s | %6s | %6s | %7s | %7s | %6s | %s"
+FORMAT_BARIS = "%5d | %-7s | %11s | %5.1f s | %-18s | %6s | %6s | %7.1f | %7.1f | %6s | %s"
 
 
 def langkah(detik):
@@ -198,6 +221,19 @@ def daftar_gaya(profil):
                  "profil %s (%.2f)." % (maks, profil, awal))
     jumlah = int(math.floor((maks - awal) / jarak + 1e-9))
     return [round(awal + i * jarak, 6) for i in range(jumlah + 1)]
+
+
+def daftar_miring():
+    """Kisi kemiringan S2 [deg]: OPTUNA_MIRING_LANGKAH, 2 x langkah, ... sampai OPTUNA_MIRING_MAKS."""
+    jarak = float(config.OPTUNA_MIRING_LANGKAH)
+    maks = float(config.OPTUNA_MIRING_MAKS)
+    if jarak <= 0.0 or maks < jarak:
+        sys.exit("Periksa config.py: perlu OPTUNA_MIRING_LANGKAH > 0 dan OPTUNA_MIRING_MAKS (%.2f) >= "
+                 "OPTUNA_MIRING_LANGKAH (%.2f)." % (maks, jarak))
+    if float(config.OPTUNA_MIRING_LAMA) <= 0.0:
+        sys.exit("Periksa config.py: perlu OPTUNA_MIRING_LAMA > 0.")
+    jumlah = int(math.floor(maks / jarak + 1e-9))
+    return [round(i * jarak, 6) for i in range(1, jumlah + 1)]
 
 
 def daftar_gaya_cbf(profil):
@@ -281,6 +317,11 @@ def teks_gaya(gaya):
     return "%.1f" % gaya if gaya > 0.0 else "-"
 
 
+def teks_miring(miring):
+    """Kemiringan lolos S2 untuk log, "-" bila 0 atau tidak ada (None)."""
+    return "%.1f" % miring if miring is not None and miring > 0.0 else "-"
+
+
 def overshoot_persen(nilai, acuan, puncak_min, n_rata):
     """Overshoot respon SATU dorongan [%] (syarat lolos, lihat config.py blok SYARAT LOLOS):
         e(t)      = nilai(t) - acuan           (acuan = rata-rata sinyal sesaat sebelum dorongan)
@@ -326,7 +367,9 @@ class Penguji:
         if pakai_cbf:
             print("Menyiapkan CBF-QP (CasADi) ...")
             from cbf_qp import CBFQP
-            self.cbf = CBFQP()
+            # Sama dengan robot fisik (config.CBF_TAHU_ZETA = False): model CBF-QP memakai zeta = 0 walau lantai
+            # simulasi miring; gangguan kemiringan ditaksir DOB (dijalankan tiap siklus, lihat _satu_ulangan).
+            self.cbf = CBFQP(zeta=None if config.CBF_TAHU_ZETA else 0.0)
         # Nilai config.py saat program mulai: dasar semua variabel yang tidak dituning (nilai terkunci).
         self.dasar = {nama: float(getattr(config, nama)) for nama in semua_variabel()}
         self.tahap = None
@@ -337,6 +380,8 @@ class Penguji:
         self.cari_gaya = False              # True: tiap trial mencari gaya dorong tertinggi yang lolos (tahap PD)
         self.dua_mode = False               # True: tiap trial PD saja + PD + CBF-QP dengan gain sama (tahap SEMUA)
         self.diag_dua = dict.fromkeys(KOLOM_DUA, 0.0)   # hasil dua mode trial terakhir (lihat KOLOM_DUA)
+        self.miring = False                 # True: tiap trial (tiap mode) S1 -> S2 -> S3 (tahap SEMUA)
+        self.diag_miring = {}               # hasil S2 / S3 trial terakhir (lihat KOLOM_MIRING)
         self.gaya_cbf = None                # daftar gaya dorong tahap CBFQP_* [N]
         self.skor_per_gaya = {}             # tahap CBFQP_*: gaya [N] -> skor pengujian trial terakhir
         self.diag = dict.fromkeys(KOLOM_DIAG, 0.0)       # diagnostik trial terakhir (lihat KOLOM_DIAG)
@@ -369,6 +414,10 @@ class Penguji:
         self.dua_mode = bool(definisi.get("dua_mode", False))
         if self.dua_mode and not (self.pakai_cbf and self.cari_gaya):
             raise RuntimeError("Tahap %s: dua_mode butuh barrier (CBF-QP) dan cari_gaya = True." % tahap)
+        self.miring = bool(definisi.get("miring", False))
+        if self.miring and not self.cari_gaya:
+            raise RuntimeError("Tahap %s: miring (S1 S2 S3) butuh cari_gaya = True." % tahap)
+        self.diag_miring = {}
         self.gaya_cbf = None if self.cari_gaya else daftar_gaya_cbf(self.profil)
 
     def atur_zeta(self, zeta_deg):
@@ -428,6 +477,12 @@ class Penguji:
         hasil["dua_mode"] = self.dua_mode
         if self.dua_mode:
             hasil["bobot_cbf_buruk"] = float(config.OPTUNA_BOBOT_CBF_BURUK)
+        if self.miring:
+            # hanya dicatat bila aktif, supaya study tahap lain yang sudah ada tidak dianggap berubah skenarionya
+            hasil.update({"miring": True, "miring_langkah": float(config.OPTUNA_MIRING_LANGKAH),
+                          "miring_maks": float(config.OPTUNA_MIRING_MAKS),
+                          "miring_lama": float(config.OPTUNA_MIRING_LAMA),
+                          "bobot_miring": float(config.OPTUNA_BOBOT_MIRING), "bobot_s3": float(config.OPTUNA_BOBOT_S3)})
         for nama in FISIKA_SKENARIO:
             if hasattr(config, nama):
                 nilai = getattr(config, nama)
@@ -526,6 +581,8 @@ class Penguji:
         self.sim.reset()
         self.sim.acak = np.random.default_rng(config.OPTUNA_SEED + ulangan)
         self.sim.gaya_dorong = float(gaya)
+        if self.cbf is not None:
+            self.cbf.reset_dob()                  # robot fisik: DOB dikosongkan saat MULAI
         self.pd.set_command(0)                    # mode DIAM (tanpa perintah gerak)
         data = {"t": [], "psi": [], "s": [], "waktu_dorong": [], "nama_dorong": nama, "ulangan": ulangan}
         if rekam:
@@ -608,6 +665,9 @@ class Penguji:
                 data["waktu_dorong"].append(k * dt)
 
             x = self.sim.baca_state()
+            # urutan sama dengan robot fisik: DOB (awal siklus) -> PD -> CBF-QP -> DOB (catat u)
+            if self.pakai_cbf:
+                self.cbf.dob_perbarui(x, config.DT)
             u_PD = self.pd.compute(x)
             if not self.pakai_cbf:
                 u = max(config.u_min, min(config.u_max, u_PD))
@@ -615,6 +675,7 @@ class Penguji:
             else:
                 u = self.cbf.compute(x, u_PD)
                 gagal = not self.cbf.feasible              # status CBF-QP bukan AMAN (SLACK, GAGAL, atau ALPHA_NOL)
+                self.cbf.dob_catat(x, u)
             self.sim.step(u)
 
             # Dinilai dari state yang dibaca kontrol (psi hasil Kalman).
@@ -728,6 +789,135 @@ class Penguji:
         skor_trial = -config.OPTUNA_BOBOT_GAYA * kisi[lolos] + skor_lolos
         return skor_trial, STATUS_SELESAI, "; ".join(bagian)
 
+    def uji_miring(self, gain, zeta_deg):
+        """Satu pengujian S2 di bidang miring zeta_deg [deg], TANPA dorongan, mode kontrol sekarang (self.pakai_cbf):
+        OPTUNA_ULANGAN ulangan (reset, seed noise OPTUNA_SEED + k seperti uji), robot diletakkan tegak lalu dibiarkan
+        OPTUNA_MIRING_LAMA detik dalam mode DIAM.
+        BERHASIL bila sepanjang waktu |psi| <= SAFE_TILT_DEG (tidak jatuh) dan |s| <= s_max (tidak meluncur melewati
+        barrier s), dan ch/s seluruh pengujian <= OPTUNA_BATAS_CHATTERING (0 = tidak dicek).
+        Mengembalikan (berhasil, detail, info): detail = penyebab gagal ("" bila berhasil), info = dict s_maks_m,
+        psi_maks_deg, chattering_per_s."""
+        self.atur_zeta(zeta_deg)
+        self.atur_gain(gain)
+        dt = config.DT
+        batas_psi = math.radians(config.SAFE_TILT_DEG)
+        ambang_u = config.OPTUNA_AMBANG_CHATTERING * config.u_max
+        jumlah_langkah = langkah(config.OPTUNA_MIRING_LAMA)
+        info = {"s_maks_m": 0.0, "psi_maks_deg": 0.0, "chattering_per_s": 0.0}
+        balik = 0
+        langkah_total = 0
+        gagal = ""
+        for ulangan in range(config.OPTUNA_ULANGAN):
+            label = ", U%d" % (ulangan + 1) if config.OPTUNA_ULANGAN > 1 else ""
+            self.sim.reset()
+            self.sim.acak = np.random.default_rng(config.OPTUNA_SEED + ulangan)
+            self.sim.gaya_dorong = 0.0
+            self.pd.set_command(0)                    # mode DIAM (tanpa perintah gerak)
+            if self.cbf is not None:
+                self.cbf.reset_dob()                  # robot fisik: DOB dikosongkan saat MULAI
+            tanda_besar = 0.0
+            for k in range(jumlah_langkah):
+                x = self.sim.baca_state()
+                # urutan sama dengan robot fisik: DOB (awal siklus) -> PD -> CBF-QP -> DOB (catat u)
+                if self.pakai_cbf:
+                    self.cbf.dob_perbarui(x, config.DT)
+                u_PD = self.pd.compute(x)
+                if not self.pakai_cbf:
+                    u = max(config.u_min, min(config.u_max, u_PD))
+                else:
+                    u = self.cbf.compute(x, u_PD)
+                    self.cbf.dob_catat(x, u)
+                self.sim.step(u)
+                psi = float(x[2])
+                s = model.hitung_s(x)
+                info["psi_maks_deg"] = max(info["psi_maks_deg"], math.degrees(abs(psi)))
+                info["s_maks_m"] = max(info["s_maks_m"], abs(s))
+                if abs(u) >= ambang_u:
+                    tanda = math.copysign(1.0, u)
+                    if tanda_besar != 0.0 and tanda != tanda_besar:
+                        balik = balik + 1
+                    tanda_besar = tanda
+                langkah_total = langkah_total + 1
+                if abs(psi) > batas_psi:
+                    gagal = "|psi| > %.0f deg (t %.1f s%s)" % (config.SAFE_TILT_DEG, k * dt, label)
+                elif abs(s) > config.s_max:
+                    gagal = "|s| > s_max %.2f m (t %.1f s%s)" % (config.s_max, k * dt, label)
+                if gagal:
+                    break
+            if gagal:
+                break
+        lama = langkah_total * dt
+        info["chattering_per_s"] = balik / lama if lama > 0.0 else 0.0
+        batas_ch = float(config.OPTUNA_BATAS_CHATTERING)
+        if not gagal and batas_ch > 0.0 and info["chattering_per_s"] > batas_ch:
+            gagal = "chattering %.2f/s > %g/s" % (info["chattering_per_s"], batas_ch)
+        return not gagal, gagal, info
+
+    def cari_miring_tertinggi(self, gain):
+        """S2: bisection kemiringan tertinggi (kisi daftar_miring) yang berhasil uji_miring, mode kontrol sekarang.
+        ASUMSI: berhasil pada kemiringan z berarti berhasil pada kemiringan yang lebih kecil.
+        Mengembalikan (miring_lolos [deg], 0 bila kisi pertama pun gagal; detail; info uji_miring yang berhasil pada
+        miring_lolos, atau pada kisi pertama bila gagal)."""
+        kisi = daftar_miring()
+        berhasil, detail, info = self.uji_miring(gain, kisi[0])
+        if not berhasil:
+            return 0.0, "gagal pada %.1f deg: %s" % (kisi[0], detail), info
+        # kisi[lolos] berhasil; kisi[gagal] gagal (gagal = len(kisi): di atas OPTUNA_MIRING_MAKS, dianggap gagal).
+        lolos, gagal = 0, len(kisi)
+        info_lolos = info
+        detail_gagal = ""
+        while gagal - lolos > 1:
+            tengah = (lolos + gagal) // 2
+            berhasil, detail, info = self.uji_miring(gain, kisi[tengah])
+            if berhasil:
+                lolos = tengah
+                info_lolos = info
+            else:
+                gagal = tengah
+                detail_gagal = "gagal pada %.1f deg: %s" % (kisi[tengah], detail)
+        teks = detail_gagal if detail_gagal else "lolos sampai batas %.1f deg" % kisi[-1]
+        return kisi[lolos], teks, info_lolos
+
+    def nilai_mode(self, gain, pakai_cbf):
+        """Satu mode kontrol (pakai_cbf False = PD saja), lalu mode tahap dikembalikan. Mask barrier CBF-QP tetap dari
+        tahap (atur_tahap).
+            tanpa "miring": S1 saja (cari_gaya_tertinggi di lantai OPTUNA_ZETA_DEG), sama persis dengan sebelumnya
+            dengan "miring": S1 -> S2 (cari_miring_tertinggi) -> S3 (uji gaya_lolos S1 di miring_lolos S2)
+                             skor = skor S1 - OPTUNA_BOBOT_MIRING x miring_lolos - (OPTUNA_BOBOT_S3 bila S3 lolos)
+                             S2 dan S3 tidak dijalankan bila S1 gagal pada gaya terendah (miring_lolos = 0)
+        Mengembalikan (skor, status, detail, hasil_miring). status dari S1 (komet bila gaya terendah pun komet).
+        self.diag = diagnostik S1. hasil_miring = {} tanpa "miring", atau dict miring_deg, s3_lolos, miring_s_maks_m."""
+        if pakai_cbf and self.cbf is None:
+            raise RuntimeError("Mode PD + CBF-QP butuh Penguji dengan CBF-QP.")
+        mode_tahap = self.pakai_cbf
+        self.pakai_cbf = bool(pakai_cbf)
+        try:
+            skor, status, detail = self.cari_gaya_tertinggi(gain, config.OPTUNA_ZETA_DEG)
+            if not self.miring:
+                return skor, status, detail, {}
+            diag_s1 = self.diag
+            gaya = float(diag_s1["gaya_N"])
+            if gaya <= 0.0:
+                # S2 dan S3 baru dijalankan setelah S1 punya hasil (gaya lolos > 0)
+                hasil = {"miring_deg": 0.0, "s3_lolos": 0.0, "miring_s_maks_m": 0.0}
+                return skor, status, "S1 %s; S2 dan S3 tidak dijalankan (S1 gagal pada gaya terendah)" % detail, hasil
+            miring, detail_s2, info_s2 = self.cari_miring_tertinggi(gain)
+            if miring > 0.0:
+                _, status_s3, detail_s3, _, _ = self.uji(gain, miring, gaya)
+                s3_lolos = status_s3 == STATUS_SELESAI
+                teks_s3 = "lolos" if s3_lolos else "komet " + detail_s3.split("; tidak stabil:")[0]
+                teks_s3 = "S3 %.1f N di %.1f deg: %s" % (gaya, miring, teks_s3)
+            else:
+                s3_lolos = False
+                teks_s3 = "S3 tidak dijalankan (kemiringan S2 = 0)"
+            self.diag = diag_s1
+            skor = skor - config.OPTUNA_BOBOT_MIRING * miring - (config.OPTUNA_BOBOT_S3 if s3_lolos else 0.0)
+            detail = "S1 %s; S2 %s deg: %s; %s" % (detail, teks_miring(miring), detail_s2, teks_s3)
+            hasil = {"miring_deg": miring, "s3_lolos": 1.0 if s3_lolos else 0.0, "miring_s_maks_m": info_s2["s_maks_m"]}
+            return skor, status, detail, hasil
+        finally:
+            self.pakai_cbf = mode_tahap
+
     def cari_gaya_mode(self, gain, zeta_deg, pakai_cbf):
         """cari_gaya_tertinggi dengan mode kontrol tertentu (pakai_cbf False = PD saja), lalu mode tahap dikembalikan.
         Mask barrier CBF-QP tetap dari tahap (atur_tahap)."""
@@ -741,14 +931,19 @@ class Penguji:
             self.pakai_cbf = mode_tahap
 
     def trial_dua_mode(self, gain):
-        """Tahap SEMUA: gain yang SAMA diuji PD saja lalu PD + CBF-QP (gaya lolos tertinggi masing-masing).
+        """Tahap SEMUA: gain yang SAMA diuji PD saja lalu PD + CBF-QP (nilai_mode: S1, dan S2 S3 bila "miring").
             skor = skor PD saja + skor PD + CBF-QP + OPTUNA_BOBOT_CBF_BURUK x max(0, skor PD + CBF-QP - skor PD saja)
-        Mengembalikan (skor, status, detail). self.diag = diagnostik PD + CBF-QP, self.diag_dua = KOLOM_DUA."""
-        zeta = config.OPTUNA_ZETA_DEG
-        skor_pd, _, detail_pd = self.cari_gaya_mode(gain, zeta, pakai_cbf=False)
+        Mengembalikan (skor, status, detail). self.diag = diagnostik S1 PD + CBF-QP, self.diag_dua = KOLOM_DUA,
+        self.diag_miring = KOLOM_MIRING (bila "miring")."""
+        skor_pd, _, detail_pd, miring_pd = self.nilai_mode(gain, pakai_cbf=False)
         gaya_pd = self.diag["gaya_N"]
-        skor_cbf, _, detail_cbf = self.cari_gaya_mode(gain, zeta, pakai_cbf=True)
+        skor_cbf, _, detail_cbf, miring_cbf = self.nilai_mode(gain, pakai_cbf=True)
         gaya_cbf = self.diag["gaya_N"]
+        if self.miring:
+            self.diag_miring = {"miring_deg": miring_cbf["miring_deg"], "s3_lolos": miring_cbf["s3_lolos"],
+                                "miring_s_maks_m": miring_cbf["miring_s_maks_m"],
+                                "miring_pd_saja_deg": miring_pd["miring_deg"], "s3_pd_saja_lolos": miring_pd["s3_lolos"],
+                                "miring_s_maks_pd_saja_m": miring_pd["miring_s_maks_m"]}
         lebih_buruk = skor_cbf - skor_pd
         if lebih_buruk < 1.0e-3:            # selisih numerik sangat kecil (CBF-QP hampir tidak aktif): tidak dihitung
             lebih_buruk = 0.0
@@ -805,11 +1000,15 @@ class Penguji:
         return total, STATUS_KOMET if komet else STATUS_SELESAI, "; ".join(bagian)
 
     def jalankan_trial(self, gain, trial=None):
-        """Satu trial di lantai OPTUNA_ZETA_DEG: (skor, status, detail). Diagnostik di self.diag."""
+        """Satu trial: (skor, status, detail). Lantai OPTUNA_ZETA_DEG; tahap "miring" juga S2 dan S3 di bidang
+        miring. Diagnostik di self.diag (dan self.diag_dua, self.diag_miring)."""
         if self.dua_mode:
             return self.trial_dua_mode(gain)
         if self.cari_gaya:
-            return self.cari_gaya_tertinggi(gain, config.OPTUNA_ZETA_DEG)
+            skor, status, detail, hasil_miring = self.nilai_mode(gain, self.pakai_cbf)
+            if self.miring:
+                self.diag_miring = hasil_miring
+            return skor, status, detail
         return self.uji_beberapa_gaya(gain, config.OPTUNA_ZETA_DEG, self.gaya_cbf, trial)
 
 
@@ -1014,12 +1213,23 @@ def cetak_kepala(study, tahap, profil, penguji, definisi, variabel, bawah, atas,
     if config.OPTUNA_STABIL_LAMA >= config.OPTUNA_DURASI_STABIL:
         print("PERHATIAN: OPTUNA_STABIL_LAMA (%.1f s) >= OPTUNA_DURASI_STABIL (%.1f s): robot tidak pernah "
               "sempat dianggap stabil." % (config.OPTUNA_STABIL_LAMA, config.OPTUNA_DURASI_STABIL))
-    print("gaya = gaya lolos [N] | ch/s = u berbalik antara >= +%.2f dan <= -%.2f N m per detik (chattering) | "
-          "psimaks = puncak |psi| [deg] | gagal = lama status CBF bukan AMAN [s]"
+    print("gaya = gaya lolos [N] | miring = kemiringan lolos S2 [deg] | ch/s = u berbalik antara >= +%.2f dan "
+          "<= -%.2f N m per detik (chattering) | psimaks = puncak |psi| [deg] | gagal = lama status CBF bukan AMAN [s]"
           % (config.OPTUNA_AMBANG_CHATTERING * config.u_max, config.OPTUNA_AMBANG_CHATTERING * config.u_max))
     print("SYARAT LOLOS (config.py): tidak jatuh, ch/s <= %g, overshoot psi <= %g %%, overshoot s <= %g %% "
           "(0 = syarat mati); tidak memenuhi = KOMET"
           % (config.OPTUNA_BATAS_CHATTERING, config.OPTUNA_SYARAT_OVERSHOOT_PSI, config.OPTUNA_SYARAT_OVERSHOOT_S))
+    if penguji.miring:
+        kisi_miring = daftar_miring()
+        print("S1 S2 S3 tiap mode (gain sama):")
+        print("    S1 dorongan, lantai %.1f deg: gaya dinaikkan sampai gagal (di atas)" % config.OPTUNA_ZETA_DEG)
+        print("    S2 bidang miring tanpa dorongan: bisection %.1f .. %.1f deg (langkah %.1f deg, %d kisi), %.0f s x %d "
+              "ulangan; berhasil = tidak jatuh, |s| <= s_max %.2f m, ch/s <= %g"
+              % (kisi_miring[0], kisi_miring[-1], config.OPTUNA_MIRING_LANGKAH, len(kisi_miring),
+                 config.OPTUNA_MIRING_LAMA, config.OPTUNA_ULANGAN, config.s_max, config.OPTUNA_BATAS_CHATTERING))
+        print("    S3 gaya lolos S1 di kemiringan lolos S2 (skenario dan syarat lolos S1)")
+        print("    skor mode = skor S1 - %.0f x kemiringan lolos [deg] - %.0f bila S3 lolos"
+              % (config.OPTUNA_BOBOT_MIRING, config.OPTUNA_BOBOT_S3))
     if penguji.dua_mode:
         print("DUA MODE: skor = skor PD saja + skor PD+CBF + %g x max(0, skor PD+CBF - skor PD saja)"
               % config.OPTUNA_BOBOT_CBF_BURUK)
@@ -1069,6 +1279,8 @@ def jalankan_tahap(tahap, profil, jumlah_trial, stagnant=None):
         sys.exit("Tahap %s butuh gaya dorong dari hasil tahap PD. Isi OPTUNA_PROFIL['%s']['gaya_pd_terbaik'] di "
                  "config.py (dicetak di akhir tahap PD, atau: python3 tuning_optuna.py --hasil --profil %s)."
                  % (tahap, profil, profil))
+    if penguji.miring:
+        daftar_miring()                                     # berhenti dengan pesan bila kisi kemiringan salah
     kunci = penguji.terkunci()
     for nama in kunci:
         if nama in config.NAMA_ALPHA and kunci[nama] <= 0.0:
@@ -1090,6 +1302,9 @@ def jalankan_tahap(tahap, profil, jumlah_trial, stagnant=None):
         if penguji.dua_mode:
             for nama in KOLOM_DUA:
                 trial.set_user_attr(nama, penguji.diag_dua[nama])
+        if penguji.miring:
+            for nama, nilai in penguji.diag_miring.items():
+                trial.set_user_attr(nama, nilai)
         if not penguji.cari_gaya and keterangan != "pruned":
             for gaya, skor in penguji.skor_per_gaya.items():
                 trial.set_user_attr(nama_kolom_gaya(gaya), skor)
@@ -1099,6 +1314,7 @@ def jalankan_tahap(tahap, profil, jumlah_trial, stagnant=None):
         for nama in variabel:
             params[nama] = trial.suggest_float(nama, bawah[nama], atas[nama], step=config.OPTUNA_LANGKAH)
         t0 = time.perf_counter()
+        penguji.diag_miring = {}
         try:
             skor, status, detail = penguji.jalankan_trial(params, trial)
         except optuna.TrialPruned:
@@ -1115,8 +1331,9 @@ def jalankan_tahap(tahap, profil, jumlah_trial, stagnant=None):
         teks_terbaik = "%.3f (#%d)" % (terbaik.value, terbaik.number) if terbaik is not None else "-"
         teks_gagal = "%6.1f" % atribut.get("lama_gagal_s", 0.0) if penguji.pakai_cbf else "%6s" % "-"
         print(FORMAT_BARIS % (trial.number, status, teks_skor, atribut.get("lama_s", 0.0), teks_terbaik,
-                              teks_gaya(atribut.get("gaya_N", 0.0)), atribut.get("chattering_per_s", 0.0),
-                              atribut.get("psi_maks_deg", 0.0), teks_gagal, detail))
+                              teks_gaya(atribut.get("gaya_N", 0.0)), teks_miring(atribut.get("miring_deg")),
+                              atribut.get("chattering_per_s", 0.0), atribut.get("psi_maks_deg", 0.0), teks_gagal,
+                              detail))
 
     optuna.logging.set_verbosity(optuna.logging.WARNING)
     if penjaga.stagnan():
@@ -1190,8 +1407,13 @@ def laporkan(tahap, profil, penguji):
     gaya_uji = rekaman_pilihan[0]
     dilewati = daftar_uji[len(hasil_gaya):]
     hasil_uji = [(config.OPTUNA_ZETA_DEG,) + rekaman_pilihan[1:]]
-    skor, status, detail, rekaman, diag = penguji.uji(gain, config.OPTUNA_ZETA_UJI_DEG, gaya_uji, rekam=True)
-    hasil_uji.append((config.OPTUNA_ZETA_UJI_DEG, skor, ("%s %s" % (status, detail)).strip(), rekaman, diag))
+    # Lantai miring: tahap "miring" = S3 (kemiringan lolos S2 trial terbaik), lainnya OPTUNA_ZETA_UJI_DEG.
+    miring_terbaik = float(terbaik.user_attrs.get("miring_deg", 0.0)) if penguji.miring else 0.0
+    zeta_miring = miring_terbaik if miring_terbaik > 0.0 else config.OPTUNA_ZETA_UJI_DEG
+    teks_miring_uji = ("S3: kemiringan lolos S2 trial terbaik" if miring_terbaik > 0.0
+                       else "tidak ikut dioptimasi")
+    skor, status, detail, rekaman, diag = penguji.uji(gain, zeta_miring, gaya_uji, rekam=True)
+    hasil_uji.append((zeta_miring, skor, ("%s %s" % (status, detail)).strip(), rekaman, diag))
 
     print("\n================ HASIL TAHAP %s | %s ================" % (tahap, study.study_name))
     print(teks_label(profil))
@@ -1208,7 +1430,7 @@ def laporkan(tahap, profil, penguji):
         lolos = [h[0] for h in hasil_gaya if not h[2].startswith(STATUS_KOMET)]
         print("  gaya lolos tertinggi: %s" % ("%.2f N" % max(lolos) if lolos else "- (gaya terendah pun komet)"))
     zeta_deg, skor, keterangan, _, diag = hasil_uji[1]
-    print("uji ulang lantai %.1f deg (tidak ikut dioptimasi):" % zeta_deg)
+    print("uji ulang lantai %.1f deg (%s):" % (zeta_deg, teks_miring_uji))
     print("  gaya %6.2f N: skor %10.4f | psimaks %5.1f deg | ch/s %5.1f | gagal %4.1f s | %s"
           % (gaya_uji, skor, diag["psi_maks_deg"], diag["chattering_per_s"], diag["lama_gagal_s"], keterangan))
     if penguji.dua_mode:
@@ -1218,6 +1440,16 @@ def laporkan(tahap, profil, penguji):
                  a.get("skor_pd_cbf", 0.0)))
         if a.get("cbf_lebih_buruk", 0.0) > 0.0:
             print("  PERHATIAN: PD + CBF-QP lebih buruk dari PD saja (selisih skor %.3f)" % a["cbf_lebih_buruk"])
+    if penguji.miring:
+        a = terbaik.user_attrs
+        teks_s3 = {1.0: "lolos", 0.0: "gagal / tidak dijalankan"}
+        mode_miring = [("PD + CBF-QP" if penguji.pakai_cbf else "PD saja", "", "_m")]
+        if penguji.dua_mode:
+            mode_miring = [("PD saja", "_pd_saja", "_pd_saja_m"), ("PD + CBF-QP", "", "_m")]
+        for nama_mode, akhiran, akhiran_s in mode_miring:
+            print("S2 / S3 %s (trial terbaik): kemiringan lolos %s deg (|s| maks %.2f m) | S3 %s"
+                  % (nama_mode, teks_miring(a.get("miring" + akhiran + "_deg")),
+                     a.get("miring_s_maks" + akhiran_s, 0.0), teks_s3.get(a.get("s3" + akhiran + "_lolos"), "-")))
     print("\nSalin ke config.py:")
     for nama in terbaik.params:
         print("%s = %.4f" % (nama, terbaik.params[nama]))
@@ -1253,6 +1485,8 @@ def simpan_csv(path, study, profil):
     kolom_gaya = sorted(kolom_gaya, key=lambda k: float(k[len("skor_"):-1]))
     # tahap SEMUA dua mode: hasil PD saja dan PD + CBF-QP (atribut trial)
     kolom_dua = [nama for nama in KOLOM_DUA if any(nama in t.user_attrs for t in study.trials)]
+    # tahap "miring": hasil S2 dan S3 (atribut trial)
+    kolom_dua = kolom_dua + [nama for nama in KOLOM_MIRING if any(nama in t.user_attrs for t in study.trials)]
     with open(path, "w", newline="") as f:
         penulis = csv.writer(f)
         penulis.writerow(["trial", "status", "skor", "keterangan", "lama_s", "profil", "terverifikasi"]
@@ -1307,6 +1541,15 @@ def simpan_png(path, tahap, profil, study, gain, hasil_uji, gaya_uji, cari_gaya)
         ax[0].axvline(nomor_pruned[i], color="0.85", lw=0.8, zorder=0, label="pruned" if i == 0 else None)
     if cari_gaya:
         ax[0].set_ylabel("gaya lolos tertinggi [N]")
+        # tahap "miring": kemiringan lolos S2 tiap trial di sumbu kanan
+        trial_miring = [t for t in study.trials
+                        if t.state == optuna.trial.TrialState.COMPLETE and "miring_deg" in t.user_attrs]
+        if trial_miring:
+            kanan = ax[0].twinx()
+            kanan.plot([t.number for t in trial_miring], [t.user_attrs["miring_deg"] for t in trial_miring], "x", ms=4,
+                       color="tab:green", label="kemiringan lolos S2")
+            kanan.set_ylabel("kemiringan lolos S2 [deg]", color="tab:green")
+            kanan.legend(fontsize=8, loc="lower right")
     else:
         ax[0].set_ylabel("skor (log)")
         if len(nilai_selesai) > 0 and min(nilai_selesai) > 0.0:
@@ -1619,6 +1862,12 @@ CONFIG_WAJIB = {
     "OPTUNA_OVERSHOOT_PUNCAK_PSI_DEG": "OPTUNA_OVERSHOOT_PUNCAK_PSI_DEG = 0.5  # [deg] puncak lebih kecil: abaikan",
     "OPTUNA_OVERSHOOT_PUNCAK_S_M": "OPTUNA_OVERSHOOT_PUNCAK_S_M = 0.01     # [m] puncak lebih kecil: tidak dinilai",
     "OPTUNA_BOBOT_CBF_BURUK": "OPTUNA_BOBOT_CBF_BURUK = 1.0          # tahap SEMUA: bobot penalti PD+CBF lebih buruk",
+    "OPTUNA_MIRING_LANGKAH": "OPTUNA_MIRING_LANGKAH = 0.1   # [deg] S2: kenaikan kemiringan tiap berhasil",
+    "OPTUNA_MIRING_MAKS": "OPTUNA_MIRING_MAKS = 30.0      # [deg] S2: kemiringan tertinggi yang dicoba",
+    "OPTUNA_MIRING_LAMA": "OPTUNA_MIRING_LAMA = 15.0      # [s] S2: lama robot di bidang miring tiap ulangan",
+    "OPTUNA_BOBOT_MIRING": "OPTUNA_BOBOT_MIRING = 5000.0   # [per deg] S2: bobot kemiringan lolos di skor",
+    "OPTUNA_BOBOT_S3": "OPTUNA_BOBOT_S3 = 5000.0       # S3: bonus skor bila lolos",
+    "CBF_TAHU_ZETA": "CBF_TAHU_ZETA = False          # False = seperti robot: CBF tidak tahu kemiringan, DOB menaksir",
 }
 
 

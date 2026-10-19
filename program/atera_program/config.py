@@ -37,6 +37,8 @@ g = 9.81               # [m/s^2]
 N_WHEEL = 2
 
 zeta_DEG = 0.0                      # [deg] kemiringan bidang: 0.0 (datar) atau 8.0 (miring), + = menanjak ke depan
+# BIARKAN 0.0 di datar maupun miring: CBF-QP tidak diberi tahu kemiringan, DOB yang menaksirnya. Sama dengan simulasi
+# dan tuning (simulasi/config.py CBF_TAHU_ZETA = False), jadi gain dan Alpha hasil tuning bisa langsung dipakai.
 zeta = math.radians(zeta_DEG)
 
 # =============================================================================
@@ -55,9 +57,9 @@ dpsi_setpoint = 0.0                 # [rad/s]
 # =============================================================================
 #                              3. SAFETY SET DAN KOMET
 # =============================================================================
-psi_max_DEG = 8.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
+psi_max_DEG = 10.0                  # [deg]    batas psi yang dijaga CBF (h1, h2), = simulasi
 psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
-dpsi_max = 1.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
+dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max, = simulasi
 # Sedikit di bawah batas motor (no-load DDSM115 200 rpm = 20.9 rad/s; data robot 20261015: |dtheta| tidak pernah
 # > ~21 rad/s). Uji model planar 16-10: dengan 13 rad/s, h7/h8 melarang roda mengejar badan setelah dorongan ~10 N
 # (PD butuh ~19 rad/s) sehingga robot jatuh; dengan 20 rad/s tidak.

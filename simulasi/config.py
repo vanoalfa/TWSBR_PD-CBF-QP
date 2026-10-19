@@ -66,7 +66,8 @@ dtheta_setpoint = 0.0               # [rad/s]
 #                              4. SAFETY SET DAN KOMET
 # =============================================================================
 # Safety set (batas simetris: min = -max)
-psi_max_DEG = 15.0                  # [deg]    batas psi yang dijaga CBF (h1, h2); bisa diubah di jendela Kontrol
+psi_max_DEG = 10.0                  # [deg]    batas psi yang dijaga CBF (h1, h2); bisa diubah di jendela Kontrol
+                                    #          (= robot fisik; 10 deg supaya koreksi CBF-QP terlihat jelas dibanding PD)
 psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
 # ASUMSI: sedikit di bawah batas kecepatan motor DDSM115 (no-load 200 rpm = 20.9 rad/s, wiki Waveshare), = robot fisik.
@@ -75,7 +76,8 @@ dtheta_max = 20.0                   # [rad/s]  |dtheta| <= dtheta_max
 psi_min = -psi_max
 dpsi_min = -dpsi_max
 dtheta_min = -dtheta_max
-s_max = 1.0                         # [m]      jarak tempuh s = R*theta (dari titik nol s), |s| <= s_max
+s_max = 0.5                         # [m]      jarak tempuh s = R*theta (dari titik nol s), |s| <= s_max
+                                    #          (0.5 m = robot fisik; barrier terlihat dan robot tidak lari jauh)
 s_min = -s_max
 
 # KOMET = kondisi robot yang sudah tidak tertolong, berlaku di mode PD maupun PD+CBF. Roda dimatikan.
@@ -156,6 +158,11 @@ CBF_MARGIN_DEG = 1.0                # [deg] barrier psi = psi_max - margin (gari
 DOB_AKTIF = True                    # True: d_hat dipakai CBF-QP. False: hanya dicatat
 DOB_TAU_S = 0.020                   # [s]
 DOB_BATAS = 200.0                   # [rad/s^2]
+# False = SAMA DENGAN ROBOT FISIK: CBF-QP TIDAK diberi tahu kemiringan lantai (model CBF memakai zeta = 0, seperti
+#         robot dengan zeta_DEG = 0), gangguan kemiringan ditaksir DOB. Dipakai simulasi (atera_main.py) dan
+#         tuning_optuna.py, jadi gain dan Alpha hasil tuning langsung berlaku di robot pada kemiringan berapa pun.
+# True  = CBF-QP memakai kemiringan lantai simulasi config.zeta (model tepat, tidak bisa dilakukan di robot).
+CBF_TAHU_ZETA = False
 
 # Toleransi numerik (bukan besaran fisik)
 CBF_INFTY = 1.0e9                   # batas atas "tak hingga" constraint c di QP
@@ -396,8 +403,8 @@ DESIMAL_ALPHA = 2
 # sebelum menjalankan tahap berikutnya.
 # Tuning GABUNGAN (tahap SEMUA, terpisah dari tahap bertahap di atas): Kp_psi, Kd_psi, Kp_theta, Kd_theta,
 #   Alpha_1 .. Alpha_6 dituning SEKALIGUS. Tiap trial menguji gain yang SAMA dua kali (DUA MODE):
-#     1. PD saja (CBF-QP mati)       -> skor PD saja      (seperti tahap PD: gaya lolos tertinggi + ISE)
-#     2. PD + CBF-QP (h1 .. h8)      -> skor PD + CBF-QP
+#     1. PD saja (CBF-QP mati)       -> skor PD saja      (S1 dorongan + S2 bidang miring + S3 dorongan di miring)
+#     2. PD + CBF-QP (h1 .. h8)      -> skor PD + CBF-QP  (S1 + S2 + S3, lihat blok "SKENARIO S1 S2 S3" di bawah)
 #     skor trial = skor PD saja + skor PD + CBF-QP + OPTUNA_BOBOT_CBF_BURUK x max(0, skor PD + CBF-QP - skor PD saja)
 #   Jadi gain PD harus bagus SENDIRIAN (dipakai juga di mode PD saja untuk perbandingan), dan trial yang PD + CBF-QP-nya
 #   lebih buruk dari PD saja dihukum: Optuna mencari Alpha yang membuat CBF-QP tidak memperburuk PD.
@@ -516,6 +523,8 @@ OPTUNA_BATAS = {
 #   cari_gaya     : (opsional, default False) True = tiap trial mencari gaya dorong tertinggi yang lolos (lihat atas)
 #   stagnant      : (opsional, default OPTUNA_STAGNANT) batas stagnan khusus tahap ini (lihat AUTO-EXIT di bawah)
 #   dua_mode      : (opsional, default False) True = tiap trial PD saja + PD + CBF-QP dengan gain sama (tahap SEMUA)
+#   miring        : (opsional, default False) True = tiap trial (tiap mode) menjalankan S1 -> S2 -> S3 (lihat blok
+#                   "SKENARIO S1 S2 S3" di bawah); butuh cari_gaya = True
 OPTUNA_TAHAP = {
     "PD":           {"variabel": ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta"], "trial": OPTUNA_TRIAL_PD,
                      "barrier": None, "penalti_jarak": False, "cari_gaya": True},
@@ -527,7 +536,7 @@ OPTUNA_TAHAP = {
     "SEMUA":        {"variabel": ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta",
                                   "Alpha_1", "Alpha_2", "Alpha_3", "Alpha_4", "Alpha_5", "Alpha_6"],
                      "trial": OPTUNA_TRIAL_SEMUA, "barrier": [1, 2, 3, 4, 5, 6, 7, 8], "penalti_jarak": False,
-                     "cari_gaya": True, "dua_mode": True},
+                     "cari_gaya": True, "dua_mode": True, "miring": True},
 }
 
 # Profil optimasi. Tiap profil punya study Optuna sendiri (hasilnya tidak tercampur):
@@ -587,6 +596,38 @@ OPTUNA_MULAI_DARI_CONFIG = True     # study BARU: trial pertama = nilai config.p
 OPTUNA_BOBOT_CBF_BURUK = 1.0        # tahap SEMUA (dua mode): bobot penalti bila skor PD + CBF-QP lebih buruk dari
                                     #     PD saja. 1.0 = keunggulan PD saja tidak dihitung (skor = 2 x skor PD+CBF);
                                     #     lebih besar = CBF-QP yang memperburuk PD makin dihukum. 0 = tanpa penalti
+
+# -----------------------------------------------------------------------------------------------------------------
+# >>>>>>>>>>  SKENARIO S1 S2 S3 TIAP TRIAL  (tahap dengan "miring": True, yaitu SEMUA)  <<<<<<<<<<
+# Tiap trial, untuk TIAP mode (PD saja dan PD + CBF-QP), dengan gain yang SAMA:
+#   S1 dorongan, lantai datar : seperti sebelumnya, gaya dorong dinaikkan (bisection OPTUNA_GAYA_LANGKAH) sampai
+#                               gagal -> gaya_lolos [N] (lantai OPTUNA_ZETA_DEG, skenario dorongan di atas).
+#   S2 bidang miring          : TANPA dorongan. Kemiringan dinaikkan OPTUNA_MIRING_LANGKAH tiap berhasil
+#                               (bisection pada kisi OPTUNA_MIRING_LANGKAH .. OPTUNA_MIRING_MAKS) -> miring_lolos [deg].
+#                               Satu pengujian S2 = OPTUNA_ULANGAN ulangan (reset, seed noise sama dengan S1), robot
+#                               diletakkan tegak lalu dibiarkan OPTUNA_MIRING_LAMA detik. BERHASIL bila sepanjang waktu:
+#                               tidak jatuh (|psi| <= SAFE_TILT_DEG), |s| <= s_max (tidak meluncur melewati barrier s),
+#                               dan ch/s <= OPTUNA_BATAS_CHATTERING.
+#                               ASUMSI bisection: berhasil pada kemiringan z berarti berhasil pada kemiringan lebih kecil.
+#   S3 dorongan, bidang miring: gaya_lolos S1 diberikan di kemiringan miring_lolos S2 (skenario dorongan dan SYARAT
+#                               LOLOS sama dengan S1) -> lolos / gagal. Tidak dijalankan (= gagal) bila miring_lolos = 0.
+#   S2 dan S3 baru dijalankan setelah S1 punya hasil: bila gaya terendah pun gagal (gaya_lolos = 0), miring_lolos = 0
+#   dan S3 gagal.
+#   skor mode = skor S1 (-OPTUNA_BOBOT_GAYA x gaya_lolos + skor pengujian)
+#             - OPTUNA_BOBOT_MIRING x miring_lolos - (OPTUNA_BOBOT_S3 bila S3 lolos)
+#   Dua mode digabung seperti biasa (OPTUNA_BOBOT_CBF_BURUK). Makin kecil makin baik.
+# ASUMSI bobot: satu langkah S2 (0.1 deg x 5000 = 500) = satu langkah S1 (0.5 N x 1000 = 500); S3 lolos = 10 langkah.
+OPTUNA_MIRING_LANGKAH = 0.1         # [deg] kenaikan kemiringan tiap berhasil (kisi S2)
+OPTUNA_MIRING_MAKS = 30.0           # [deg] kemiringan tertinggi yang dicoba S2 (ASUMSI). Untuk diam di kemiringan
+                                    #     zeta badan harus condong psi = asin(0.83 x sin zeta) (model.py): 6.6 deg
+                                    #     di 8 deg, 12.4 deg di 15 deg. Mode PD + CBF-QP dibatasi barrier psi
+                                    #     (psi_max - CBF_MARGIN_DEG = 9 deg -> sekitar 10.8 deg), mode PD saja tidak,
+                                    #     jadi batas ini dibuat jauh di atasnya.
+OPTUNA_MIRING_LAMA = 15.0           # [s] lama robot dibiarkan di bidang miring tiap ulangan S2 (ASUMSI, = jarak
+                                    #     antar dorongan; data robot 20261019: meluncur sampai diam dalam ~5 s)
+OPTUNA_BOBOT_MIRING = 5000.0        # [per deg] bobot kemiringan lolos S2 di skor
+OPTUNA_BOBOT_S3 = 5000.0            # bonus skor bila S3 lolos
+# -----------------------------------------------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------------------------------------------
 # >>>>>>>>>>  SYARAT LOLOS SATU PENGUJIAN  (UBAH DI SINI)  <<<<<<<<<<
