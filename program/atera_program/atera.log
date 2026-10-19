@@ -2662,3 +2662,19 @@ AttributeError: 'CBFQP' object has no attribute 'reset_dob'
 2026-10-19 13:30:32,173 | INFO | atera | s = 2.00 m (> 2 m, mode DIAM) -> tersimpan PERCOBAAN 20261019_133032_COBA PD_PERCOBAAN KE-12
 2026-10-19 13:30:32,173 | INFO | atera | KOMET: s = 2.00 m (> 2 m, mode DIAM) | tersimpan: PERCOBAAN 20261019_133032_COBA PD_PERCOBAAN KE-12
 2026-10-19 13:30:33,059 | INFO | atera | Roda sudah mati.
+2026-10-19 13:47:05,473 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-19 13:47:05,527 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-19 13:47:05,528 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-19 13:47:05,582 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-19 13:47:05,659 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-19 13:47:05,715 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-19 13:47:05,715 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-19 13:47:05,715 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-19 13:47:06,728 | INFO | atera | plot realtime: laptop 10.16.111.145 tersambung
+2026-10-19 13:47:10,637 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-19 13:47:15,555 | INFO | atera | Kalibrasi selesai (sudut nol -2.88 deg, s = 0 di sini). Tekan MULAI.
+2026-10-19 13:47:17,985 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-19 13:47:22,902 | INFO | atera | Kalibrasi selesai (sudut nol -2.19 deg, s = 0 di sini). Tekan MULAI.
+2026-10-19 13:47:31,065 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-19 13:47:33,287 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-19 13:47:58,613 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261019_134758_COBA PD_PERCOBAAN KE-13
