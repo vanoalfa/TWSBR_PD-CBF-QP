@@ -94,14 +94,14 @@ YAW_KOMET_DEG = 90.0                # [deg]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 14.63       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 02.28       #5.2                # [N m s/rad]
-Kp_theta = 0.08      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
-Kd_theta = 0.24      #0.41             # [N m s/rad]
+Kp_psi = 09.69       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 01.83       #5.2                # [N m s/rad]
+Kp_theta = 0.03      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
+Kd_theta = 0.25      #0.41             # [N m s/rad]
 # Kvel*arah hanya mode GERAK / BEBAS. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
 # -> Kvel NEGATIF supaya W maju (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s).
 # ASUMSI: -0.52 (0.20 m/s), sama dengan robot fisik.
-Kvel = -0.52                # [N m]
+Kvel = -0.99                # [N m]
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan apalah_bisa/tunning.py).
@@ -128,12 +128,12 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 32.49 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 51.13 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 42.95 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 16.44 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_5 = 79.20 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_6 = 283.94 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
+Alpha_1 = 35.15 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 52.64 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 46.67 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
+Alpha_4 = 36.95 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_5 = 50.18 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_6 = 223.09 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
