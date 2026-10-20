@@ -93,56 +93,51 @@ KOMET_REM_LAMA_S = 2.0              # [s]
 KOMET_REM_SELESAI = 0.5             # [rad/s]
 
 # =============================================================================
-#                              4. PD  (= simulasi)
+#                              5. PD
 # =============================================================================
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 09.69       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 01.83       #5.2                # [N m s/rad]
-Kp_theta = 0.03      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
-Kd_theta = 0.25      #0.41             # [N m s/rad]
-# Kvel*arah hanya mode GERAK / BEBAS (arah +1 = D-Pad atas, -1 = D-Pad bawah). Kecepatan tunak di lantai datar:
-#     v = -R*Kvel*arah/Kd_theta      -> Kvel NEGATIF supaya D-Pad atas berjalan ke DEPAN
-#     (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s; no-load DDSM115 1.05 m/s)
-# ASUMSI: -0.52 (0.20 m/s). Nilai sebelumnya +0.05 membuat D-Pad atas berjalan MUNDUR ~0.02 m/s.
-Kvel = -0.88            # [N m]
+Kp_psi = 06.39       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 01.65       #5.2                # [N m s/rad]
+Kp_theta = 0.11      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
+Kd_theta = 0.29      #0.41             # [N m s/rad]
+# Kvel*arah hanya mode GERAK / BEBAS. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
+# -> Kvel NEGATIF supaya W maju (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s).
+# ASUMSI: -0.52 (0.20 m/s), sama dengan robot fisik.
+Kvel = -0.99                # [N m]
+
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
-# (sama dengan simulasi/config.py). Tanpa ini pd_control.py juga memakai -1.
+# (sama dengan apalah_bisa/tunning.py).
 BALANCE_DIRECTION_SIGN = -1.0
+# BUTUH PENGUJIAN ARAH KOREKSI: gain kecil, badan dimiringkan ke depan, roda harus berputar ke DEPAN.
 
 # =============================================================================
-#                              4b. PD HEADING (roda kiri dan kanan bergerak bersama)
+#                              5b. PD HEADING (roda kiri dan kanan bergerak bersama)  (= robot fisik 4b)
 # =============================================================================
-# yaw = R*(theta_kanan - theta_kiri)/W_RODA dari encoder (+ = berputar ke KIRI dilihat dari atas).
-# u_belok = Kp_yaw*(yaw - yaw_ref) + Kd_yaw*(dyaw - dyaw_ref); roda kiri u + u_belok, roda kanan u - u_belok.
-#   D-Pad kiri / kanan dilepas : yaw_ref tetap -> robot tidak berputar-putar.
-#   D-Pad kiri / kanan ditekan : dyaw_ref = -belok*YAW_RATE_BELOK (saat DIAM = berputar di tempat).
-# ASUMSI gain: model yaw  I_yaw*ddyaw = (W/R)*u_belok,  I_yaw ~ 0.054 kg m^2 (badan 0.0165 dari robot.urdf + roda
-# 2*m_r*(W/2)^2 + inersia putar roda 2*j_theta*(W/(2R))^2)  ->  Kp 0.30, Kd 0.10: omega_n ~5 rad/s, zeta ~0.9
-# (dengan torsi nyata 0.238 N m/A: omega_n ~3 rad/s, zeta ~0.5). Naikkan pelan-pelan bila robot masih berputar.
-W_RODA = 0.258                      # [m] tengah ban kiri ke tengah ban kanan (diukur; ATERA.step: poros motor +-124 mm)
+# yaw = R*(theta_kanan - theta_kiri)/W_RODA (+ = berputar ke KIRI dilihat dari atas)
+# u_belok = Kp_yaw*(yaw - yaw_ref) + Kd_yaw*(dyaw - dyaw_ref); roda kiri u + u_belok, roda kanan u - u_belok
+#   A / D dilepas : yaw_ref tetap.   A / D ditahan : dyaw_ref = -belok*YAW_RATE_BELOK (saat DIAM = berputar di tempat).
+W_RODA = 0.258                      # [m] tengah ban kiri ke tengah ban kanan (diukur pengguna)
 YAW_AKTIF = True
-Kp_yaw = 0.30                       # [N m/rad]
+Kp_yaw = 0.30                       # [N m/rad]     ASUMSI (lihat robot fisik config.py 4b)
 Kd_yaw = 0.10                       # [N m s/rad]
-YAW_RATE_BELOK = 1.0                # [rad/s] kecepatan belok D-Pad kiri / kanan, A / D (~57 deg/s)
-A_YAW_MAKS = 3.0                    # [rad/s^2] perubahan maksimum dyaw_ref
-YAW_TORSI_MAKS = 0.40               # [N m] batas |u_belok| (juga dibatasi sisa torsi u_max - |u|)
-# Mode BEBAS (Tombol A): PD heading mati, belok D-Pad = selisih torsi tetap: roda kiri u + TORSI_BELOK*belok, kanan
-# u - TORSI_BELOK*belok (dibatasi sisa torsi u_max - |u|). ASUMSI: 0.02 N m = nilai program lama (commit 61784ea).
-# Naikkan bila belok di mode BEBAS terlalu lemah (YAW_TORSI_MAKS sebagai batas yang masih wajar).
+YAW_RATE_BELOK = 1.0                # [rad/s] kecepatan belok A / D
+A_YAW_MAKS = 3.0                    # [rad/s^2]
+YAW_TORSI_MAKS = 0.40               # [N m]
+# Mode BEBAS (tombol F): PD heading mati, belok A / D = selisih torsi tetap (= robot fisik 4b). ASUMSI: 0.02 N m.
 TORSI_BELOK = 0.02                  # [N m]
 
 # =============================================================================
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 35.15 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 52.64 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 46.67 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 36.95 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_5 = 50.18 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_6 = 223.09 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
+Alpha_1 = 35.62 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 39.32 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 33.22 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
+Alpha_4 = 27.18 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_5 = 93.32 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_6 = 245.94 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Semua Alpha_<nomor> berurutan di atas (otomatis dipakai cbf_qp.py dan ise.py).
 NAMA_ALPHA = []
