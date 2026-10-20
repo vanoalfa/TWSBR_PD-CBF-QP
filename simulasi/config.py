@@ -96,10 +96,10 @@ YAW_KOMET_DEG = 90.0                # [deg]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 06.39       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 01.65       #5.2                # [N m s/rad]
-Kp_theta = 0.11      #0.24               # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
-Kd_theta = 0.29      #0.41               # [N m s/rad]
+Kp_psi = 09.69       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 01.83       #5.2                # [N m s/rad]
+Kp_theta = 0.03      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
+Kd_theta = 0.25      #0.41             # [N m s/rad]
 # Kvel*arah hanya mode GERAK / BEBAS. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
 # -> Kvel NEGATIF supaya W maju (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s).
 # ASUMSI: -0.52 (0.20 m/s), sama dengan robot fisik.
@@ -130,12 +130,12 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 35.62 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 39.32 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 33.22 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 27.18 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_5 = 93.32 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_6 = 245.94 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
+Alpha_1 = 35.15 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 52.64 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 46.67 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
+Alpha_4 = 36.95 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_5 = 50.18 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_6 = 223.09 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
@@ -605,10 +605,22 @@ OPTUNA_MULAI_DARI_CONFIG = True     # study BARU: trial pertama = nilai config.p
 OPTUNA_BOBOT_CBF_BURUK = 1.0        # tahap SEMUA (dua mode): bobot penalti bila skor PD + CBF-QP lebih buruk dari
                                     #     PD saja. 1.0 = keunggulan PD saja tidak dihitung (skor = 2 x skor PD+CBF);
                                     #     lebih besar = CBF-QP yang memperburuk PD makin dihukum. 0 = tanpa penalti
+# UJI SYARAT (tahap SEMUA): S1 PD + CBF-QP langsung diuji pada gaya lolos S1 PD saja (gaya terendah tidak diuji).
+#   Lolos -> gaya dinaikkan sampai komet, lalu S2 dan S3. Komet (atau S1 PD komet pada gaya terendah) -> trial
+#   BERHENTI, S2 dan S3 tidak dijalankan: skor trial = skor S1 PD saja + OPTUNA_PENALTI_SYARAT.
+#   1e6 > selisih skor terbesar yang mungkin (2 mode x 100 N x 1000 + bonus S2 S3), jadi trial yang gagal uji syarat
+#   SELALU lebih buruk dari trial yang lolos, dan di antara sesamanya tetap diurutkan menurut S1 PD saja.
+OPTUNA_PENALTI_SYARAT = 1.0e6
+# MULAI DARI TERBAIK (tahap SEMUA): pencarian dimulai dari hasil trial terbaik sejauh ini, bukan dari bawah:
+#   S1 PD dari gaya_pd_saja_N, S2 PD dari miring_pd_saja_deg, S2 PD + CBF-QP dari miring_deg. Langkah naik / turun
+#   dilipatgandakan (1, 2, 4, ... kisi) sampai batas lolos / gagal ditemukan, lalu bisection. Hasil sama dengan
+#   bisection biasa (ASUMSI yang sama), pengujian lebih sedikit bila hasilnya dekat. False = bisection biasa.
+OPTUNA_MULAI_DARI_TERBAIK = True
 
 # -----------------------------------------------------------------------------------------------------------------
 # >>>>>>>>>>  SKENARIO S1 S2 S3 TIAP TRIAL  (tahap dengan "miring": True, yaitu SEMUA)  <<<<<<<<<<
-# Tiap trial, untuk TIAP mode (PD saja dan PD + CBF-QP), dengan gain yang SAMA:
+# Tiap trial, untuk TIAP mode (PD saja dan PD + CBF-QP), dengan gain yang SAMA. Urutan tahap SEMUA:
+#   S1 PD -> S1 PD + CBF-QP (UJI SYARAT, lihat OPTUNA_PENALTI_SYARAT) -> S2 PD -> S2 PD + CBF-QP -> S3 PD -> S3 PD + CBF-QP
 #   S1 dorongan, lantai datar : seperti sebelumnya, gaya dorong dinaikkan (bisection OPTUNA_GAYA_LANGKAH) sampai
 #                               gagal -> gaya_lolos [N] (lantai OPTUNA_ZETA_DEG, skenario dorongan di atas).
 #   S2 bidang miring          : TANPA dorongan. Kemiringan dinaikkan OPTUNA_MIRING_LANGKAH tiap berhasil
