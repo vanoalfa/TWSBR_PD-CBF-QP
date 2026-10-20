@@ -72,7 +72,7 @@ psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 dpsi_max = 2.0 * math.pi            # [rad/s]  |dpsi|   <= dpsi_max
 # ASUMSI: sedikit di bawah batas kecepatan motor DDSM115 (no-load 200 rpm = 20.9 rad/s, wiki Waveshare), = robot fisik.
 # Dengan 13 rad/s h7/h8 melarang roda mengejar badan setelah dorongan ~10 N (PD butuh ~19 rad/s) -> robot jatuh.
-dtheta_max = 20.0                   # [rad/s]  |dtheta| <= dtheta_max
+dtheta_max = 10.0                   # [rad/s]  |dtheta| <= dtheta_max
 psi_min = -psi_max
 dpsi_min = -dpsi_max
 dtheta_min = -dtheta_max
