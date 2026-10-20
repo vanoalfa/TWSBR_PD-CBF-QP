@@ -2800,3 +2800,168 @@ AttributeError: 'CBFQP' object has no attribute 'reset_dob'
 2026-10-20 09:35:52,620 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
 2026-10-20 09:35:54,625 | ERROR | ddsm115 | motor kiri: port /dev/ttyACM0 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
 2026-10-20 09:35:54,625 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-20 10:56:51,156 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-20 10:56:51,210 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-20 10:56:51,211 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-20 10:56:51,266 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-20 10:56:51,289 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-20 10:56:51,345 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-20 10:56:51,346 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-20 10:56:51,346 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-20 10:57:33,843 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 10:57:38,759 | INFO | atera | Kalibrasi selesai (sudut nol -2.99 deg, s = 0 di sini). Tekan MULAI.
+2026-10-20 10:57:41,121 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 10:57:46,038 | INFO | atera | Kalibrasi selesai (sudut nol -2.33 deg, s = 0 di sini). Tekan MULAI.
+2026-10-20 10:58:19,462 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 10:58:20,566 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 10:58:55,143 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261020_105855_COBA PD_PERCOBAAN KE-01
+2026-10-20 10:58:55,143 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261020_105855_COBA PD_PERCOBAAN KE-01
+2026-10-20 10:58:59,487 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 10:59:00,465 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 10:59:42,769 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 11:00:14,562 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 11:02:16,663 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261020_110216_COBA PD_PERCOBAAN KE-02
+2026-10-20 11:02:16,664 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261020_110216_COBA PD_PERCOBAAN KE-02
+2026-10-20 11:03:18,573 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 11:03:19,667 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 11:03:23,580 | INFO | atera | Mode BEBAS: PD heading, Kp_theta, constraint s mati; robot bisa ditarik tali. Tekan A lagi untuk kembali.
+2026-10-20 11:03:29,581 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261020_110329_COBA PD_PERCOBAAN KE-03
+2026-10-20 11:03:29,582 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261020_110329_COBA PD_PERCOBAAN KE-03
+2026-10-20 11:03:37,978 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 11:03:38,900 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 11:03:49,286 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261020_110349_COBA PD_PERCOBAAN KE-04
+2026-10-20 11:03:49,287 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261020_110349_COBA PD_PERCOBAAN KE-04
+2026-10-20 11:03:53,763 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 11:03:54,270 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 11:04:09,084 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 11:04:36,208 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 11:05:02,146 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 11:05:14,510 | INFO | atera | Mode BEBAS: PD heading, Kp_theta, constraint s mati; robot bisa ditarik tali. Tekan A lagi untuk kembali.
+2026-10-20 11:05:16,019 | INFO | atera | Mode BEBAS mati: setpoint dipasang di sini (s = 0, arah sekarang).
+2026-10-20 11:05:21,568 | INFO | atera | Mode BEBAS: PD heading, Kp_theta, constraint s mati; robot bisa ditarik tali. Tekan A lagi untuk kembali.
+2026-10-20 11:07:06,871 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 11:08:06,960 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 11:10:48,104 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261020_111048_COBA PD_PERCOBAAN KE-05
+2026-10-20 11:10:48,105 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261020_111048_COBA PD_PERCOBAAN KE-05
+2026-10-20 11:11:06,611 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-20 11:11:06,665 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-20 11:11:06,666 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-20 11:11:06,720 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-20 11:11:06,743 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-20 11:11:06,798 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-20 11:11:06,799 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-20 11:11:06,799 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-20 11:11:12,364 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 11:11:17,280 | INFO | atera | Kalibrasi selesai (sudut nol -3.35 deg, s = 0 di sini). Tekan MULAI.
+2026-10-20 11:11:18,427 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 11:11:23,343 | INFO | atera | Kalibrasi selesai (sudut nol -2.59 deg, s = 0 di sini). Tekan MULAI.
+2026-10-20 11:13:41,647 | INFO | atera | Mode kontrol: PD+CBF
+2026-10-20 11:13:47,499 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 11:13:48,423 | INFO | atera | Balancing, mode PD+CBF. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 11:13:54,731 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-20 11:13:54,785 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-20 11:13:54,786 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-20 11:13:54,840 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-20 11:13:54,863 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-20 11:13:54,917 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-20 11:13:54,918 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-20 11:13:54,918 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-20 11:14:02,080 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 11:14:06,997 | INFO | atera | Kalibrasi selesai (sudut nol -3.32 deg, s = 0 di sini). Tekan MULAI.
+2026-10-20 11:14:11,248 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 11:14:16,165 | INFO | atera | Kalibrasi selesai (sudut nol -2.65 deg, s = 0 di sini). Tekan MULAI.
+2026-10-20 11:14:31,020 | INFO | atera | Mode kontrol: PD+CBF
+2026-10-20 11:14:38,707 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 11:14:39,686 | INFO | atera | Balancing, mode PD+CBF. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 11:14:50,172 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261020_111450_COBA PD+CBF_PERCOBAAN KE-01
+2026-10-20 11:14:50,172 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261020_111450_COBA PD+CBF_PERCOBAAN KE-01
+2026-10-20 11:14:54,642 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 11:14:56,532 | INFO | atera | Balancing, mode PD+CBF. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 11:15:25,240 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261020_111525_COBA PD+CBF_PERCOBAAN KE-02
+2026-10-20 11:15:25,240 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261020_111525_COBA PD+CBF_PERCOBAAN KE-02
+2026-10-20 11:18:17,024 | INFO | atera | Dihentikan dari keyboard
+2026-10-20 12:41:30,518 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-20 12:41:30,572 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-20 12:41:30,576 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-20 12:41:30,630 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-20 12:41:30,664 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-20 12:41:30,918 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-20 12:41:30,919 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-20 12:41:30,919 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-20 12:41:58,878 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 12:42:03,798 | INFO | atera | Kalibrasi selesai (sudut nol -3.55 deg, s = 0 di sini). Tekan MULAI.
+2026-10-20 12:42:05,131 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 12:42:10,052 | INFO | atera | Kalibrasi selesai (sudut nol -2.87 deg, s = 0 di sini). Tekan MULAI.
+2026-10-20 12:42:22,280 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:42:27,161 | INFO | atera | torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) -> tersimpan PERCOBAAN 20261020_124227_COBA PD_PERCOBAAN KE-06
+2026-10-20 12:42:27,162 | INFO | atera | KOMET: torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) | tersimpan: PERCOBAAN 20261020_124227_COBA PD_PERCOBAAN KE-06
+2026-10-20 12:42:30,025 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:42:30,664 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:43:17,226 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261020_124317_COBA PD_PERCOBAAN KE-07
+2026-10-20 12:43:17,226 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261020_124317_COBA PD_PERCOBAAN KE-07
+2026-10-20 12:43:21,678 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 12:43:22,628 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:43:33,998 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:44:00,670 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261020_124400_COBA PD_PERCOBAAN KE-08
+2026-10-20 12:44:00,670 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261020_124400_COBA PD_PERCOBAAN KE-08
+2026-10-20 12:44:13,140 | INFO | atera | psi = 40.1 deg (> 40 deg) -> tersimpan PERCOBAAN 20261020_124413_COBA PD+CBF_PERCOBAAN KE-03
+2026-10-20 12:44:13,140 | INFO | atera | KOMET: psi = 40.1 deg (> 40 deg) | tersimpan: PERCOBAAN 20261020_124413_COBA PD+CBF_PERCOBAAN KE-03
+2026-10-20 12:44:19,450 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:44:20,036 | INFO | atera | Balancing, mode PD+CBF. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:45:06,743 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:47:20,274 | INFO | atera | psi = 40.0 deg (> 40 deg) -> tersimpan PERCOBAAN 20261020_124720_COBA PD+CBF_PERCOBAAN KE-04
+2026-10-20 12:47:20,274 | INFO | atera | KOMET: psi = 40.0 deg (> 40 deg) | tersimpan: PERCOBAAN 20261020_124720_COBA PD+CBF_PERCOBAAN KE-04
+2026-10-20 12:47:26,884 | INFO | atera | Mode kontrol: PD
+2026-10-20 12:47:28,584 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 12:47:33,499 | INFO | atera | Robot bergerak saat kalibrasi (simpangan gyro 15.1 deg/s). Ulangi Tombol Y.
+2026-10-20 12:47:46,103 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-20 12:47:51,023 | INFO | atera | Kalibrasi selesai (sudut nol -3.00 deg, s = 0 di sini). Tekan MULAI.
+2026-10-20 12:47:52,264 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 12:48:03,217 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:49:22,066 | INFO | atera | psi = 41.7 deg (> 40 deg) -> tersimpan PERCOBAAN 20261020_124922_COBA PD_PERCOBAAN KE-09
+2026-10-20 12:49:22,066 | INFO | atera | KOMET: psi = 41.7 deg (> 40 deg) | tersimpan: PERCOBAAN 20261020_124922_COBA PD_PERCOBAAN KE-09
+2026-10-20 12:49:27,931 | INFO | atera | MULAI ditolak: robot 0.56 m dari titik nol s (batas 0.5 m): kembalikan ke dekat titik nol, atau tekan B untuk memasang setpoint di sini
+2026-10-20 12:49:29,652 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:49:30,741 | INFO | atera | MULAI ditolak: tegakkan robot dulu (|psi| harus < 15 deg)
+2026-10-20 12:49:40,670 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:49:45,658 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:50:16,781 | INFO | atera | s = 2.00 m (> 2 m, mode DIAM) -> tersimpan PERCOBAAN 20261020_125016_COBA PD_PERCOBAAN KE-10
+2026-10-20 12:50:16,781 | INFO | atera | KOMET: s = 2.00 m (> 2 m, mode DIAM) | tersimpan: PERCOBAAN 20261020_125016_COBA PD_PERCOBAAN KE-10
+2026-10-20 12:50:32,823 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:50:33,706 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:50:35,594 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261020_125035_COBA PD_PERCOBAAN KE-11
+2026-10-20 12:50:35,595 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261020_125035_COBA PD_PERCOBAAN KE-11
+2026-10-20 12:50:38,446 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261020_125038_COBA PD+CBF_PERCOBAAN KE-05
+2026-10-20 12:50:38,446 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261020_125038_COBA PD+CBF_PERCOBAAN KE-05
+2026-10-20 12:50:40,209 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:50:48,998 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261020_125048_COBA PD_PERCOBAAN KE-12
+2026-10-20 12:50:48,999 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261020_125048_COBA PD_PERCOBAAN KE-12
+2026-10-20 12:51:28,162 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang). Tekan MULAI.
+2026-10-20 12:51:28,930 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:52:19,869 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:52:24,870 | INFO | atera | psi = -40.3 deg (> 40 deg) -> tersimpan PERCOBAAN 20261020_125224_COBA PD_PERCOBAAN KE-13
+2026-10-20 12:52:24,872 | INFO | atera | KOMET: psi = -40.3 deg (> 40 deg) | tersimpan: PERCOBAAN 20261020_125224_COBA PD_PERCOBAAN KE-13
+2026-10-20 12:52:27,248 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:52:27,911 | INFO | atera | Balancing, mode PD. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:52:35,032 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:54:38,394 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261020_125438_COBA PD_PERCOBAAN KE-14
+2026-10-20 12:54:38,395 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261020_125438_COBA PD_PERCOBAAN KE-14
+2026-10-20 12:54:39,743 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:54:56,842 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261020_125456_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-20 12:54:56,842 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261020_125456_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-20 12:55:00,421 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261020_125500_COBA PD_PERCOBAAN KE-15
+2026-10-20 12:55:00,421 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261020_125500_COBA PD_PERCOBAAN KE-15
+2026-10-20 12:55:01,953 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:55:07,356 | INFO | atera | psi = -41.0 deg (> 40 deg) -> tersimpan PERCOBAAN 20261020_125507_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-20 12:55:07,356 | INFO | atera | KOMET: psi = -41.0 deg (> 40 deg) | tersimpan: PERCOBAAN 20261020_125507_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-20 12:55:12,190 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:55:13,211 | INFO | atera | MULAI ditolak: tegakkan robot dulu (|psi| harus < 15 deg)
+2026-10-20 12:55:14,549 | INFO | atera | Balancing, mode PD+CBF. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-20 12:55:16,287 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:55:17,108 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:55:19,052 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261020_125519_COBA PD+CBF_PERCOBAAN KE-08
+2026-10-20 12:55:19,053 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261020_125519_COBA PD+CBF_PERCOBAAN KE-08
+2026-10-20 12:55:20,092 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:55:50,128 | INFO | atera | Setpoint roda dipasang di sini (s = 0, arah sekarang).
+2026-10-20 12:59:04,356 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261020_125904_COBA PD_PERCOBAAN KE-16
+2026-10-20 12:59:04,357 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261020_125904_COBA PD_PERCOBAAN KE-16
