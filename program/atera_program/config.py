@@ -134,7 +134,7 @@ YAW_TORSI_MAKS = 0.40               # [N m] batas |u_belok| (juga dibatasi sisa 
 TORSI_BELOK = 0.02                  # [N m]
 
 # =============================================================================
-#                              5. CBF-QP  (= simulasi)
+#                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
 Alpha_1 = 35.15 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
