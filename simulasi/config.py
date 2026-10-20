@@ -502,8 +502,8 @@ OPTUNA_BATAS = {
         # maju-mundur robot (underdamped). Dibutuhkan tahap PD dan SEMUA.
         "Kp_psi":   (5.0, 25.0),
         "Kd_psi":   (1.5, 3.5),
-        "Kp_theta": (0.0, 0.3),
-        "Kd_theta": (0.1, 0.6),
+        "Kp_theta": (0.01, 1.0),
+        "Kd_theta": (0.1, 1.0),
         "Alpha_1": (25.77, 54.77),
         "Alpha_2": (25.77, 54.77),
         "Alpha_3": (30.00, 150.0),
