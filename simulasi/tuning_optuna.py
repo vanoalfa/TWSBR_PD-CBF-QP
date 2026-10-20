@@ -24,7 +24,8 @@ Study baru (belum ada trial) dimulai dari nilai config.py sebagai trial pertama 
 Satu PENGUJIAN (headless, lantai config.OPTUNA_ZETA_DEG, mode DIAM) = OPTUNA_ULANGAN ulangan skenario, robot
 di-reset di awal tiap ulangan:
     tenang sampai stabil -> dorongan berurutan OPTUNA_ARAH_DORONG berjarak OPTUNA_DURASI_DORONGAN s (stabil atau
-    belum) -> tunggu stabil setelah dorongan terakhir. Ulangan ke-k memakai seed noise OPTUNA_SEED + k dan waktu
+    belum; OPTUNA_JARAK_ACAK: tiap jarak acak OPTUNA_JARAK_ACAK_MIN .. MAKS, seed tetap, daftar_jarak) -> tunggu
+    stabil setelah dorongan terakhir. Ulangan ke-k memakai seed noise OPTUNA_SEED + k dan waktu
     dorong yang digeser k x OPTUNA_GESER_DORONG s. Skor pengujian = jumlah skor semua ulangan.
 Satu TRIAL:
     tahap PD     : bisection gaya dorong (profil gaya_dorong .. OPTUNA_GAYA_MAKS, langkah OPTUNA_GAYA_LANGKAH);
@@ -194,6 +195,21 @@ def nama_dorongan():
     return hasil
 
 
+def daftar_jarak(ulangan):
+    """Jarak [s] antar dorongan berurutan pada ulangan ke-`ulangan` (0 = pertama): list sepanjang jumlah dorongan - 1.
+    OPTUNA_JARAK_ACAK: acak merata OPTUNA_JARAK_ACAK_MIN .. OPTUNA_JARAK_ACAK_MAKS (kelipatan DT), seed
+    OPTUNA_SEED_JARAK + ulangan, jadi sama untuk semua trial dan gaya. Tanpa acak: semuanya jarak_dorongan(ulangan)."""
+    jumlah = max(0, len(config.OPTUNA_ARAH_DORONG) - 1)
+    if not config.OPTUNA_JARAK_ACAK:
+        return [jarak_dorongan(ulangan)] * jumlah
+    acak = np.random.default_rng(int(config.OPTUNA_SEED_JARAK) + ulangan)
+    hasil = []
+    for _ in range(jumlah):
+        jarak = acak.uniform(float(config.OPTUNA_JARAK_ACAK_MIN), float(config.OPTUNA_JARAK_ACAK_MAKS))
+        hasil.append(langkah(jarak) * config.DT)
+    return hasil
+
+
 def jarak_dorongan(ulangan):
     """Jarak antar dorongan [s] pada ulangan ke-`ulangan` (0 = ulangan pertama)."""
     return config.OPTUNA_DURASI_DORONGAN + ulangan * config.OPTUNA_GESER_DORONG
@@ -202,6 +218,8 @@ def jarak_dorongan(ulangan):
 def waktu_dinilai_ulangan_maks():
     """Lama maksimum bagian yang dinilai dalam satu ulangan [s] (dari dorongan pertama sampai batas tunggu setelah
     dorongan terakhir), untuk ulangan dengan jarak dorongan terpanjang."""
+    if config.OPTUNA_JARAK_ACAK:
+        return (len(config.OPTUNA_ARAH_DORONG) - 1) * float(config.OPTUNA_JARAK_ACAK_MAKS) + config.OPTUNA_DURASI_STABIL
     jarak_terpanjang = jarak_dorongan(config.OPTUNA_ULANGAN - 1)
     return (len(config.OPTUNA_ARAH_DORONG) - 1) * jarak_terpanjang + config.OPTUNA_DURASI_STABIL
 
@@ -461,6 +479,8 @@ class Penguji:
                  "ulangan": int(config.OPTUNA_ULANGAN), "geser_dorong": float(config.OPTUNA_GESER_DORONG),
                  "arah_dorong": list(config.OPTUNA_ARAH_DORONG),
                  "durasi_dorongan": float(config.OPTUNA_DURASI_DORONGAN),
+                 "jarak_acak": bool(config.OPTUNA_JARAK_ACAK),
+                 "jarak_dorongan": [daftar_jarak(k) for k in range(int(config.OPTUNA_ULANGAN))],
                  "durasi_stabil": float(config.OPTUNA_DURASI_STABIL),
                  "stabil_psi": float(config.OPTUNA_STABIL_PSI), "stabil_dpsi": float(config.OPTUNA_STABIL_DPSI),
                  "stabil_dtheta": float(config.OPTUNA_STABIL_DTHETA),
@@ -567,7 +587,7 @@ class Penguji:
         arah = config.OPTUNA_ARAH_DORONG
         jumlah_dorongan = len(arah)
         nama = nama_dorongan()
-        langkah_dorongan = langkah(jarak_dorongan(ulangan))
+        langkah_jarak = [langkah(jarak) for jarak in daftar_jarak(ulangan)]   # jarak setelah dorongan ke-i
         langkah_tunda = langkah(ulangan * config.OPTUNA_GESER_DORONG)
         langkah_stabil_maks = langkah(config.OPTUNA_DURASI_STABIL)
         langkah_stabil_lama = langkah(config.OPTUNA_STABIL_LAMA)
@@ -645,7 +665,7 @@ class Penguji:
             elif fase == jumlah_dorongan - 1:
                 akhir_fase = sudah_stabil or k_fase >= langkah_stabil_maks
             else:
-                akhir_fase = k_fase >= langkah_dorongan
+                akhir_fase = k_fase >= langkah_jarak[fase]
             if akhir_fase:
                 tutup_respon()                       # respon dorongan sebelumnya selesai (tidak ada bila fase awal)
                 if fase == jumlah_dorongan - 1:
@@ -752,24 +772,60 @@ class Penguji:
     # -------------------------------------------------------------------------
     # Satu trial
     # -------------------------------------------------------------------------
-    def cari_gaya_tertinggi(self, gain, zeta_deg):
+    def cari_gaya_tertinggi(self, gain, zeta_deg, mulai=None):
         """Tahap PD: bisection gaya dorong tertinggi yang lolos satu pengujian (tanpa komet).
 
         ASUMSI: lolos pada gaya F berarti lolos pada gaya yang lebih kecil (bisection hanya mencoba sebagian kisi).
+        mulai [N] (opsional, dipakai S1 PD + CBF-QP = gaya lolos PD saja): setelah gaya terendah lolos, pencarian
+        dimulai dari kisi terdekat gaya itu, langkah naik / turun dilipatgandakan (1, 2, 4, ... kisi) sampai batas
+        lolos / komet ditemukan, lalu bisection seperti biasa. Dengan ASUMSI yang sama hasilnya sama dengan
+        bisection biasa, tetapi jauh lebih sedikit pengujian bila hasilnya dekat dengan `mulai`.
         Mengembalikan (skor, status, detail). Diagnostik (self.diag) dari pengujian pada gaya lolos tertinggi, atau
         pada gaya terendah bila semua komet (gaya_N = 0).
         """
         kisi = daftar_gaya(self.profil)
+        detail_gagal = ""
+        # Gaya terendah SELALU diuji lebih dulu (juga dengan `mulai`): robot harus lolos dari gaya rendah.
         skor, status, detail, _, diag = self.uji(gain, zeta_deg, kisi[0])
         if status == STATUS_KOMET:
             diag["gaya_N"] = 0.0
             self.diag = diag
             return skor, STATUS_KOMET, "%s pada %.1f N" % (detail, kisi[0])
-
         # kisi[lolos] lolos; kisi[gagal] komet (gagal = len(kisi): di atas OPTUNA_GAYA_MAKS, dianggap komet).
         lolos, gagal = 0, len(kisi)
         hasil_lolos = (skor, detail, diag)
-        detail_gagal = ""
+        if mulai is not None:
+            i = min(range(len(kisi)), key=lambda k: abs(kisi[k] - float(mulai)))
+            jarak = 1
+            if i > 0:
+                skor, status, detail, _, diag = self.uji(gain, zeta_deg, kisi[i])
+                if status == STATUS_KOMET:
+                    gagal = i
+                    detail_gagal = "komet pada %.1f N: %s" % (kisi[i], detail.split("; tidak stabil:")[0])
+                    while gagal - lolos > 1:                 # turun sampai lolos (kisi[0] sudah lolos)
+                        j = max(lolos + 1, gagal - jarak)
+                        skor, status, detail, _, diag = self.uji(gain, zeta_deg, kisi[j])
+                        if status != STATUS_KOMET:
+                            lolos = j
+                            hasil_lolos = (skor, detail, diag)
+                            break
+                        gagal = j
+                        detail_gagal = "komet pada %.1f N: %s" % (kisi[j], detail.split("; tidak stabil:")[0])
+                        jarak = 2 * jarak
+                else:
+                    lolos = i
+                    hasil_lolos = (skor, detail, diag)
+            if gagal == len(kisi):
+                while lolos < len(kisi) - 1:                 # naik sampai komet (atau batas atas kisi)
+                    j = min(len(kisi) - 1, lolos + jarak)
+                    skor, status, detail, _, diag = self.uji(gain, zeta_deg, kisi[j])
+                    if status == STATUS_KOMET:
+                        gagal = j
+                        detail_gagal = "komet pada %.1f N: %s" % (kisi[j], detail.split("; tidak stabil:")[0])
+                        break
+                    lolos = j
+                    hasil_lolos = (skor, detail, diag)
+                    jarak = 2 * jarak
         while gagal - lolos > 1:
             tengah = (lolos + gagal) // 2
             skor, status, detail, _, diag = self.uji(gain, zeta_deg, kisi[tengah])
@@ -878,13 +934,14 @@ class Penguji:
         teks = detail_gagal if detail_gagal else "lolos sampai batas %.1f deg" % kisi[-1]
         return kisi[lolos], teks, info_lolos
 
-    def nilai_mode(self, gain, pakai_cbf):
+    def nilai_mode(self, gain, pakai_cbf, gaya_awal=None):
         """Satu mode kontrol (pakai_cbf False = PD saja), lalu mode tahap dikembalikan. Mask barrier CBF-QP tetap dari
         tahap (atur_tahap).
             tanpa "miring": S1 saja (cari_gaya_tertinggi di lantai OPTUNA_ZETA_DEG), sama persis dengan sebelumnya
             dengan "miring": S1 -> S2 (cari_miring_tertinggi) -> S3 (uji gaya_lolos S1 di miring_lolos S2)
                              skor = skor S1 - OPTUNA_BOBOT_MIRING x miring_lolos - (OPTUNA_BOBOT_S3 bila S3 lolos)
                              S2 dan S3 tidak dijalankan bila S1 gagal pada gaya terendah (miring_lolos = 0)
+        gaya_awal [N]: S1 dimulai dari gaya ini (cari_gaya_tertinggi `mulai`), dipakai PD + CBF-QP = gaya lolos PD saja.
         Mengembalikan (skor, status, detail, hasil_miring). status dari S1 (komet bila gaya terendah pun komet).
         self.diag = diagnostik S1. hasil_miring = {} tanpa "miring", atau dict miring_deg, s3_lolos, miring_s_maks_m."""
         if pakai_cbf and self.cbf is None:
@@ -892,7 +949,8 @@ class Penguji:
         mode_tahap = self.pakai_cbf
         self.pakai_cbf = bool(pakai_cbf)
         try:
-            skor, status, detail = self.cari_gaya_tertinggi(gain, config.OPTUNA_ZETA_DEG)
+            mulai = gaya_awal if gaya_awal is not None and gaya_awal > 0.0 else None
+            skor, status, detail = self.cari_gaya_tertinggi(gain, config.OPTUNA_ZETA_DEG, mulai)
             if not self.miring:
                 return skor, status, detail, {}
             diag_s1 = self.diag
@@ -937,7 +995,8 @@ class Penguji:
         self.diag_miring = KOLOM_MIRING (bila "miring")."""
         skor_pd, _, detail_pd, miring_pd = self.nilai_mode(gain, pakai_cbf=False)
         gaya_pd = self.diag["gaya_N"]
-        skor_cbf, _, detail_cbf, miring_cbf = self.nilai_mode(gain, pakai_cbf=True)
+        # S1 PD + CBF-QP dimulai dari gaya lolos PD saja (hasil sama, pengujian lebih sedikit)
+        skor_cbf, _, detail_cbf, miring_cbf = self.nilai_mode(gain, pakai_cbf=True, gaya_awal=gaya_pd)
         gaya_cbf = self.diag["gaya_N"]
         if self.miring:
             self.diag_miring = {"miring_deg": miring_cbf["miring_deg"], "s3_lolos": miring_cbf["s3_lolos"],
@@ -1202,8 +1261,14 @@ def cetak_kepala(study, tahap, profil, penguji, definisi, variabel, bawah, atas,
               "Skor = jumlah skor gaya yang diuji + penalti." % penalti_dilewati())
     selesai = len([t for t in study.trials if t.state != optuna.trial.TrialState.WAITING])
     print("Lantai %.1f deg | %d trial (sudah ada %d)" % (config.OPTUNA_ZETA_DEG, jumlah_trial, selesai))
-    print("Skenario: tenang sampai stabil -> %s (jarak %.1f s) -> sampai stabil"
-          % (" -> ".join(nama_dorongan()), config.OPTUNA_DURASI_DORONGAN))
+    if config.OPTUNA_JARAK_ACAK:
+        teks_jarak = "jarak acak %.1f .. %.1f s, seed %d + k" % (config.OPTUNA_JARAK_ACAK_MIN,
+                                                                 config.OPTUNA_JARAK_ACAK_MAKS, config.OPTUNA_SEED_JARAK)
+    else:
+        teks_jarak = "jarak %.1f s" % config.OPTUNA_DURASI_DORONGAN
+    print("Skenario: tenang sampai stabil -> %s (%s) -> sampai stabil" % (" -> ".join(nama_dorongan()), teks_jarak))
+    for k in range(config.OPTUNA_ULANGAN):
+        print("          ulangan %d: jarak antar dorongan %s s" % (k + 1, ", ".join("%.2f" % j for j in daftar_jarak(k))))
     print("          %d ulangan dengan reset (ulangan ke-k: seed %d + k, dorongan digeser k x %.2f s) | "
           "tunggu stabil maks %.0f s" % (config.OPTUNA_ULANGAN, config.OPTUNA_SEED, config.OPTUNA_GESER_DORONG,
                                          config.OPTUNA_DURASI_STABIL))
@@ -1868,6 +1933,10 @@ CONFIG_WAJIB = {
     "OPTUNA_BOBOT_MIRING": "OPTUNA_BOBOT_MIRING = 5000.0   # [per deg] S2: bobot kemiringan lolos di skor",
     "OPTUNA_BOBOT_S3": "OPTUNA_BOBOT_S3 = 5000.0       # S3: bonus skor bila lolos",
     "CBF_TAHU_ZETA": "CBF_TAHU_ZETA = False          # False = seperti robot: CBF tidak tahu kemiringan, DOB menaksir",
+    "OPTUNA_JARAK_ACAK": "OPTUNA_JARAK_ACAK = True      # jarak antar dorongan acak (seed tetap)",
+    "OPTUNA_JARAK_ACAK_MIN": "OPTUNA_JARAK_ACAK_MIN = 10.0  # [s] jarak acak terpendek",
+    "OPTUNA_JARAK_ACAK_MAKS": "OPTUNA_JARAK_ACAK_MAKS = 20.0 # [s] jarak acak terpanjang",
+    "OPTUNA_SEED_JARAK": "OPTUNA_SEED_JARAK = 1001      # seed jarak acak ulangan pertama",
 }
 
 

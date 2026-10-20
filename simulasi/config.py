@@ -96,10 +96,10 @@ YAW_KOMET_DEG = 90.0                # [deg]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 09.69       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 01.83       #5.2                # [N m s/rad]
-Kp_theta = 0.03      #0.24             # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
-Kd_theta = 0.25      #0.41             # [N m s/rad]
+Kp_psi = 06.39       #33.15              # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 01.65       #5.2                # [N m s/rad]
+Kp_theta = 0.11      #0.24               # [N m/rad]    hanya mode DIAM (diabaikan saat GERAK / BEBAS)
+Kd_theta = 0.29      #0.41               # [N m s/rad]
 # Kvel*arah hanya mode GERAK / BEBAS. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
 # -> Kvel NEGATIF supaya W maju (Kd_theta 0.13: Kvel -0.26 -> 0.10 m/s, -0.52 -> 0.20 m/s, -0.78 -> 0.30 m/s).
 # ASUMSI: -0.52 (0.20 m/s), sama dengan robot fisik.
@@ -130,12 +130,12 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 35.15 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 52.64 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 46.67 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
-Alpha_4 = 36.95 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_5 = 50.18 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
-Alpha_6 = 223.09 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
+Alpha_1 = 35.62 #23.95          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 39.32 #20.09          # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 33.22 #51.74          # [1/s]  h3, h4 (dpsi, CBF orde 1)
+Alpha_4 = 27.18 #11.52          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_5 = 93.32 #35.41          # [1/s]  h5, h6 (jarak tempuh s, HOCBF orde 2), hanya mode DIAM
+Alpha_6 = 245.94 #84.67         # [1/s]  h7, h8 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
@@ -425,7 +425,8 @@ DESIMAL_ALPHA = 2
 #   Titik nol s = posisi awal tiap ulangan. Torsi roda mengikuti profil (OPTUNA_PROFIL di bawah).
 # Ulangan ke-k (k = 0, 1, ...) dibuat berbeda supaya hasil tidak bergantung pada keberuntungan:
 #   noise IMU memakai seed OPTUNA_SEED + k, dan dorongan pertama ditunda k x OPTUNA_GESER_DORONG detik setelah
-#   tenang awal, jarak antar dorongan menjadi OPTUNA_DURASI_DORONGAN + k x OPTUNA_GESER_DORONG.
+#   tenang awal, jarak antar dorongan menjadi OPTUNA_DURASI_DORONGAN + k x OPTUNA_GESER_DORONG
+#   (atau ACAK OPTUNA_JARAK_ACAK_MIN .. OPTUNA_JARAK_ACAK_MAKS bila OPTUNA_JARAK_ACAK, lihat di bawah).
 #   Skor pengujian = JUMLAH skor semua ulangan. Komet di satu ulangan menghentikan pengujian (ulangan sisanya tidak
 #   dijalankan).
 # STABIL = |psi| < OPTUNA_STABIL_PSI, |dpsi| < OPTUNA_STABIL_DPSI, |dtheta| < OPTUNA_STABIL_DTHETA, ketiganya
@@ -571,6 +572,14 @@ OPTUNA_ZETA_UJI_DEG = 5.2           # [deg] lantai untuk menguji hasil terbaik (
 OPTUNA_ARAH_DORONG = [1, -1, 1, -1]  # urutan dorongan: 1 = dorong depan, -1 = dorong belakang (tanpa reset di antaranya)
 OPTUNA_DURASI_DORONGAN = 15.0       # [s] jarak antar dorongan (terpisah dari DURASI_PENGUJIAN). ASUMSI 20261017:
                                     #     respon 25 N di simulasi 20261014 reda sekitar 15 s setelah dorongan
+# Jarak antar dorongan ACAK (OPTUNA_JARAK_ACAK = True): tiap jarak diambil acak merata OPTUNA_JARAK_ACAK_MIN ..
+# OPTUNA_JARAK_ACAK_MAKS detik (kelipatan DT), menggantikan OPTUNA_DURASI_DORONGAN + k x OPTUNA_GESER_DORONG.
+# Seed acak ulangan ke-k = OPTUNA_SEED_JARAK + k: tiap ulangan dan tiap dorongan berbeda, tetapi SAMA untuk semua
+# trial dan semua gaya (perbandingan antar trial tetap adil). False = jarak tetap seperti di atas.
+OPTUNA_JARAK_ACAK = True
+OPTUNA_JARAK_ACAK_MIN = 10.0        # [s] ASUMSI: dorongan bisa datang sebelum robot tenang (kondisi buruk)
+OPTUNA_JARAK_ACAK_MAKS = 20.0       # [s] ASUMSI: rata-rata 15 s = OPTUNA_DURASI_DORONGAN
+OPTUNA_SEED_JARAK = 1001            # seed jarak acak ulangan pertama (terpisah dari seed noise IMU)
 # Syarat STABIL (lihat penjelasan di atas). Hanya menentukan kapan dorongan pertama diberikan dan kapan ulangan
 # selesai, TIDAK diberi penalti.
 OPTUNA_STABIL_PSI = 0.15707963     # [rad]   |psi|    < nilai ini (10 deg)
