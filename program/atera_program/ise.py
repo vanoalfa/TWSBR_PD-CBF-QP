@@ -6,8 +6,9 @@ Folder hasil (di dalam atera_program, HHmmSS = jam saat disimpan):
     PLOT_EVALUASI/ATERA_RASPI/PENGUJIAN/PD/ dan .../PENGUJIAN/CBFQP/   (L3, DURASI_PENGUJIAN detik)
     PLOT_EVALUASI/ATERA_RASPI/<PERCOBAAN atau PENGUJIAN>/BANDING/      (hasil --bandingkan)
 Nomor KE-XX naik otomatis per tanggal, mode, dan jenis. Kolom CSV sama dengan simulasi/ise.py.
-Kolom CSV tambahan (KOLOM_EKSTRA, sesudah zeta_DEG): arah (perintah maju / mundur: 0 = mode DIAM, +1 / -1 = mode
-GERAK), bebas (1 = mode BEBAS, Tombol A), yaw_rad, dyaw_rad_s, yaw_ref_rad, u_belok_Nm (PD heading), dob_dtheta_rad_s2, dob_dpsi_rad_s2 (DOB), slack.
+Kolom CSV tambahan (KOLOM_EKSTRA, sesudah zeta_DEG): arah (perintah maju / mundur: 0 lepas, +1 / -1 D-Pad atas /
+bawah), bebas (1 = mode BEBAS, Tombol A), balancing (1 = mode BALANCING, Tombol B), yaw_rad, dyaw_rad_s, yaw_ref_rad,
+u_belok_Nm (PD heading), dob_dtheta_rad_s2, dob_dpsi_rad_s2 (DOB), slack.
 Status CBF "SLACK" (constraint dilonggarkan) dihitung di metrik.
 Penyimpanan saat robot masih balancing berjalan di PROSES TERPISAH (simpan(latar=True)) supaya loop kontrol tidak
 tertahan matplotlib.
@@ -79,8 +80,8 @@ JENIS_PENGUJIAN = "PENGUJIAN"       # L3: DURASI_PENGUJIAN detik sejak tombol di
 KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
 KOLOM_GAIN = KOLOM_GAIN_PD + config.NAMA_ALPHA + ["psi_max_DEG"]
 # kolom tambahan (sama dengan simulasi/ise.py); file lama tanpa kolom ini tetap terbaca (nilai 0)
-KOLOM_EKSTRA = ["arah", "bebas", "yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "u_belok_Nm", "dob_dtheta_rad_s2",
-                "dob_dpsi_rad_s2", "slack"]
+KOLOM_EKSTRA = ["arah", "bebas", "balancing", "yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "u_belok_Nm",
+                "dob_dtheta_rad_s2", "dob_dpsi_rad_s2", "slack"]
 KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
              "error_theta", "error_dtheta", "error_psi", "error_dpsi",
              "u_PD_Nm", "u_Nm", "status_cbf", "dorong_N",
@@ -405,7 +406,10 @@ def _penanda_psi(ax, sumbu="y"):
 
 def _aktif(mask, nama):
     """(batas atas aktif, batas bawah aktif) barrier `nama` ("psi", "dpsi", "s", "dtheta") dari mask constraint
-    (config.CBF_BARRIER_H). mask None = semua dianggap aktif (mode PD / file lama)."""
+    (config.CBF_BARRIER_H). mask None = semua dianggap aktif (mode PD / file lama). Nama yang bukan constraint
+    CBF-QP (tidak ada di config.CBF_BARRIER_H, contoh dpsi, s) selalu tidak aktif."""
+    if nama not in config.CBF_BARRIER_H:
+        return False, False
     atas, bawah = config.CBF_BARRIER_H[nama]
     if mask is None:
         return True, True

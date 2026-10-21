@@ -11,14 +11,12 @@ Bagian safety filter selain constraint WORKPLACE:
                 yang memenuhi semua (constraint bertabrakan, atau torsi motor tidak cukup), QP tetap punya solusi dan
                 constraint yang bobotnya KECIL dilonggarkan lebih dulu (PRIORITAS). Bobot besar di h1/h2 = psi didahulukan.
                 Kenapa tidak persis segway_cbf.py dosen (SATU slack bersama, penalti kuadrat rho*d^2)?
-                  - Dosen hanya punya constraint tilt. Dengan h1..h8, satu slack bersama membagi pelanggaran ke semua
+                  - Dosen hanya punya constraint tilt. Dengan h1..h4, satu slack bersama membagi pelanggaran ke semua
                     constraint tanpa prioritas; bobot per constraint membuat psi selalu didahulukan.
                   - Penalti kuadrat membuat constraint yang sedang aktif selalu sedikit dilanggar (turunan rho*d^2 di d = 0
                     adalah 0), jadi status SLACK muncul walau tidak ada tabrakan. Penalti linear tidak.
-                  Catatan uji loop tertutup 16-10 (model planar): di dorongan 5-12 N pilihan bobot ini TIDAK mengubah
-                  hasil. Yang menentukan adalah dtheta_max: dengan 13 rad/s SEMUA varian slack membuat robot jatuh di
-                  dorongan 10 N (h7/h8 melarang roda mengejar badan), dengan 20 rad/s tidak. QP lama "selamat" di kasus
-                  itu hanya karena saat GAGAL ia kembali ke u_PD (semua constraint dibuang).
+                  Catatan uji loop tertutup 16-10 (model planar): yang menentukan adalah dtheta_max: dengan 13 rad/s
+                  barrier dtheta melarang roda mengejar badan dan robot jatuh di dorongan 10 N, dengan 20 rad/s tidak.
                 Status "SLACK" = ada constraint yang dilonggarkan (CSV kolom slack = d_k terbesar).
                 CBF_SLACK_AKTIF = False -> d dipaksa 0 (perilaku lama, GAGAL -> u_PD dibatasi arus).
     2. DOB    : Disturbance Observer (class DOB). Model f(x) + g(x)*u tidak tahu dorongan tangan, gesekan, batas
@@ -38,10 +36,10 @@ Bagian safety filter selain constraint WORKPLACE:
     zeta (kemiringan bidang) dan psi_max (batas h1, h2) juga parameter: nilainya dibaca dari config.zeta dan
     config.psi_max tiap siklus, jadi bisa diubah saat program berjalan tanpa membangun ulang solver.
 
-Mode gerak (mode_cbf, pd_control.py): MODE_DIAM (D-Pad atas / bawah dilepas), MODE_GERAK (ditekan), dan MODE_BEBAS
-(Tombol A) memakai SATU solver yang sama. Setiap constraint diberi parameter mask m_k (1 = aktif, 0 = dilewati): c_k dipakai sebagai
-m_k*c_k + (1 - m_k),  jadi constraint dengan m_k = 0 selalu terpenuhi dan tidak ikut membatasi u. Yang berganti saat
-mode berganti hanya mask, bukan solver, jadi aman berganti tiap siklus.
+Mode gerak (mode_cbf, pd_control.py): MODE_DIAM, MODE_BALANCING, dan MODE_BEBAS memakai SATU solver yang sama.
+Setiap constraint diberi parameter mask m_k (1 = aktif, 0 = dilewati): c_k dipakai sebagai m_k*c_k + (1 - m_k), jadi
+constraint dengan m_k = 0 selalu terpenuhi dan tidak ikut membatasi u. Yang berganti saat mode berganti hanya mask,
+bukan solver, jadi aman berganti tiap siklus.
 
 Model torsi: u adalah torsi PERINTAH (arus perintah x K_t datasheet). Torsi yang benar-benar bekerja di roda adalah
 rasio_torsi * u, dengan rasio_torsi = K_t efektif / K_t datasheet (config.RASIO_TORSI).
@@ -76,7 +74,7 @@ import numpy as np
 
 import config
 import model
-from pd_control import MODE_BEBAS, MODE_DIAM, MODE_GERAK
+from pd_control import MODE_BALANCING, MODE_BEBAS, MODE_DIAM
 
 STATUS_AMAN = "AMAN"                # u = u* dari QP solver, semua constraint terpenuhi (slack = 0)
 STATUS_SLACK = "SLACK"              # QP selesai, tetapi constraint terpaksa dilonggarkan (slack > 0)
@@ -92,7 +90,7 @@ def workplace(x, u, f, g, zeta, psi_max):
     """Tempat menulis barrier function h dan constraint CBF. Mengembalikan (DAFTAR_C, C_MODE).
 
     Yang bisa dipakai di dalam WORKPLACE:
-        theta, dtheta, psi, dpsi  : state (simbol)
+        dtheta, psi               : state (simbol); theta = x[config.IDX_THETA], dpsi = x[config.IDX_DPSI] bila perlu
         u                         : torsi satu roda (simbol)
         f, g                      : model dx/dt = f(x) + g(x)*u   (dari model.py, sudah memakai zeta dan rasio_torsi,
                                     u = torsi perintah satu roda)
@@ -100,14 +98,11 @@ def workplace(x, u, f, g, zeta, psi_max):
         psi_max                   : batas psi [rad] (simbol, nilainya dari config.psi_max tiap siklus)
         lie(h, v)                 : turunan Lie, L_v h = (dh/dx) * v
         Alpha_1, Alpha_2, ...     : semua Alpha_<nomor> di config.py (otomatis, nilainya bisa diubah di jendela Kontrol)
-        MODE_DIAM, MODE_GERAK, MODE_BEBAS : nama mode gerak (kunci C_MODE, ketiganya wajib ada)
-        config.<nama>             : nilai lain dari config.py (dpsi_max, dtheta_max, s_max, MAX_CURRENT_A, ...)
+        MODE_DIAM, MODE_BALANCING, MODE_BEBAS : nama mode gerak (kunci C_MODE, ketiganya wajib ada)
+        config.<nama>             : nilai lain dari config.py (dtheta_max, MAX_CURRENT_A, ...)
     """
-    theta = x[config.IDX_THETA]
     dtheta = x[config.IDX_DTHETA]
     psi = x[config.IDX_PSI]
-    dpsi = x[config.IDX_DPSI]
-    s = model.hitung_s(x)               # jarak tempuh [m] dari setpoint theta (titik nol s)
 
     def lie(h, v):
         """Turunan Lie: L_v h = (dh/dx) * v"""
@@ -118,10 +113,10 @@ def workplace(x, u, f, g, zeta, psi_max):
     # =========================================================================================
     # FORMAT (salin, lalu ganti h dan Alpha):
     #
-    #   CBF orde 1 (h yang turunan pertamanya sudah memuat u, contoh: dpsi, dtheta):
+    #   CBF orde 1 (h yang turunan pertamanya sudah memuat u, contoh: dtheta):
     #       c_hX = lie(hX, f) + lie(hX, g) * u + Alpha_k * hX
     #
-    #   HOCBF orde 2 (h yang baru memuat u di turunan kedua, contoh: psi, theta, jarak s):
+    #   HOCBF orde 2 (h yang baru memuat u di turunan kedua, contoh: psi):
     #       Lf_hX = lie(hX, f)
     #       c_hX = lie(Lf_hX, f) + lie(Lf_hX, g) * u + Alpha_k * Lf_hX + Alpha_m * (Lf_hX + Alpha_k * hX)
     #
@@ -134,14 +129,10 @@ def workplace(x, u, f, g, zeta, psi_max):
     # -----------------------------------------------------------------------------------------
 
     # 1. Tulis definisi h di bawah
-    h1 = -psi + psi_max
-    h2 = psi + psi_max
-    h3 = -dpsi + config.dpsi_max
-    h4 = dpsi + config.dpsi_max
-    h5 = -s + config.s_max              # s <= s_max
-    h6 = s - config.s_min               # s >= s_min
-    h7 = -dtheta + config.dtheta_max
-    h8 = dtheta + config.dtheta_max
+    h1 = -psi + psi_max                 # psi <= psi_max
+    h2 = psi + psi_max                  # psi >= -psi_max
+    h3 = -dtheta + config.dtheta_max    # dtheta <= dtheta_max
+    h4 = dtheta + config.dtheta_max     # dtheta >= -dtheta_max
 
     # 2. Tulis constraint di bawah
     Lf_h1 = lie(h1, f)
@@ -152,22 +143,14 @@ def workplace(x, u, f, g, zeta, psi_max):
     c_h3 = lie(h3, f) + lie(h3, g) * u + Alpha_3 * h3
     c_h4 = lie(h4, f) + lie(h4, g) * u + Alpha_3 * h4
 
-    Lf_h5 = lie(h5, f)
-    c_h5 = lie(Lf_h5, f) + lie(Lf_h5, g) * u + Alpha_4 * Lf_h5 + Alpha_5 * (Lf_h5 + Alpha_4 * h5)
-    Lf_h6 = lie(h6, f)
-    c_h6 = lie(Lf_h6, f) + lie(Lf_h6, g) * u + Alpha_4 * Lf_h6 + Alpha_5 * (Lf_h6 + Alpha_4 * h6)
-
-    c_h7 = lie(h7, f) + lie(h7, g) * u + Alpha_6 * h7
-    c_h8 = lie(h8, f) + lie(h8, g) * u + Alpha_6 * h8
-
     # 3. Daftarkan semua constraint yang bisa dipakai
-    DAFTAR_C = [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6, c_h7, c_h8]
+    DAFTAR_C = [c_h1, c_h2, c_h3, c_h4]
 
     # 4. Pilih constraint yang aktif di tiap mode gerak (urutan di dalam daftar bebas, isinya dari DAFTAR_C)
     C_MODE = {
-        MODE_DIAM:  [c_h1, c_h2, c_h3, c_h4, c_h5, c_h6, c_h7, c_h8],
-        MODE_GERAK: [c_h1, c_h2, c_h3, c_h4, c_h7, c_h8],      # tanpa h5, h6 (barrier jarak s)
-        MODE_BEBAS: [c_h1, c_h2, c_h3, c_h4, c_h7, c_h8],      # tanpa h5, h6 (barrier jarak s)
+        MODE_DIAM:      [c_h1, c_h2, c_h3, c_h4],
+        MODE_BALANCING: [c_h1, c_h2, c_h3, c_h4],
+        MODE_BEBAS:     [c_h1, c_h2, c_h3, c_h4],
     }
 
     # =========================================================================================
@@ -223,7 +206,7 @@ def _cbf_expressions():
 def _mask_tiap_mode(daftar_c, c_mode):
     """Mask 0 / 1 tiap mode: 1 bila constraint di DAFTAR_C ikut di daftar C_MODE mode itu."""
     mask = {}
-    for mode in (MODE_DIAM, MODE_GERAK, MODE_BEBAS):
+    for mode in (MODE_DIAM, MODE_BALANCING, MODE_BEBAS):
         if mode not in c_mode or len(c_mode[mode]) == 0:
             raise RuntimeError("C_MODE di WORKPLACE PROGRAM belum memuat constraint untuk mode %s." % mode)
         mask[mode] = np.zeros(len(daftar_c))
@@ -460,7 +443,7 @@ class CBFQP:
 
     # ------------------------------------------------------------------ mode
     def mode_cbf(self, mode: str) -> None:
-        """Pilih constraint CBF sesuai mode gerak: constraint di C_MODE[mode] (MODE_DIAM, MODE_GERAK, MODE_BEBAS).
+        """Pilih constraint CBF sesuai mode gerak: constraint di C_MODE[mode] (MODE_DIAM, MODE_BALANCING, MODE_BEBAS).
         Solver tidak dibangun ulang: hanya mask-nya yang berganti. Aman dipanggil tiap siklus.
         """
         if mode == self.mode:
@@ -546,11 +529,6 @@ class CBFQP:
         p = self._parameter(alphas)
         a, b = self._coeff(np.asarray(x, dtype=float), p)
         return np.array(a).ravel(), np.array(b).ravel()
-
-    def allowed_interval(self, x, alphas=None):
-        """Selang u yang memenuhi semua constraint aktif (termasuk batas arus). lo > hi berarti tidak ada solusi."""
-        a, b = self.constraint_coefficients(x, alphas)
-        return self._interval(a, b)
 
     def _interval(self, a, b):
         lo, hi = self.u_lb, self.u_ub
@@ -664,8 +642,7 @@ def _sampel_uji(cbf, jumlah, seed=0):
     rng = np.random.default_rng(seed)
     hasil = []
     for _ in range(jumlah):
-        x = rng.uniform(-1.3, 1.3, config.NX) * np.array([1.2 * config.s_max / config.R, config.dtheta_max,
-                                                          config.psi_max, config.dpsi_max])
+        x = rng.uniform(-1.3, 1.3, config.NX) * np.array([20.0, config.dtheta_max, config.psi_max, 2.0 * math.pi])
         u_pd = rng.uniform(2.0 * config.u_min, 2.0 * config.u_max)
         d = rng.normal(0.0, 20.0, 2)
         hasil.append((x, u_pd, d))
@@ -725,7 +702,7 @@ if __name__ == "__main__":
     print("QP solver: %s | slack %s (rho %s) | DOB %s | margin psi %.1f deg"
           % (cbf.plugin, "AKTIF" if config.CBF_SLACK_AKTIF else "MATI", " ".join("%.0e" % r for r in cbf.rho),
              "AKTIF" if config.DOB_AKTIF else "MATI (hanya dicatat)", config.CBF_MARGIN_DEG))
-    for mode in (MODE_DIAM, MODE_GERAK, MODE_BEBAS):
+    for mode in (MODE_DIAM, MODE_BALANCING, MODE_BEBAS):
         cbf.mode_cbf(mode)
         print("mode %s | constraint aktif: %d dari %d | Alpha yang dipakai: %s"
               % (mode, int(cbf.mask.sum()), cbf.NH, [cbf.nama_alpha[i] for i in cbf.alpha_dipakai]))

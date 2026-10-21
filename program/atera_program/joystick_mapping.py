@@ -1,22 +1,21 @@
 """joystick_mapping.py - mapping dan pembaca joystick Fantech WGP-13s (evdev, non-blocking), dan keyboard terminal.
 
 Fungsi tombol (Konteks_ATERA.md, ditambah L3 / R3 untuk perekaman ISE):
-    Tombol A : mode BEBAS nyala / mati (saat balancing). Seperti program lama: tanpa PD heading, Kp_theta, dan
-               constraint s, jadi robot bisa ditarik tali ke mana saja; belok D-Pad = selisih torsi TORSI_BELOK.
-               Saat dimatikan, setpoint roda dipasang di posisi itu.
-    Tombol B : pasang setpoint roda di posisi sekarang (kapan saja): setpoint theta (titik nol s) + arah (yaw_ref).
-               Kalibrasi untuk roda saja; Tombol Y untuk IMU + roda.
+    Tombol A : mode gerak BEBAS nyala / mati (saat balancing): tanpa PD heading dan Kp_theta, robot bisa ditarik tali;
+               belok D-Pad = selisih torsi TORSI_BELOK. Mati -> DIAM.
+    Tombol B : mode gerak BALANCING nyala / mati (saat balancing): Kp_theta aktif, setpoint roda (titik nol s + arah)
+               dipasang di posisi saat itu. Mati -> DIAM. Saat BEBAS -> BALANCING.
     Tombol X : matikan roda (percobaan disimpan)
     Tombol Y : kalibrasi IMU (robot diam dan tegak di titik seimbang) + titik nol s di posisi sekarang
     LB / RB  : mode kontrol PD / PD + CBF-QP
     LT / RT  : halaman GUI ke kiri / kanan
-    MULAI    : mulai balancing (setelah kalibrasi; ditolak bila |s| > s_max dari titik nol)
+    MULAI    : mulai balancing, mode gerak DIAM (setelah kalibrasi)
     QUIT     : keluar program
     L3       : mulai satu PENGUJIAN (direkam config.DURASI_PENGUJIAN detik; dorong robot dengan tangan)
     R3       : simpan PERCOBAAN sekarang, perekaman baru dimulai (robot tetap balancing)
-Perintah gerak: arah -1 / 0 / +1 dan belok -1 / 0 / +1, dari D-Pad atau analog kiri. Mode gerak otomatis
-(pd_control.py): D-Pad atas / bawah ditekan = GERAK (Kvel), dilepas = DIAM dengan setpoint theta baru di titik itu.
-D-Pad kiri / kanan = belok (saat DIAM: berputar di tempat).
+Perintah gerak: arah -1 / 0 / +1 dan belok -1 / 0 / +1, dari D-Pad atau analog kiri, di semua mode gerak:
+D-Pad atas / bawah = maju / mundur (Kvel; di BALANCING dilepas = setpoint theta baru di titik itu), kiri / kanan = belok
+(tanpa atas / bawah: berputar di tempat).
 
 Keyboard terminal (KeyboardTerminal, terminal SSH tempat GUI berjalan): aksi sama dengan joystick, lihat
 TOMBOL_KEYBOARD. Panah kiri / kanan = halaman GUI. W A S D = gerak (sama dengan D-Pad); karena terminal tidak
@@ -65,7 +64,7 @@ DPAD_MAP = {
 # Aksi program untuk tiap tombol
 AKSI = {
     "Tombol A": "BEBAS",
-    "Tombol B": "SETPOINT",
+    "Tombol B": "BALANCING",
     "Tombol X": "RODA_MATI",
     "Tombol Y": "KALIBRASI",
     "LB": "MODE_PD",
@@ -84,13 +83,13 @@ ANALOG_BELOK = 1
 
 BANTUAN = (
     "Tombol Y : kalibrasi IMU (robot diam, tegak di titik seimbang) + s = 0 di sini",
-    "MULAI    : mulai balancing (ditolak bila |s| > %g m dari titik nol)" % config.s_max,
+    "MULAI    : mulai balancing, mode gerak DIAM (tanpa Kp_theta)",
     "Tombol X : matikan roda, percobaan disimpan",
     "LB / RB  : mode kontrol PD / PD + CBF-QP",
-    "Tombol B : pasang setpoint roda di sini (s = 0 dan arah sekarang), kapan saja",
-    "D-Pad    : atas / bawah = GERAK maju / mundur (Kvel), dilepas = DIAM dengan setpoint baru di titik itu",
+    "Tombol B : mode BALANCING nyala / mati: Kp_theta aktif, setpoint roda (s = 0 dan arah) di sini. Mati = DIAM",
+    "D-Pad    : atas / bawah = maju / mundur (Kvel), di BALANCING dilepas = setpoint baru di titik itu",
     "           kiri / kanan = belok (tanpa atas / bawah: berputar di tempat). Analog kiri sama dengan D-Pad",
-    "Tombol A : mode BEBAS nyala / mati: tanpa PD heading, Kp_theta, constraint s (bisa ditarik tali)",
+    "Tombol A : mode BEBAS nyala / mati: tanpa PD heading dan Kp_theta (bisa ditarik tali). Mati = DIAM",
     "L3       : mulai PENGUJIAN %.0f s (dorong robot dengan tangan setelah menekan L3)" % config.DURASI_PENGUJIAN,
     "R3       : simpan PERCOBAAN sekarang, rekaman baru dimulai",
     "LT / RT  : halaman GUI",
@@ -103,7 +102,7 @@ TOMBOL_KEYBOARD = {
     "y": "KALIBRASI",
     "m": "MULAI", "\r": "MULAI", "\n": "MULAI",          # m atau Enter
     "x": "RODA_MATI", " ": "RODA_MATI",                   # x atau spasi
-    "b": "SETPOINT",
+    "b": "BALANCING",
     "f": "BEBAS",                                          # F = free (A sudah dipakai W A S D)
     "1": "MODE_PD",
     "2": "MODE_PD_CBF",
@@ -115,7 +114,7 @@ PANAH = {"C": "HALAMAN_KANAN", "D": "HALAMAN_KIRI"}      # ESC [ C / ESC [ D (at
 GERAK_KEYBOARD = {"w": ("arah", 1), "s": ("arah", -1), "a": ("belok", -1), "d": ("belok", 1)}
 
 BANTUAN_KEYBOARD = (
-    "Keyboard terminal: Y kalibrasi | M / Enter MULAI | X / Spasi roda mati | B setpoint di sini | F mode BEBAS",
+    "Keyboard terminal: Y kalibrasi | M / Enter MULAI | X / Spasi roda mati | B mode BALANCING | F mode BEBAS",
     "  1 / 2 mode PD / PD+CBF | T PENGUJIAN | E simpan PERCOBAAN | Q keluar | Panah kiri / kanan halaman GUI",
     "  W / S maju / mundur, A / D belok (tahan, sama dengan D-Pad; dianggap lepas +-%.2f s setelah dilepas)"
     % config.KEYBOARD_TAHAN_ULANG_S,

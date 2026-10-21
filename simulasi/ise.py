@@ -17,7 +17,7 @@ dilanggar (status GAGAL). Kosong = constraint tidak dipakai di mode gerak itu, a
 
 Setiap gambar disimpan sebagai .png dan .eps (vektor, untuk LaTeX). Batas sumbu tetap (config.PLOT_BATAS):
 psi +-1 rad, dpsi +-10 rad/s, theta +-60 rad, dtheta +-30 rad/s, s +-3 m.
-Barrier yang digambar hanya psi, dpsi, dtheta, dan s (config.CBF_BARRIER_H: batas atas / bawah = h berapa).
+Barrier CBF-QP: psi dan dtheta (config.CBF_BARRIER_H: batas atas / bawah = h berapa); dpsi dan s hanya garis acuan.
 Warna garis:
     merah          : barrier CBF-QP yang AKTIF (constraint dicentang / dipakai). Kotak psi memakai psi_max
                      yang tercatat di CSV (kolom psi_max_DEG, bisa diubah di jendela Kontrol)
@@ -79,11 +79,11 @@ KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
 KOLOM_GAIN_CBF = config.NAMA_ALPHA + ["psi_max_DEG"]
 KOLOM_GAIN = KOLOM_GAIN_PD + KOLOM_GAIN_CBF
 
-# Kolom tambahan (sesudah zeta_DEG, sebelum c_h..): arah (perintah maju / mundur: 0 = mode DIAM, +1 / -1 = mode
-# GERAK), bebas (1 = mode BEBAS, tombol F), yaw dan referensi PD heading, u_belok, taksiran DOB, dan slack CBF-QP (0 di mode PD).
-# File lama tanpa kolom ini tetap terbaca.
-KOLOM_EKSTRA = ["arah", "bebas", "yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "u_belok_Nm", "dob_dtheta_rad_s2",
-                "dob_dpsi_rad_s2", "slack"]
+# Kolom tambahan (sesudah zeta_DEG, sebelum c_h..): arah (perintah maju / mundur: 0 lepas, +1 / -1 W / S), bebas
+# (1 = mode BEBAS, tombol F), balancing (1 = mode BALANCING, tombol B), yaw dan referensi PD heading, u_belok, taksiran
+# DOB, dan slack CBF-QP (0 di mode PD). File lama tanpa kolom ini tetap terbaca.
+KOLOM_EKSTRA = ["arah", "bebas", "balancing", "yaw_rad", "dyaw_rad_s", "yaw_ref_rad", "u_belok_Nm",
+                "dob_dtheta_rad_s2", "dob_dpsi_rad_s2", "slack"]
 KOLOM_CSV = ["t_s", "theta_rad", "dtheta_rad_s", "psi_rad", "dpsi_rad_s",
              "error_theta", "error_dtheta", "error_psi", "error_dpsi",
              "u_PD_Nm", "u_Nm", "status_cbf", "dorong_N",
@@ -164,7 +164,10 @@ def nama_percobaan(mode, tuning, jenis=JENIS_PERCOBAAN):
 
 def aktif_barrier(mask, nama):
     """(batas atas aktif, batas bawah aktif) barrier `nama` ("psi", "dpsi", "s", "dtheta") menurut mask constraint
-    CBF-QP (list 0 / 1 urutan DAFTAR_C). mask None = semua dianggap aktif (contoh: mode PD, file lama)."""
+    CBF-QP (list 0 / 1 urutan DAFTAR_C). mask None = semua dianggap aktif (contoh: mode PD, file lama).
+    Nama yang bukan constraint CBF-QP (tidak ada di config.CBF_BARRIER_H, contoh dpsi, s) selalu tidak aktif."""
+    if nama not in config.CBF_BARRIER_H:
+        return False, False
     atas, bawah = config.CBF_BARRIER_H[nama]
     if mask is None:
         return True, True
@@ -275,10 +278,6 @@ def gambar_penanda_psi(ax, sumbu="x"):
         for tanda in (1.0, -1.0):
             garis(tanda * math.radians(derajat), color=warna, linewidth=1.2, linestyle=":", zorder=1.3,
                   label=("|psi| = %g deg" % derajat) if tanda > 0 else None)
-
-
-def ada_batas_jarak():
-    return hasattr(config, "s_max") and hasattr(config, "s_min")
 
 
 def gambar_safety_set(gambar1, gambar2, psi_max=None, mask=None):

@@ -8,20 +8,16 @@ Rumus PD:
     jadi theta = 0 tepat di setpoint. SIGN = config.BALANCE_DIRECTION_SIGN (= -1), sehingga sama dengan
     u_PD = Kp_psi*psi + Kd_psi*dpsi + Kp_theta*theta + Kd_theta*dtheta + Kvel*arah        (semua gain positif)
 
-Mode gerak (mode_gerak), dipilih set_command() dan atur_bebas():
-    MODE_DIAM  : arah = 0 (D-Pad atas / bawah tidak ditekan). Kp_theta AKTIF -> robot ditahan di setpoint theta.
-                 CBF-QP memakai constraint jarak s (h5, h6) dan KOMET |s| > S_KOMET aktif (atera_main.py).
-    MODE_GERAK : arah = +1 / -1 (D-Pad atas / bawah ditekan). Kp_theta DIABAIKAN, Kvel*arah AKTIF.
-                 Constraint s dan KOMET s tidak dipakai (robot memang berjalan jauh).
-    Saat D-Pad DILEPAS (GERAK -> DIAM), atera_main.py memasang setpoint theta baru tepat di posisi itu
-    (titik nol s pindah, theta = 0). Tombol B memasang setpoint yang sama kapan saja.
-    Belok (D-Pad kiri / kanan) bukan GERAK: tanpa maju / mundur robot tetap DIAM dan berputar di tempat.
-    MODE_BEBAS : Tombol A (toggle, atur_bebas). Seperti program lama: Kp_theta DIABAIKAN, Kvel*arah aktif, TANPA PD
-                 heading (yaw tidak ditahan), belok = selisih torsi tetap TORSI_BELOK. Constraint s, KOMET s, dan
-                 KOMET yaw tidak dipakai. Robot bisa ditarik tali ke mana saja (kedua roda bebas berputar sendiri).
-                 Tekan A lagi: kembali DIAM / GERAK, setpoint theta dan arah dipasang di posisi itu (atera_main.py).
+Mode gerak (mode_gerak), dipilih atur_mode() (simulasi: B / F, robot fisik: Tombol B / A):
+    MODE_DIAM      : default. Tanpa Kp_theta (posisi tidak ditahan): Kp_psi, Kd_psi, Kd_theta, Kvel*arah.
+    MODE_BALANCING : B (toggle dengan DIAM). Kp_theta AKTIF -> robot kembali ke setpoint theta (dipasang saat masuk
+                     BALANCING dan saat D-Pad atas / bawah dilepas). Selama D-Pad atas / bawah ditekan, Kp_theta
+                     diabaikan. KOMET |s| > S_KOMET hanya di mode ini.
+    MODE_BEBAS     : A (simulasi: F). Tanpa Kp_theta dan tanpa PD heading (yaw tidak ditahan), belok = selisih torsi
+                     tetap TORSI_BELOK. A lagi -> DIAM. B saat BEBAS -> BALANCING.
+    D-Pad atas / bawah (Kvel*arah) dan kiri / kanan (belok) berlaku di semua mode.
 
-    Kecepatan tunak saat GERAK / BEBAS (lantai datar: psi -> 0 dan u -> 0):   Kd_theta*dtheta + Kvel*arah = 0
+    Kecepatan tunak saat D-Pad atas / bawah ditekan (lantai datar: psi -> 0 dan u -> 0):  Kd_theta*dtheta + Kvel*arah = 0
         dtheta = -Kvel*arah / Kd_theta,   v = R*dtheta
     jadi Kvel harus NEGATIF supaya arah +1 (D-Pad atas) berjalan ke DEPAN.
 
@@ -36,7 +32,7 @@ PD heading (sinkron roda kiri-kanan, compute_belok; tidak dipakai di MODE_BEBAS)
 
 Kontrak: pd.compute(x) -> float (N m),  x = [theta, dtheta, psi, dpsi].
 Urutan pemakaian tiap siklus:
-    pd.set_command(arah, belok)                          (mode gerak ikut otomatis; pd.atur_bebas() untuk Tombol A)
+    pd.set_command(arah, belok)                          (pd.atur_mode() untuk Tombol B / A)
     u_PD = pd.compute(x)
     u_belok = pd.compute_belok(yaw, dyaw, u, u_max, dt)  (u = torsi sesudah CBF-QP / batas arus)
 """
@@ -44,7 +40,7 @@ Urutan pemakaian tiap siklus:
 import config
 
 MODE_DIAM = "DIAM"         # nama mode gerak, dipakai juga oleh cbf_qp.py (kunci C_MODE) dan atera_main.py
-MODE_GERAK = "GERAK"
+MODE_BALANCING = "BALANCING"
 MODE_BEBAS = "BEBAS"
 
 
@@ -76,9 +72,8 @@ class PDControl:
         self.psi_setpoint = float(config.psi_setpoint)
         self.dpsi_setpoint = float(config.dpsi_setpoint)
 
-        # Perintah dari joystick / keyboard
+        # Mode gerak dan perintah dari joystick / keyboard
         self.mode_gerak = MODE_DIAM
-        self.bebas = False             # True = MODE_BEBAS (Tombol A)
         self.arah = 0                  # -1 mundur, 0 lepas, +1 maju
         self.belok = 0                 # -1 kiri, 0 lepas, +1 kanan
 
@@ -93,25 +88,23 @@ class PDControl:
         self.u_belok = 0.0
 
     def set_command(self, arah, belok=0):
-        """arah = -1 / 0 / +1 (+1 = maju), belok = -1 / 0 / +1 (+1 = kanan).
-        Mode gerak ikut otomatis: MODE_BEBAS bila bebas, MODE_GERAK bila arah != 0, selain itu MODE_DIAM."""
+        """arah = -1 / 0 / +1 (+1 = maju), belok = -1 / 0 / +1 (+1 = kanan)."""
         self.arah = int(arah)
         self.belok = int(belok)
-        self._pilih_mode()
 
-    def atur_bebas(self, aktif):
-        """Tombol A: MODE_BEBAS nyala (True) / mati (False). Mode gerak langsung ikut."""
-        self.bebas = bool(aktif)
-        self._pilih_mode()
+    def atur_mode(self, mode):
+        """MODE_DIAM, MODE_BALANCING, atau MODE_BEBAS."""
+        if mode not in (MODE_DIAM, MODE_BALANCING, MODE_BEBAS):
+            raise ValueError("mode gerak tidak dikenal: %s" % mode)
+        self.mode_gerak = mode
 
-    def _pilih_mode(self):
-        if self.bebas:
-            self.mode_gerak = MODE_BEBAS
-        else:
-            self.mode_gerak = MODE_GERAK if self.arah != 0 else MODE_DIAM
+    @property
+    def tahan_posisi(self):
+        """True = Kp_theta bekerja: mode BALANCING dan D-Pad atas / bawah tidak ditekan."""
+        return self.mode_gerak == MODE_BALANCING and self.arah == 0
 
     def pasang_yaw_ref(self, yaw):
-        """Setpoint heading = arah robot sekarang (MULAI, Tombol B, robot diletakkan ulang)."""
+        """Setpoint heading = arah robot sekarang (MULAI, masuk BALANCING, keluar BEBAS, robot diletakkan ulang)."""
         self.yaw_ref = float(yaw)
         self.dyaw_ref = 0.0
 
@@ -129,10 +122,10 @@ class PDControl:
         error_psi = self.psi_setpoint - psi
         error_dpsi = self.dpsi_setpoint - dpsi
 
-        # Kp_theta hanya saat DIAM; saat GERAK / BEBAS robot tidak ditahan di setpoint theta
-        Kp_theta = self.Kp_theta if self.mode_gerak == MODE_DIAM else 0.0
+        # Kp_theta hanya saat BALANCING tanpa perintah maju / mundur
+        Kp_theta = self.Kp_theta if self.tahan_posisi else 0.0
 
-        # Persamaan PD (arah = 0 saat DIAM, jadi Kvel*arah hanya bekerja saat D-Pad atas / bawah ditekan)
+        # Persamaan PD (Kvel*arah hanya bekerja saat D-Pad atas / bawah ditekan)
         u_PD = (self.Kp_psi * error_psi) + (self.Kd_psi * error_dpsi) \
             + (Kp_theta * error_theta) + (self.Kd_theta * error_dtheta)
         u_PD = u_PD * self.balance_direction_sign

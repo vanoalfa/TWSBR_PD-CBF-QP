@@ -8,30 +8,30 @@ Jalankan di Raspberry Pi 5, dari folder atera_program:   python3 atera_main.py
 
 Kontrolnya sama dengan simulasi (simulasi/atera_main.py), hanya sumber state dan tujuan torsinya yang berbeda.
 Tiap siklus (langkah_kontrol_inti):
-    perintah D-Pad / analog / W A S D -> pd.set_command(arah, belok): mode gerak otomatis (pd_control.py)
-        D-Pad atas / bawah ditekan = GERAK (Kp_theta dan constraint s diabaikan, Kvel*arah aktif)
-        dilepas = DIAM: setpoint theta (titik nol s) dipasang tepat di posisi saat dilepas (nolkan_s)
-        Tombol A = BEBAS (toggle): tanpa PD heading, Kp_theta, constraint s; bisa ditarik tali (program lama)
+    perintah D-Pad / analog / W A S D -> pd.set_command(arah, belok) (Kvel*arah dan belok, semua mode gerak)
+        mode gerak (pd_control.py): DIAM (default, tanpa Kp_theta), Tombol B = BALANCING (toggle, Kp_theta aktif,
+        setpoint theta dipasang saat masuk dan saat D-Pad atas / bawah dilepas, nolkan_s), Tombol A = BEBAS (tanpa
+        PD heading dan Kp_theta, bisa ditarik tali; A lagi -> DIAM; B saat BEBAS -> BALANCING)
     -> IMU (psi, dpsi) + encoder DDSM115 -> x = [theta, dtheta, psi, dpsi], yaw dari encoder kiri - kanan
     -> cek KOMET
     -> cbf.dob_perbarui(x, dt)                   DOB (semua mode kontrol, supaya taksirannya selalu siap)
     -> u_PD = pd.compute(x)                      (pd_control.py, torsi SATU roda)
     -> mode PD     : u = u_PD dibatasi arus
-       mode PD+CBF : u = cbf.compute(x, u_PD)    (cbf_qp.py, constraint mode gerak sekarang, slack + DOB)
+       mode PD+CBF : u = cbf.compute(x, u_PD)    (cbf_qp.py, h1 .. h4, slack + DOB)
     -> u_belok = pd.compute_belok(...)           PD heading: kedua roda bergerak bersama (BEBAS: selisih torsi tetap)
     -> roda kiri u + u_belok, roda kanan u - u_belok, arus = torsi / MOTOR_KT  (ddsm115.py)
     -> cbf.dob_catat(x, u)
     -> ise.py merekam (kolom CSV sama dengan simulasi) ke PLOT_EVALUASI/ATERA_RASPI
 
 State: AWAL -(Y)-> SIAP -(MULAI)-> BALANCING -(X)-> SIAP
-       BALANCING -> KOMET    : |psi| > SAFE_TILT_DEG, |s| > S_KOMET (hanya mode DIAM), torsi jenuh terlalu lama,
+       BALANCING -> KOMET    : |psi| > SAFE_TILT_DEG, |s| > S_KOMET (hanya mode gerak BALANCING tanpa D-Pad atas /
+                               bawah), torsi jenuh terlalu lama,
                                atau |yaw - yaw_ref| > YAW_KOMET_DEG (berputar, bukan mode BEBAS).
                                Saat KOMET roda DIREM aktif (KOMET_REM_*), bukan dibiarkan bebas 0 A.
        BALANCING -> GANGGUAN : IMU / motor gagal dibaca saat balancing
        Di KOMET / GANGGUAN roda mati dan data tersimpan; tegakkan robot lalu tekan MULAI lagi.
-Setpoint theta (titik nol s, s = R*theta = 0) dipasang oleh Tombol Y (bersama kalibrasi IMU), Tombol B (kapan saja,
-juga arah / yaw_ref), saat D-Pad atas / bawah dilepas, dan saat mode BEBAS dimatikan; bukan oleh MULAI.
-MULAI ditolak bila robot lebih dari s_max dari titik nol: kembalikan robot ke dekatnya, atau tekan B di sini.
+Setpoint theta (titik nol s, s = R*theta = 0) dipasang oleh Tombol Y (bersama kalibrasi IMU), saat masuk mode gerak
+BALANCING (juga arah / yaw_ref), dan saat D-Pad atas / bawah dilepas di mode BALANCING; bukan oleh MULAI.
 Tombol: joystick, atau keyboard di terminal ini (juga lewat SSH). Lihat joystick_mapping.py / halaman BANTUAN di GUI.
 Log: config.LOG_FILE.
 """
@@ -55,7 +55,7 @@ import joystick_mapping as jm
 import model
 from ddsm115 import MODE_CURRENT, MODE_NAMES, DDSM115Error, DualDDSM115, decode_error
 from mpu6050 import MPU6050
-from pd_control import MODE_BEBAS, MODE_DIAM, MODE_GERAK, PDControl, hitung_yaw
+from pd_control import MODE_BALANCING, MODE_BEBAS, MODE_DIAM, PDControl, hitung_yaw
 
 LOGGER = logging.getLogger("atera")
 DEG = 180.0 / math.pi
@@ -323,10 +323,8 @@ class Atera:
                 self.atur_pesan("Roda sudah mati.")
         elif aksi in ("MODE_PD", "MODE_PD_CBF"):
             self.ganti_mode_kontrol(ise.MODE_PD if aksi == "MODE_PD" else ise.MODE_PD_CBF)
-        elif aksi == "SETPOINT":
-            self.pasang_setpoint()
-            self.atur_pesan("Setpoint roda dipasang di sini (s = 0, arah sekarang)."
-                            + (" Tekan MULAI." if self.state == SIAP else ""))
+        elif aksi == "BALANCING":
+            self.ganti_balancing()
         elif aksi == "BEBAS":
             self.ganti_bebas()
         elif aksi == "PENGUJIAN":
@@ -378,25 +376,34 @@ class Atera:
         self.theta_nol += self.baca_state()[0]
         self.putus_plot()
 
-    def pasang_setpoint(self):
-        """Setpoint roda = posisi dan arah robot sekarang (theta = 0 di sini, yaw_ref = yaw sekarang).
-        Tombol B (kalibrasi roda saja; Tombol Y = IMU + roda) dan saat mode BEBAS dimatikan."""
-        self.nolkan_s()
-        self.pd.pasang_yaw_ref(self.baca_yaw()[0])
+    def ganti_balancing(self):
+        """Tombol B (hanya saat balancing): DIAM / BEBAS -> BALANCING (setpoint roda = posisi dan arah sekarang),
+        BALANCING -> DIAM."""
+        if self.state != BALANCING:
+            self.atur_pesan("Tombol B (mode BALANCING) berlaku saat balancing.")
+            return
+        if self.pd.mode_gerak == MODE_BALANCING:
+            self.pd.atur_mode(MODE_DIAM)
+            self.atur_pesan("Mode DIAM: Kp_theta mati.")
+        else:
+            self.pd.atur_mode(MODE_BALANCING)
+            self.nolkan_s()
+            self.pd.pasang_yaw_ref(self.baca_yaw()[0])
+            self.atur_pesan("Mode BALANCING: Kp_theta aktif, setpoint roda di sini (s = 0, arah sekarang). B = DIAM.")
+        self.perbarui_plot_mode()
 
     def ganti_bebas(self):
-        """Tombol A: mode BEBAS nyala / mati (hanya saat balancing). Saat dimatikan, setpoint dipasang di posisi itu."""
+        """Tombol A (hanya saat balancing): DIAM / BALANCING -> BEBAS, BEBAS -> DIAM (arah sekarang = yaw_ref)."""
         if self.state != BALANCING:
             self.atur_pesan("Tombol A (mode BEBAS) berlaku saat balancing.")
             return
-        if not self.pd.bebas:
-            self.pd.atur_bebas(True)
-            self.atur_pesan("Mode BEBAS: PD heading, Kp_theta, constraint s mati; robot bisa ditarik tali. "
-                            "Tekan A lagi untuk kembali.")
+        if self.pd.mode_gerak == MODE_BEBAS:
+            self.pd.atur_mode(MODE_DIAM)
+            self.pd.pasang_yaw_ref(self.baca_yaw()[0])
+            self.atur_pesan("Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.")
         else:
-            self.pd.atur_bebas(False)
-            self.pasang_setpoint()
-            self.atur_pesan("Mode BEBAS mati: setpoint dipasang di sini (s = 0, arah sekarang).")
+            self.pd.atur_mode(MODE_BEBAS)
+            self.atur_pesan("Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.")
         self.perbarui_plot_mode()
 
     def mulai(self):
@@ -414,14 +421,11 @@ class Atera:
             alasan = "tegakkan robot dulu (|psi| harus < %g deg)" % config.START_TILT_DEG
         elif self.mode_kontrol == ise.MODE_PD_CBF and self.cbf is None:
             alasan = "CBF-QP tidak tersedia (%s), pilih mode PD (LB)" % self.cbf_alasan
-        elif abs(model.hitung_s(self.baca_state())) > config.s_max:
-            alasan = ("robot %.2f m dari titik nol s (batas %g m): kembalikan ke dekat titik nol, atau tekan B "
-                      "untuk memasang setpoint di sini" % (model.hitung_s(self.x), config.s_max))
         if alasan:
             self.atur_pesan("MULAI ditolak: " + alasan)
             return
-        # mulai DIAM (BEBAS mati), arah sekarang = setpoint heading, DOB dikosongkan, pengereman KOMET berhenti
-        self.pd.atur_bebas(False)
+        # mulai mode gerak DIAM, arah sekarang = setpoint heading, DOB dikosongkan, pengereman KOMET berhenti
+        self.pd.atur_mode(MODE_DIAM)
         self.pd.set_command(0, 0)
         self.pd.pasang_yaw_ref(self.baca_yaw()[0])
         if self.cbf is not None:
@@ -436,7 +440,7 @@ class Atera:
         self.plot_t0 = self.t0                            # plot realtime mulai dari 0 setiap MULAI
         self.kirim_plot(("RESET",))
         self.perbarui_plot_mode()
-        self.atur_pesan("Balancing, mode %s. D-Pad = gerak / belok, B = setpoint di sini, A = BEBAS, "
+        self.atur_pesan("Balancing, mode %s, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, "
                         "L3 = PENGUJIAN, X = roda mati." % self.mode_kontrol)
 
     def simpan(self, perekam):
@@ -581,12 +585,12 @@ class Atera:
             self.berhenti(GANGGUAN, "IMU gagal dibaca saat balancing: " + self.imu.problem)
             return
 
-        # Perintah gerak -> mode gerak otomatis. D-Pad atas / bawah baru DILEPAS (GERAK -> DIAM): setpoint theta
-        # dipasang tepat di posisi ini (sebelum state dibaca, jadi siklus ini sudah memakai theta = 0 di sini).
+        # Perintah gerak. D-Pad atas / bawah baru DILEPAS di mode BALANCING: setpoint theta dipasang tepat di posisi
+        # ini (sebelum state dibaca, jadi siklus ini sudah memakai theta = 0 di sini).
         self.arah, self.belok = self.perintah_gerak()
-        gerak_sebelumnya = self.pd.mode_gerak
+        arah_sebelumnya = self.pd.arah
         self.pd.set_command(self.arah, self.belok)
-        if gerak_sebelumnya == MODE_GERAK and self.pd.mode_gerak == MODE_DIAM:
+        if self.pd.mode_gerak == MODE_BALANCING and arah_sebelumnya != 0 and self.pd.arah == 0:
             self.nolkan_s()
         self.perbarui_plot_mode()
 
@@ -596,8 +600,8 @@ class Atera:
         if abs(x[2]) > math.radians(config.SAFE_TILT_DEG):
             self.berhenti(KOMET, "psi = %.1f deg (> %g deg)" % (x[2] * DEG, config.SAFE_TILT_DEG))
             return
-        if self.pd.mode_gerak == MODE_DIAM and abs(s) > config.S_KOMET:
-            self.berhenti(KOMET, "s = %.2f m (> %g m, mode DIAM)" % (s, config.S_KOMET))
+        if self.pd.tahan_posisi and abs(s) > config.S_KOMET:
+            self.berhenti(KOMET, "s = %.2f m (> %g m, mode BALANCING)" % (s, config.S_KOMET))
             return
         if self.pd.mode_gerak != MODE_BEBAS and abs(yaw - self.pd.yaw_ref) > math.radians(config.YAW_KOMET_DEG):
             self.berhenti(KOMET, "berputar: yaw - yaw_ref = %.0f deg (> %g deg)"
@@ -648,7 +652,8 @@ class Atera:
         """Kolom CSV tambahan (ise.KOLOM_EKSTRA)."""
         pd = self.pd
         d_dtheta, d_dpsi = self.cbf.d_hat if self.cbf is not None else (0.0, 0.0)
-        return {"arah": pd.arah, "bebas": float(pd.bebas),
+        return {"arah": pd.arah, "bebas": float(pd.mode_gerak == MODE_BEBAS),
+                "balancing": float(pd.mode_gerak == MODE_BALANCING),
                 "yaw_rad": self.yaw, "dyaw_rad_s": self.dyaw, "yaw_ref_rad": pd.yaw_ref, "u_belok_Nm": self.u_belok,
                 "dob_dtheta_rad_s2": d_dtheta, "dob_dpsi_rad_s2": d_dpsi,
                 "slack": self.cbf.slack if (self.cbf is not None and self.mode_kontrol == ise.MODE_PD_CBF) else 0.0}
@@ -761,9 +766,9 @@ class Atera:
         baris += ["-" * self.lebar, tab, "-" * self.lebar]
         baris += (self.hal_status, self.hal_kontrol, self.hal_hardware, self.hal_bantuan)[self.halaman]()
         baris += ["-" * self.lebar,
-                  "Joystick: Y kalibrasi | MULAI | X mati | LB PD | RB PD+CBF | B setpoint | A bebas | D-Pad gerak | "
+                  "Joystick: Y kalibrasi | MULAI | X mati | LB PD | RB PD+CBF | B balancing | A bebas | D-Pad gerak | "
                   "L3 uji | R3 simpan",
-                  "Keyboard: Y kalibrasi | M/Enter MULAI | X/Spasi mati | 1 PD | 2 PD+CBF | B setpoint | F bebas | "
+                  "Keyboard: Y kalibrasi | M/Enter MULAI | X/Spasi mati | 1 PD | 2 PD+CBF | B balancing | F bebas | "
                   "WASD gerak | T uji | E simpan | Q keluar | <- -> halaman"]
         sys.stdout.write("\x1b[H" + "".join(b[:self.lebar] + "\x1b[K\n" for b in baris) + "\x1b[J")
         sys.stdout.flush()
@@ -800,18 +805,17 @@ class Atera:
         # suku PD: gain x (state - setpoint), sama dengan u_PD karena BALANCE_DIRECTION_SIGN = -1
         suku = (("Kp_psi*psi", pd.Kp_psi, x[2] - pd.psi_setpoint),
                 ("Kd_psi*dpsi", pd.Kd_psi, x[3] - pd.dpsi_setpoint),
-                ("Kp_theta*theta", pd.Kp_theta if pd.mode_gerak == MODE_DIAM else 0.0, x[0] - pd.theta_setpoint),
+                ("Kp_theta*theta", pd.Kp_theta if pd.tahan_posisi else 0.0, x[0] - pd.theta_setpoint),
                 ("Kd_theta*dtheta", pd.Kd_theta, x[1] - pd.dtheta_setpoint),
                 ("Kvel*arah", pd.Kvel, pd.arah))
         baris = ["PD (torsi satu roda): u_PD = %+.4f N m" % self.u_PD]
         baris += ["  %-19s %8.3f x %+8.4f = %+8.4f N m" % (n, k, v, k * v) for n, k, v in suku]
         v_tunak = -config.R * pd.Kvel * pd.arah / pd.Kd_theta if pd.Kd_theta > 0.0 else float("nan")
-        if pd.mode_gerak == MODE_DIAM:
-            baris.append("  DIAM: ditahan di setpoint theta, s %+.3f m | Kp_theta + constraint s aktif"
-                         % model.hitung_s(x))
+        if pd.tahan_posisi:
+            baris.append("  BALANCING: ditahan di setpoint theta, s %+.3f m | Kp_theta aktif" % model.hitung_s(x))
         else:
-            baris.append("  %s: Kp_theta + constraint s diabaikan | v tunak -R*Kvel*arah/Kd_theta %+.2f m/s | "
-                         "v %+.2f m/s" % (pd.mode_gerak, v_tunak, config.R * x[1]))
+            baris.append("  %s: Kp_theta tidak dipakai | v tunak -R*Kvel*arah/Kd_theta %+.2f m/s | v %+.2f m/s"
+                         % (pd.mode_gerak, v_tunak, config.R * x[1]))
         if pd.mode_gerak == MODE_BEBAS:
             baris.append("  BEBAS: PD heading mati (yaw bebas, bisa ditarik tali) | u_belok = belok x TORSI_BELOK "
                          "%g = %+.3f N m" % (config.TORSI_BELOK, self.u_belok))

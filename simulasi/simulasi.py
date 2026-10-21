@@ -12,7 +12,7 @@ File ini hanya mengurus simulasinya:
         d. batas arus bergantung kecepatan roda (back-EMF, SIM_BATAS_KECEPATAN): arus yang bisa masuk
            turun linear dari batas arus sampai 0 di kecepatan no-load DDSM115 (200 rpm = 20.9 rad/s)
     - jendela "ATERA - Kontrol" (Qt): tombol mode kontrol PD / PD + CBF-QP, tombol W A S D B F O P,
-      dan kolom angka parameter (input utama). B = pasang setpoint roda di posisi sekarang, F = mode BEBAS
+      dan kolom angka parameter (input utama). B = mode BALANCING, F = mode BEBAS
     - plot realtime: kurva sekarang + kurva PEMBANDING (pengujian terakhir tiap mode: PD ungu, PD+CBF biru)
     - keyboard di jendela PyBullet (input cadangan, tombolnya sama)
     - tampilan di jendela PyBullet: teks parameter dan bidang merah safety set
@@ -40,7 +40,7 @@ import pybullet_data
 
 import config
 import model
-from pd_control import MODE_BEBAS, MODE_DIAM, MODE_GERAK, hitung_yaw
+from pd_control import MODE_BALANCING, MODE_BEBAS, MODE_DIAM, hitung_yaw
 
 
 # Kalman dipakai langsung dari kalman.py milik robot (tanpa salinan). Dimuat lewat path karena folder robot juga
@@ -539,7 +539,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
 class JendelaKontrol:
     """Jendela Qt "ATERA - Kontrol":
         - paling atas : tombol mode kontrol PD (ungu) / PD + CBF-QP (biru) (keyboard 1 / 2), perekam perbandingan
-                        (keyboard 3), dan kotak centang constraint CBF-QP yang dipakai (h1 .. h8)
+                        (keyboard 3), dan kotak centang constraint CBF-QP yang dipakai (h1 .. h4)
         - bagian atas : tombol W A S D, B F, O P (bisa diklik / ditahan dengan mouse, atau ditekan di keyboard)
         - bagian bawah: kolom angka tiap parameter (dua blok: gain + lingkungan, dan Alpha). Kolom berwarna = beda dari config.py
 
@@ -606,9 +606,8 @@ class JendelaKontrol:
         baris_mode.addStretch(1)
         susunan.addLayout(baris_mode)
 
-        # Kotak centang constraint CBF-QP (h1 .. h8): yang dicentang = dipakai CBF-QP (saat GERAK / BEBAS, h5 / h6 tetap
-        # dilepas, lihat atera_main.py). Centang awal dikirim simulasi (C_MODE[MODE_DIAM] di WORKPLACE cbf_qp.py).
-        # Dua baris: h1 h2 h3 h4 / h5 h6 h7 h8 (CENTANG_PER_BARIS kotak per baris).
+        # Kotak centang constraint CBF-QP (h1 .. h4): yang dicentang = dipakai CBF-QP. Centang awal dikirim simulasi
+        # (C_MODE[MODE_DIAM] di WORKPLACE cbf_qp.py). CENTANG_PER_BARIS kotak per baris.
         kisi_centang = QtWidgets.QGridLayout()
         kisi_centang.setHorizontalSpacing(14)
         label = QtWidgets.QLabel("Constraint CBF-QP:")
@@ -637,7 +636,7 @@ class JendelaKontrol:
         letak = {"w": (0, 1), "a": (1, 0), "s": (1, 1), "d": (1, 2),
                  "b": (0, 4), "f": (0, 5), "o": (1, 4), "p": (1, 5), "q": (0, 7), "r": (1, 7), "e": (0, 8), "t": (1, 8)}
         keterangan = {"w": "W\nmaju", "a": "A\nkiri", "s": "S\nmundur", "d": "D\nkanan",
-                      "b": "B\nsetpoint", "f": "F\nmode BEBAS", "o": "O\ndorong depan", "p": "P\ndorong belakang",
+                      "b": "B\nmode BALANCING", "f": "F\nmode BEBAS", "o": "O\ndorong depan", "p": "P\ndorong belakang",
                       "q": "Q\nkeluar + simpan", "r": "R\nreset robot", "e": "E\nsimpan data",
                       "t": "T\nmode pengujian"}
         for huruf in ("w", "a", "s", "d", "b", "f", "o", "p", "q", "r", "e", "t"):
@@ -837,7 +836,7 @@ class JendelaKontrol:
 
     def tampilkan_status(self, status):
         """Nyalakan tombol dan tulis mode / gerak / dorongan.
-        status dari simulasi: judul, mode_gerak (MODE_DIAM / MODE_GERAK / MODE_BEBAS), tahan (gabungan Qt + keyboard
+        status dari simulasi: judul, mode_gerak (MODE_DIAM / MODE_BALANCING / MODE_BEBAS), tahan (gabungan Qt + keyboard
         PyBullet), dorong, arah_dorong"""
         self.status = status
         if self.root is None and self.tombol == {}:
@@ -851,6 +850,8 @@ class JendelaKontrol:
         for huruf in ("w", "a", "s", "d"):
             self.tombol[huruf].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white") if tahan[huruf] else "")
         self.tombol["f"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_MODE, "white") if mode_gerak == MODE_BEBAS else "")
+        self.tombol["b"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_MODE, "white")
+                                       if mode_gerak == MODE_BALANCING else "")
         menyala_o = tahan["o"] or status["arah_dorong"] > 0
         menyala_p = tahan["p"] or status["arah_dorong"] < 0
         self.tombol["o"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white") if menyala_o else "")
@@ -879,8 +880,8 @@ class JendelaKontrol:
             self.label_mode.setStyleSheet("font-weight: bold; color: %s"
                                           % (config.WARNA_QT_BANDING if mode_banding else config.WARNA_QT_UJI))
         else:
-            teks_gerak = {MODE_DIAM: "DIAM di setpoint", MODE_GERAK: "GERAK (W / S ditahan)",
-                          MODE_BEBAS: "BEBAS (tanpa PD heading, F untuk kembali)"}.get(mode_gerak, mode_gerak)
+            teks_gerak = {MODE_DIAM: "DIAM (tanpa Kp_theta)", MODE_BALANCING: "BALANCING (Kp_theta, B untuk DIAM)",
+                          MODE_BEBAS: "BEBAS (tanpa PD heading, F untuk DIAM)"}.get(mode_gerak, mode_gerak)
             self.label_mode.setText("Mode kontrol: %s   |   %s" % (status["judul"], teks_gerak))
             self.label_mode.setStyleSheet("font-weight: bold")
         perintah = []
@@ -925,13 +926,6 @@ class JendelaKontrol:
         for nama in self.nilai:
             self.atur(nama, self.awal[nama])
         print("Parameter dikembalikan ke nilai config.py.", flush=True)
-
-    def daftar_berubah(self):
-        hasil = []
-        for nama in self.nilai:
-            if abs(self.nilai[nama] - self.awal[nama]) > 1e-9:
-                hasil.append(nama)
-        return hasil
 
     def cetak(self):
         cetak_nilai(self.nilai, self.awal)
@@ -1696,7 +1690,7 @@ class Simulasi:
         """Perbarui semua tampilan. Dipanggil dari atera_main.py beberapa kali per detik.
 
         baris          : daftar teks parameter (ditulis di kiri atas jendela PyBullet)
-        mode_gerak     : MODE_DIAM, MODE_GERAK, atau MODE_BEBAS (pd_control.py)
+        mode_gerak     : MODE_DIAM, MODE_BALANCING, atau MODE_BEBAS (pd_control.py)
         komet          : True = KOMET, motor dimatikan (ditampilkan di jendela Kontrol)
         pengujian      : teks status mode pengujian / perekam perbandingan ("" = tidak dalam mode itu)
         banding        : True = perekam perbandingan (tombol 3) menyala
