@@ -98,10 +98,10 @@ YAW_KOMET_DEG = 90.0                # [deg]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 13.42                     # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 01.89                      # [N m s/rad]
+Kp_psi = 13.94                     # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 01.96                      # [N m s/rad]
 Kp_theta = 0.17                     # [N m/rad]    hanya mode BALANCING tanpa W / S
-Kd_theta = 0.26                     # [N m s/rad]
+Kd_theta = 0.27                     # [N m s/rad]
 # Kvel*arah saat W / S ditahan. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
 # -> Kvel NEGATIF supaya W maju (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s), sama dengan robot fisik.
 Kvel = -1.16                        # [N m]
@@ -131,9 +131,9 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 12.97                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 21.38                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 447.06                    # [1/s]  h3, h4 (dtheta, CBF orde 1)  (= Alpha_6 lama)
+Alpha_1 = 11.24                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 18.79                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 438.98                    # [1/s]  h3, h4 (dtheta, CBF orde 1)  (= Alpha_6 lama)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
@@ -202,7 +202,7 @@ MOTOR_RAW_FULL_SCALE = 32767
 MOTOR_POSITION_COUNTS = 32767       # posisi 0..32767 <-> 0..360 deg
 
 # ASUMSI: batas arus per roda mengikuti apalah_bisa/tunning.py (di atas rated 1.5 A, di bawah stall 2.7 A).
-MAX_CURRENT_A = 2.00                # [A] per roda
+MAX_CURRENT_A = 2.50                # [A] per roda
 # BUTUH PENGUJIAN ARUS MAKSIMUM: jalankan balancing di 1.80 A, pantau error code dan suhu DDSM115.
 MIN_CURRENT_A = -MAX_CURRENT_A
 
@@ -510,7 +510,7 @@ OPTUNA_AMBANG_CHATTERING = 0.5      # fraksi u_max; |u| di atas ini dihitung tor
 OPTUNA_MULAI_DARI_CONFIG = True     # study BARU: trial pertama = nilai config.py (titik yang sudah diketahui)
 # Penalti gagal syarat PD + CBF-QP / komet gaya terendah. 1e6 > selisih skor terbesar yang mungkin (4 blok x
 # (100 N x 1000 + 10 deg x 5000 + 5000) = 6.2e5), jadi trial yang gagal SELALU lebih buruk dari trial yang lolos.
-OPTUNA_PENALTI_SYARAT = 1.0e6
+OPTUNA_PENALTI_SYARAT = 1.0e7
 # MULAI DARI TERBAIK: S1 dan S2 blok PD dimulai dari hasil trial terbaik sejauh ini (langkah naik / turun
 # dilipatgandakan 1, 2, 4, ... kisi, lalu bisection). Hasil sama dengan bisection biasa, pengujian lebih sedikit.
 OPTUNA_MULAI_DARI_TERBAIK = True
@@ -532,7 +532,7 @@ OPTUNA_PANGKAS_AMAN = True
 # ASUMSI bisection: lolos pada gaya / kemiringan X berarti lolos pada nilai yang lebih kecil.
 # ASUMSI bobot: satu langkah S2 (0.1 deg x 5000 = 500) = satu langkah S1 (0.5 N x 1000 = 500).
 OPTUNA_MIRING_LANGKAH = 0.1         # [deg] kenaikan kemiringan tiap berhasil (kisi S2)
-OPTUNA_MIRING_MAKS = 10.0           # [deg] kemiringan tertinggi S2 (kebutuhan skripsi 8 deg + margin 2 deg)
+OPTUNA_MIRING_MAKS = 30.0           # [deg] kemiringan tertinggi S2 (kebutuhan skripsi 8 deg + margin 2 deg)
 OPTUNA_MIRING_LAMA = 15.0           # [s] lama robot dibiarkan di bidang miring tiap ulangan S2
 OPTUNA_BOBOT_MIRING = 5000.0        # [per deg] bobot kemiringan lolos S2 di skor
 OPTUNA_BOBOT_S3 = 5000.0            # bonus skor bila S3 lolos
