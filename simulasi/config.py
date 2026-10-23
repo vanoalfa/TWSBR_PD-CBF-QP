@@ -532,7 +532,7 @@ OPTUNA_PANGKAS_AMAN = True
 # ASUMSI bisection: lolos pada gaya / kemiringan X berarti lolos pada nilai yang lebih kecil.
 # ASUMSI bobot: satu langkah S2 (0.1 deg x 5000 = 500) = satu langkah S1 (0.5 N x 1000 = 500).
 OPTUNA_MIRING_LANGKAH = 0.1         # [deg] kenaikan kemiringan tiap berhasil (kisi S2)
-OPTUNA_MIRING_MAKS = 30.0           # [deg] kemiringan tertinggi S2 (kebutuhan skripsi 8 deg + margin 2 deg)
+OPTUNA_MIRING_MAKS = 10.0           # [deg] kemiringan tertinggi S2 (kebutuhan skripsi 8 deg + margin 2 deg)
 OPTUNA_MIRING_LAMA = 15.0           # [s] lama robot dibiarkan di bidang miring tiap ulangan S2
 OPTUNA_BOBOT_MIRING = 5000.0        # [per deg] bobot kemiringan lolos S2 di skor
 OPTUNA_BOBOT_S3 = 5000.0            # bonus skor bila S3 lolos
