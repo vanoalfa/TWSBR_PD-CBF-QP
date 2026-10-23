@@ -105,7 +105,7 @@ Kp_theta = 0.17                     # [N m/rad]    hanya mode BALANCING tanpa W 
 Kd_theta = 0.27                     # [N m s/rad]
 # Kvel*arah saat W / S ditahan. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
 # -> Kvel NEGATIF supaya W maju (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s), sama dengan robot fisik.
-Kvel = -1.16                        # [N m]
+Kvel = -1.50                        # [N m]
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan apalah_bisa/tunning.py).
@@ -134,11 +134,11 @@ TORSI_BELOK = 0.02                  # [N m]
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
 Alpha_1 = 11.24                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
 Alpha_2 = 18.79                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 438.98                    # [1/s]  h3, h4 (dtheta, CBF orde 1)  (= Alpha_6 lama)
+Alpha_3 = 438.98                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 # Kvel*arah saat D-Pad atas / bawah ditekan (arah +1 = atas, -1 = bawah). Kecepatan tunak di lantai datar:
 #     v = -R*Kvel*arah/Kd_theta      -> Kvel NEGATIF supaya D-Pad atas berjalan ke DEPAN
 #     (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s; no-load DDSM115 1.05 m/s)
-Kvel = -1.16                        # [N m]
+Kvel = -1.50                        # [N m]
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan simulasi/config.py). Tanpa ini pd_control.py juga memakai -1.
 BALANCE_DIRECTION_SIGN = -1.0

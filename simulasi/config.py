@@ -133,7 +133,7 @@ TORSI_BELOK = 0.02                  # [N m]
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
 Alpha_1 = 11.24                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
 Alpha_2 = 18.79                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 438.98                    # [1/s]  h3, h4 (dtheta, CBF orde 1)  (= Alpha_6 lama)
+Alpha_3 = 438.98                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
