@@ -132,9 +132,9 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 11.24                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 18.79                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 438.98                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
+Alpha_1 = 17.81                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 8.48                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 415.73                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 # Kvel*arah saat D-Pad atas / bawah ditekan (arah +1 = atas, -1 = bawah). Kecepatan tunak di lantai datar:
 #     v = -R*Kvel*arah/Kd_theta      -> Kvel NEGATIF supaya D-Pad atas berjalan ke DEPAN
 #     (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s; no-load DDSM115 1.05 m/s)
