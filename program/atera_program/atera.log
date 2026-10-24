@@ -3231,3 +3231,86 @@ AttributeError: 'CBFQP' object has no attribute 'reset_dob'
 2026-10-23 16:12:58,633 | INFO | atera | Balancing, mode PD+CBF, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
 2026-10-23 16:13:39,953 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
 2026-10-23 16:14:40,665 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261023_161440_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-24 21:17:29,513 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-24 21:17:29,567 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-24 21:17:29,571 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-24 21:17:29,624 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-24 21:17:29,713 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-24 21:17:29,907 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-24 21:17:29,908 | INFO | atera | plot realtime: menunggu laptop di 192.168.8.219:5005
+2026-10-24 21:17:29,908 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-24 21:18:16,250 | INFO | atera | plot realtime: laptop 192.168.8.234 tersambung
+2026-10-24 21:18:46,946 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-24 21:18:51,863 | INFO | atera | Kalibrasi selesai (sudut nol -3.28 deg, s = 0 di sini). Tekan MULAI.
+2026-10-24 21:18:52,557 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-24 21:18:57,473 | INFO | atera | Kalibrasi selesai (sudut nol -2.74 deg, s = 0 di sini). Tekan MULAI.
+2026-10-24 21:19:05,121 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-24 21:19:33,793 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_211933_COBA PD_PERCOBAAN KE-01
+2026-10-24 21:19:33,793 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_211933_COBA PD_PERCOBAAN KE-01
+2026-10-24 21:20:18,155 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212018_COBA PD+CBF_PERCOBAAN KE-01
+2026-10-24 21:20:18,155 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_212018_COBA PD+CBF_PERCOBAAN KE-01
+2026-10-24 21:20:21,951 | INFO | atera | psi = -40.0 deg (> 40 deg) -> tersimpan PERCOBAAN 20261024_212021_COBA PD_PERCOBAAN KE-02
+2026-10-24 21:20:21,952 | INFO | atera | KOMET: psi = -40.0 deg (> 40 deg) | tersimpan: PERCOBAAN 20261024_212021_COBA PD_PERCOBAAN KE-02
+2026-10-24 21:20:24,169 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-24 21:20:25,439 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212025_COBA PD_PERCOBAAN KE-03
+2026-10-24 21:20:25,440 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_212025_COBA PD_PERCOBAAN KE-03
+2026-10-24 21:21:08,635 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212108_COBA PD+CBF_PERCOBAAN KE-02
+2026-10-24 21:21:08,635 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_212108_COBA PD+CBF_PERCOBAAN KE-02
+2026-10-24 21:21:35,500 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212135_COBA PD_PERCOBAAN KE-04
+2026-10-24 21:21:35,500 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_212135_COBA PD_PERCOBAAN KE-04
+2026-10-24 21:22:24,098 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212224_COBA PD+CBF_PERCOBAAN KE-03
+2026-10-24 21:22:24,098 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_212224_COBA PD+CBF_PERCOBAAN KE-03
+2026-10-24 21:22:47,417 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212247_COBA PD_PERCOBAAN KE-05
+2026-10-24 21:22:47,418 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_212247_COBA PD_PERCOBAAN KE-05
+2026-10-24 21:23:11,762 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261024_212311_COBA PD+CBF_PERCOBAAN KE-04
+2026-10-24 21:23:11,763 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261024_212311_COBA PD+CBF_PERCOBAAN KE-04
+2026-10-24 21:24:37,053 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-24 21:24:37,107 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-24 21:24:37,108 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-24 21:24:37,162 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-24 21:24:37,185 | INFO | atera | Menyiapkan CBF-QP (CasADi) ...
+2026-10-24 21:24:37,209 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-24 21:24:37,209 | INFO | atera | plot realtime: menunggu laptop di 192.168.8.219:5005
+2026-10-24 21:24:37,209 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-24 21:24:37,517 | INFO | atera | plot realtime: laptop 192.168.8.234 tersambung
+2026-10-24 21:24:39,693 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-24 21:24:44,603 | INFO | atera | Kalibrasi selesai (sudut nol -3.38 deg, s = 0 di sini). Tekan MULAI.
+2026-10-24 21:24:45,381 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-24 21:24:50,296 | INFO | atera | Kalibrasi selesai (sudut nol -2.85 deg, s = 0 di sini). Tekan MULAI.
+2026-10-24 21:25:01,677 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-24 21:25:52,986 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212552_COBA PD_PERCOBAAN KE-06
+2026-10-24 21:25:52,986 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_212552_COBA PD_PERCOBAAN KE-06
+2026-10-24 21:26:39,642 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212639_COBA PD+CBF_PERCOBAAN KE-05
+2026-10-24 21:26:39,643 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_212639_COBA PD+CBF_PERCOBAAN KE-05
+2026-10-24 21:26:46,467 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212646_COBA PD_PERCOBAAN KE-07
+2026-10-24 21:26:46,468 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_212646_COBA PD_PERCOBAAN KE-07
+2026-10-24 21:28:18,554 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-24 21:28:31,305 | INFO | atera | Mode BALANCING: Kp_theta aktif, setpoint roda di sini (s = 0, arah sekarang). B = DIAM.
+2026-10-24 21:28:45,113 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212845_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-24 21:28:45,113 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_212845_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-24 21:28:50,899 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212850_COBA PD_PERCOBAAN KE-08
+2026-10-24 21:28:50,900 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_212850_COBA PD_PERCOBAAN KE-08
+2026-10-24 21:29:16,741 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212916_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-24 21:29:16,742 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_212916_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-24 21:29:26,886 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212926_COBA PD_PERCOBAAN KE-09
+2026-10-24 21:29:26,886 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_212926_COBA PD_PERCOBAAN KE-09
+2026-10-24 21:29:38,753 | INFO | atera | Mode DIAM: Kp_theta mati.
+2026-10-24 21:29:49,430 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212949_COBA PD+CBF_PERCOBAAN KE-08
+2026-10-24 21:29:49,430 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_212949_COBA PD+CBF_PERCOBAAN KE-08
+2026-10-24 21:29:58,605 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_212958_COBA PD_PERCOBAAN KE-10
+2026-10-24 21:29:58,605 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_212958_COBA PD_PERCOBAAN KE-10
+2026-10-24 21:30:35,471 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_213035_COBA PD+CBF_PERCOBAAN KE-09
+2026-10-24 21:30:35,472 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_213035_COBA PD+CBF_PERCOBAAN KE-09
+2026-10-24 21:30:53,604 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_213053_COBA PD_PERCOBAAN KE-11
+2026-10-24 21:30:53,604 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_213053_COBA PD_PERCOBAAN KE-11
+2026-10-24 21:32:02,709 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_213202_COBA PD+CBF_PERCOBAAN KE-10
+2026-10-24 21:32:02,710 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_213202_COBA PD+CBF_PERCOBAAN KE-10
+2026-10-24 21:32:11,910 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_213211_COBA PD_PERCOBAAN KE-12
+2026-10-24 21:32:11,910 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261024_213211_COBA PD_PERCOBAAN KE-12
+2026-10-24 21:32:51,767 | INFO | atera | psi = 40.2 deg (> 40 deg) -> tersimpan PERCOBAAN 20261024_213251_COBA PD+CBF_PERCOBAAN KE-11
+2026-10-24 21:32:51,767 | INFO | atera | KOMET: psi = 40.2 deg (> 40 deg) | tersimpan: PERCOBAAN 20261024_213251_COBA PD+CBF_PERCOBAAN KE-11
+2026-10-24 21:32:59,959 | INFO | atera | Balancing, mode PD+CBF, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-24 21:33:09,883 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261024_213309_COBA PD+CBF_PERCOBAAN KE-12
+2026-10-24 21:33:09,884 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261024_213309_COBA PD+CBF_PERCOBAAN KE-12
+2026-10-24 21:33:26,158 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261024_213326_COBA PD_PERCOBAAN KE-13
+2026-10-24 21:33:26,159 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261024_213326_COBA PD_PERCOBAAN KE-13
