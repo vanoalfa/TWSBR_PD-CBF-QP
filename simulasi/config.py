@@ -98,10 +98,10 @@ YAW_KOMET_DEG = 90.0                # [deg]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 13.94                     # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 01.96                      # [N m s/rad]
-Kp_theta = 0.17                     # [N m/rad]    hanya mode BALANCING tanpa W / S
-Kd_theta = 0.27                     # [N m s/rad]
+Kp_psi = 15.81                     # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 02.28                      # [N m s/rad]
+Kp_theta = 0.19                     # [N m/rad]    hanya mode BALANCING tanpa W / S
+Kd_theta = 0.30                     # [N m s/rad]
 # Kvel*arah saat W / S ditahan. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
 # -> Kvel NEGATIF supaya W maju (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s), sama dengan robot fisik.
 Kvel = -1.16                        # [N m]
@@ -131,9 +131,9 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 11.24                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 18.79                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 438.98                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
+Alpha_1 = 17.81                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 8.48                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 415.73                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
