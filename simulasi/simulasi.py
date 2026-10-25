@@ -5,7 +5,7 @@ Jalankan:  python3 atera_main.py --plot     (mode kontrol PD / PD + CBF-QP dipil
 
 File ini hanya mengurus simulasinya:
     - dunia (plane.urdf bawaan PyBullet), robot, sensor, motor, dorongan
-    - realisme dari uji hardware (nilai di config.py, bagian 11; semua pengaturan simulasi di bagian 12):
+    - realisme dari uji hardware (nilai di config.py, bagian 10; semua pengaturan simulasi di bagian 11):
         a. torsi roda = arus perintah x MOTOR_KT_EFEKTIF (bukan MOTOR_KT)
         b. torsi baru bekerja SIM_JEDA_TORSI detik setelah perintah dihitung
         c. psi dibaca lewat model MPU6050 (akselerometer + gyro + noise) dan Kalman yang sama dengan robot
@@ -1065,7 +1065,7 @@ class Simulasi:
         self.plot_berhenti = None
         self.plot_kiriman = []         # data yang belum dikirim
 
-        # Realisme dari uji hardware (config.py bagian 11)
+        # Realisme dari uji hardware (config.py bagian 10)
         self.skala_torsi = config.RASIO_TORSI                           # torsi nyata / torsi perintah
         self.jeda_substep = int(round(config.SIM_JEDA_TORSI / self.dt_fisika))
         self.antrean_torsi = []        # ARUS yang sudah diperintah tetapi belum bekerja (satu per langkah fisika)

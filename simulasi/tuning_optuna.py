@@ -6,7 +6,7 @@ satu study ATERA_SEMUA_<PROFIL> di database OPTUNA/atera_optuna.db. Profil (conf
 terkunci, atau fisika simulasi (FISIKA_SKENARIO) berubah. Study baru dimulai dari nilai config.py
 (OPTUNA_MULAI_DARI_CONFIG).
 
-Satu TRIAL = blok config.OPTUNA_BLOK BERURUTAN, tiap blok S1 -> S2 -> S3 (config.py bagian 13):
+Satu TRIAL = blok config.OPTUNA_BLOK BERURUTAN, tiap blok S1 -> S2 -> S3 (config.py bagian 12):
     1. PD_DIAM        mode DIAM (Kp_theta mati), PD saja             Kp_psi, Kd_psi, Kd_theta
     2. CBF_DIAM       mode DIAM, PD + CBF-QP h1 .. h4                + Alpha_1 .. Alpha_3   (syarat: >= PD_DIAM)
     3. PD_BALANCING   mode BALANCING (Kp_theta aktif), PD saja       + Kp_theta
@@ -284,7 +284,7 @@ class Penguji:
         self.variabel = list(config.OPTUNA_VARIABEL)
         self.cbf = None
         if any(kontrol == KONTROL_CBF for _, _, kontrol in self.blok):
-            print("Menyiapkan CBF-QP (CasADi) ...")
+            print("Menyiapkan CBF-QP (solver %s) ..." % config.CBF_QP_SOLVER)
             from cbf_qp import CBFQP
             # CBF_TAHU_ZETA = True: model CBF-QP dan DOB memakai config.zeta (diubah atur_zeta saat bidang miring).
             self.cbf = CBFQP(zeta=None if config.CBF_TAHU_ZETA else 0.0)

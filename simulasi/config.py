@@ -141,12 +141,16 @@ NAMA_ALPHA = []
 while ("Alpha_%d" % (len(NAMA_ALPHA) + 1)) in globals():
     NAMA_ALPHA.append("Alpha_%d" % (len(NAMA_ALPHA) + 1))
 
-# QP solver CBF-QP (plugin ca.conic CasADi). "daqp" = dual active-set, ikut di paket pip casadi. Uji Raspi 20261020
-# (--banding-solver, 3000 kasus): daqp gagal 0 %, 0.20 ms; qpoases gagal 26 %; osqp gagal 28 %, 5.3 ms.
-CBF_QP_SOLVER = "daqp"
-# pilihan lain: "eksak" (solusi pasti numpy), "osqp", "proxqp", "qrqp", "hpipm", "daqp", "highs", "ipqp".
+# QP solver CBF-QP (cbf_qp.py):
+#   "acados" : acados (HPIPM, N = ACADOS_N_HORIZON), pengaturan di bagian 6b
+#   "eksak"  : solusi pasti numpy (tanpa iterasi)
+#   plugin ca.conic CasADi: "daqp", "qpoases", "osqp", "proxqp", "qrqp"
+# Uji Raspi 20261020 (--banding-solver, 3000 kasus): daqp gagal 0 %, 0.20 ms; qpoases gagal 26 %; osqp gagal 28 %.
 # Bandingkan:  python3 cbf_qp.py --banding-solver
-CBF_QP_SOLVER_BANDING = ["eksak", "qpoases", "osqp", "proxqp", "qrqp", "hpipm", "daqp", "highs", "ipqp"]
+CBF_QP_SOLVER = "daqp"
+# Daftar --banding-solver (acados selalu diuji terakhir). Tidak dimasukkan (uji 20261025): "hpipm" CasADi menolak
+# struktur QP ini, "highs" bisa macet (iterasi tanpa akhir), "ipqp" gagal di semua kasus.
+CBF_QP_SOLVER_BANDING = ["eksak", "daqp", "qpoases", "osqp", "proxqp", "qrqp", "acados"]
 # Slack, margin, DOB (= robot fisik, penjelasan lengkap di cbf_qp.py dan program/atera_program/config.py)
 CBF_SLACK_AKTIF = True
 # bobot slack per constraint (exact penalty, urutan DAFTAR_C h1..h4): yang kecil dilonggarkan dulu bila bertabrakan
@@ -171,19 +175,32 @@ CBF_TOL_AKTIF = 1.0e-4              # [N m] |u* - u_PD| di atas ini -> filter di
 CBF_TOL_KOEFISIEN = 1.0e-12         # |koefisien u| di bawah ini dianggap nol
 
 # =============================================================================
+#                              6b. ACADOS  (CBF_QP_SOLVER = "acados", WORKSPACE ACADOS di cbf_qp.py)
+# =============================================================================
+# OCP: stage 0 = CBF-QP (x dikunci ke state terukur, variabel u), stage 1..N = prediksi tanpa cost / constraint.
+ACADOS_N_HORIZON = 1                # N pada HPIPM (batasan skripsi: N = 1)
+ACADOS_NLP_SOLVER = "SQP_RTI"       # satu QP per siklus (constraint affine terhadap u -> hasil tepat). "SQP" juga bisa
+ACADOS_QP_SOLVER = "PARTIAL_CONDENSING_HPIPM"   # atau "FULL_CONDENSING_HPIPM"
+# Uji 20261025 (12000 kasus acak di sekitar safety set, termasuk yang butuh slack; acados v0.5.1, x86):
+#   ROBUST + mu0 1e5 : gagal 0 %, |u - u_eksak| < 1e-13 kecuali 1 kasus ekstrem (0.08 N m)
+#   ROBUST + mu0 1e4 : gagal 2 kasus;   SPEED : gagal 7 % (mu0 1e4) sampai 58 % (mu0 bawaan), saat slack dibutuhkan
+ACADOS_HPIPM_MODE = "ROBUST"        # "BALANCE", "SPEED_ABS", "SPEED", "ROBUST"
+ACADOS_QP_MU0 = 1.0e5               # barrier awal HPIPM (0 = bawaan hpipm_mode)
+ACADOS_QP_ITER_MAX = 50             # iterasi maksimum HPIPM per siklus
+ACADOS_PRINT_LEVEL = 0              # 0 = diam
+# True  = kode C solver dibuat dan di-compile ulang tiap program mulai (wajib setelah WORKPLACE / jumlah Alpha /
+#         ACADOS_* berubah).
+# False = pakai kode C di ACADOS_FOLDER_KODE yang sudah ada (mulai lebih cepat); dibuat otomatis bila belum ada.
+ACADOS_BUILD = True
+ACADOS_FOLDER_KODE = "c_generated_code"  # relatif terhadap folder cbf_qp.py
+# Folder acados (berisi interfaces/acados_template). Kosong = dicari otomatis: variabel ACADOS_SOURCE_DIR, folder
+# "acados" di sebelah / di atas folder program ini, ~/acados, atau lokasi pip install -e acados_template.
+ACADOS_SOURCE_DIR = ""
+
+# =============================================================================
 #                              7. MOTOR DDSM115  (wiki Waveshare DDSM115)
 # =============================================================================
-LEFT_MOTOR_PORT = "/dev/ttyACM0"
-RIGHT_MOTOR_PORT = "/dev/ttyACM1"
-LEFT_MOTOR_ID = 1
-RIGHT_MOTOR_ID = 1
-MOTOR_BAUDRATE = 115200             # 8N1, frame 10 byte, CRC-8/MAXIM
-MOTOR_TIMEOUT_S = 0.03
-MOTOR_COMM_MAX_HZ = 500.0
-LEFT_MOTOR_SIGN = -1.0              # dari apalah_bisa/tunning.py
-RIGHT_MOTOR_SIGN = 1.0
-# BUTUH PENGUJIAN ARAH RODA: robot diangkat, u > 0 harus memutar KEDUA roda ke DEPAN.
-
+# Port, ID, arah, dan skala komunikasi motor hanya dipakai robot fisik (program/atera_program/config.py bagian 6).
 # True: encoder mengukur roda relatif terhadap badan, theta = theta_encoder + psi (lihat model.hitung_theta).
 ENCODER_RELATIVE_TO_BODY = True
 # BUTUH PENGUJIAN ENCODER: arus 0, tahan roda di lantai, miringkan badan 10 deg dengan tangan;
@@ -192,14 +209,8 @@ ENCODER_RELATIVE_TO_BODY = True
 MOTOR_KT = 0.75                     # [N m/A]  torque constant (datasheet)
 # BUTUH PENGUJIAN BEBAN TAMBAHAN (ddsm115_inersia_testing.py --j-add --g-ref): uji inersia 20261004 memberi
 # G = K/J = 260 rad/s^2 per A perintah, yaitu K = 0.24 N m/A untuk j_theta = 9.2e-4 (bukan 0.75).
-MOTOR_RATED_TORQUE = 0.96           # [N m]
-MOTOR_RATED_CURRENT_A = 1.5         # [A]
-MOTOR_STALL_TORQUE = 2.0            # [N m]    locked-rotor torque
-MOTOR_STALL_CURRENT_A = 2.7         # [A]      locked-rotor current
+MOTOR_STALL_CURRENT_A = 2.7         # [A]      locked-rotor current (datasheet; rated 1.5 A / 0.96 N m)
 MOTOR_NO_LOAD_SPEED_RPM = 200.0     # [rpm]    +-10
-MOTOR_CURRENT_FULL_SCALE_A = 8.0    # current loop: -32767..32767 <-> -8..8 A
-MOTOR_RAW_FULL_SCALE = 32767
-MOTOR_POSITION_COUNTS = 32767       # posisi 0..32767 <-> 0..360 deg
 
 # ASUMSI: batas arus per roda mengikuti apalah_bisa/tunning.py (di atas rated 1.5 A, di bawah stall 2.7 A).
 MAX_CURRENT_A = 2.50                # [A] per roda
@@ -214,35 +225,15 @@ u_min = MOTOR_KT * MIN_CURRENT_A                      # [N m]
 # =============================================================================
 #                              8. IMU MPU6050  (datasheet InvenSense MPU-6000/6050) DAN KALMAN
 # =============================================================================
-I2C_BUS = 1
-MPU6050_ADDRESS = 0x68
 IMU_AXIS = "pitch"
-IMU_SIGN = 1.0
 L_IMU = 0.312739                    # [m] jarak CoM kedua roda (poros) ke IMU, diukur di Fusion 360
-# BUTUH PENGUJIAN ARAH IMU: badan dimiringkan ke DEPAN, psi harus terbaca POSITIF.
-# FS_SEL 0/1/2/3 = +-250/500/1000/2000 deg/s. dpsi_max = 2*pi rad/s = 360 deg/s, jadi minimal FS_SEL = 1.
-MPU6050_GYRO_FS_SEL = 1
-MPU6050_GYRO_LSB_PER_DEG_S = {0: 131.0, 1: 65.5, 2: 32.8, 3: 16.4}[MPU6050_GYRO_FS_SEL]
-# AFS_SEL 0/1/2/3 = +-2/4/8/16 g
-MPU6050_ACCEL_AFS_SEL = 0
-MPU6050_ACCEL_LSB_PER_G = {0: 16384.0, 1: 8192.0, 2: 4096.0, 3: 2048.0}[MPU6050_ACCEL_AFS_SEL]
-GYRO_CALIBRATION_SAMPLES = 800
-GYRO_CALIBRATION_DELAY_S = 0.002
-ZERO_CALIBRATION_SAMPLES = 350
-ZERO_CALIBRATION_DELAY_S = 0.004
+# I2C, skala sensor, dan kalibrasi hanya dipakai robot fisik (program/atera_program/config.py bagian 7).
 
 # =============================================================================
-#                              9. JOYSTICK  (Fantech WGP-13s)
-# =============================================================================
-JOYSTICK_PORT = "/dev/input/event5"
-JOYSTICK_AMBANG_ANALOG = 0.5        # analog dianggap ditekan bila simpangannya di atas nilai ini (0..1)
-
-# =============================================================================
-#                              10. RUNTIME DAN EVALUASI ISE
+#                              9. RUNTIME DAN EVALUASI ISE
 # =============================================================================
 CONTROL_HZ = 200.0
 DT = 1.0 / CONTROL_HZ               # [s]
-UI_HZ = 20.0
 ISE_PLOT_DIR = "PLOT_EVALUASI"
 
 # ASUMSI: satu pengujian (tombol T) = DURASI_PENGUJIAN detik waktu simulasi sejak dorongan O / P dimulai.
@@ -273,7 +264,7 @@ PLOT_WARNA_PD = "tab:purple"        # kurva mode PD (ungu)
 PLOT_WARNA_PD_CBF = "tab:blue"      # kurva mode PD + CBF-QP (biru)
 
 # =============================================================================
-# 11. REALISME SIMULASI  (hanya dipakai simulasi.py, tidak dipakai robot fisik)
+#                              10. REALISME SIMULASI  (hanya dipakai simulasi.py, tidak dipakai robot fisik)
 # =============================================================================
 # Hasil testing/DELAY/atera_delay_testing.py, 20261009.
 # K efektif = G x j_theta, G = 255 (kiri) dan 264 (kanan) rad/s^2 per A -> 0.234 dan 0.243 N m/A.
@@ -298,7 +289,7 @@ SIM_GYRO_NOISE_DEG_S = 0.10         # [deg/s] simpangan baku gyro
 SIM_ACC_NOISE_DEG = 0.14            # [deg]   simpangan baku sudut akselerometer
 
 # =============================================================================
-#                              12. PYBULLET (simulasi.py)
+#                              11. PYBULLET (simulasi.py)
 # =============================================================================
 SUBSTEP = 5                 # jumlah langkah fisika dalam satu siklus kontrol (DT)
 GAYA_DORONG_AWAL = 5.0      # [N] besar gaya dorongan (tombol O / P dan tuning_optuna.py), bisa diubah di jendela Kontrol
@@ -393,7 +384,7 @@ DESIMAL_ALPHA = 2
 
 
 # =============================================================================
-#                              13. TUNING OPTUNA  (hanya dipakai tuning_optuna.py)
+#                              12. TUNING OPTUNA  (hanya dipakai tuning_optuna.py)
 # =============================================================================
 # SATU TAHAP (SEMUA), satu study:  python3 tuning_optuna.py --profil DATASHEET
 # Semua OPTUNA_VARIABEL dicari bersamaan. Satu trial = OPTUNA_BLOK berurutan:

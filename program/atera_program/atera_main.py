@@ -154,13 +154,13 @@ class Atera:
         self.motors.initialize()
         self.joystick.open()
         self.keyboard.open()
-        self.atur_pesan("Menyiapkan CBF-QP (CasADi) ...")
+        self.atur_pesan("Menyiapkan CBF-QP (solver %s) ..." % config.CBF_QP_SOLVER)
         self.render()
         try:
             from cbf_qp import CBFQP
             self.cbf = CBFQP()
-            self.cbf_alasan = "siap (%d constraint, Alpha: %s)" % (
-                self.cbf.NH, ", ".join(self.cbf.nama_alpha[i] for i in self.cbf.alpha_dipakai))
+            self.cbf_alasan = "siap (solver %s, %d constraint, Alpha: %s)" % (
+                self.cbf.plugin, self.cbf.NH, ", ".join(self.cbf.nama_alpha[i] for i in self.cbf.alpha_dipakai))
         except Exception as exc:
             LOGGER.exception("CBF-QP")
             self.cbf_alasan = "%s: %s" % (type(exc).__name__, exc)

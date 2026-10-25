@@ -1,4 +1,5 @@
-"""cbf_qp.py - safety filter CBF-QP ATERA, diselesaikan CasADi (ca.conic, QP solver config.CBF_QP_SOLVER).
+"""cbf_qp.py - safety filter CBF-QP ATERA. QP solver dipilih di config.CBF_QP_SOLVER: acados (HPIPM, N = 1),
+plugin ca.conic CasADi, atau "eksak".
 Bagian di luar WORKPLACE PROGRAM sama persis di simulasi/ dan program/atera_program/ (WORKPLACE boleh berbeda).
 
 Bagian safety filter selain constraint WORKPLACE:
@@ -27,9 +28,14 @@ Bagian safety filter selain constraint WORKPLACE:
                 DOB_AKTIF = False -> d_hat tetap dihitung dan dicatat, tetapi TIDAK dipakai CBF-QP.
     3. MARGIN : barrier psi memakai psi_max - CBF_MARGIN_DEG (menutup jeda DOB beberapa ms saat dorongan mulai).
                 Garis merah di plot tetap di psi_max (spesifikasi).
-    4. SOLVER : config.CBF_QP_SOLVER boleh "eksak" (solusi pasti QP 2 variabel ini dengan numpy, tanpa ca.conic),
-                atau plugin ca.conic CasADi: "qpoases", "osqp", "proxqp", "qrqp", "hpipm", "daqp", "highs", "ipqp".
-                Bandingkan semuanya:  python3 cbf_qp.py --banding-solver
+    4. SOLVER : config.CBF_QP_SOLVER boleh
+                    "acados" : OCP acados N = ACADOS_N_HORIZON (HPIPM), disusun di WORKSPACE ACADOS (di bawah),
+                               pengaturannya ACADOS_* di config.py (simulasi 6b, robot fisik 5b)
+                    "eksak"  : solusi pasti QP ini dengan numpy (tanpa iterasi)
+                    plugin ca.conic CasADi: "daqp", "qpoases", "osqp", "proxqp", "qrqp" (juga "hpipm", "highs",
+                               "ipqp", tetapi tidak cocok untuk QP ini, lihat config.CBF_QP_SOLVER_BANDING)
+                Semua solver memakai constraint yang SAMA dari WORKPLACE PROGRAM. Bandingkan (waktu dan selisih
+                terhadap "eksak"):  python3 cbf_qp.py --banding-solver
 
     u = torsi SATU roda [N m].
     Alpha_1, Alpha_2, ... diambil dari config.py (semua Alpha_<nomor> yang berurutan mulai dari 1).
@@ -48,7 +54,7 @@ g(x) di model CBF-QP dikalikan rasio_torsi, jadi CBF-QP menghitung dengan tenaga
 Tuning bertahap (simulasi/tuning_optuna.py): pilih_barrier(nomor) mengaktifkan hanya constraint bernomor itu
 (1 = h1, dst), tanpa membangun ulang solver, dengan cara yang sama seperti mask mode gerak.
 
-Susunan QP di CasADi (variabel keputusan z = [u, d_1, ..., d_NH]). Setiap c_k affine terhadap u:
+Susunan QP di CasADi / "eksak" (variabel keputusan z = [u, d_1, ..., d_NH]). Setiap c_k affine terhadap u:
 c(x, u, p) = a(x, p)*u + b(x, p).
     min_z  1/2 * z' H z + G' z      H = diag(2, 2*eps, ..., 2*eps), G = [-2*u_PD, rho_1, ..., rho_NH]
                                     (= (u - u_PD)^2 + sum (rho_k*d_k + eps*d_k^2) - konstanta)
@@ -56,16 +62,24 @@ c(x, u, p) = a(x, p)*u + b(x, p).
            [u_min, 0, ..] <= z <= [u_max, d_maks, ..]      (batas arus, slack >= 0; d_maks = 0 bila slack mati)
     a(x, p) dan b(x, p) dihitung dari ekspresi CasADi WORKPLACE (ca.Function) tiap siklus.
     Tidak ada kode C yang di-generate / di-build: solver langsung siap saat CBFQP() dibuat.
+Susunan di acados: lihat WORKSPACE ACADOS (cost dan slack sama, constraint c(x, u, p) yang sama di con_h_expr_0).
 
 Kebutuhan: pip install casadi   (plugin qpoases, osqp, proxqp, qrqp, hpipm, daqp, highs, ipqp ikut di paket pip casadi
            3.6 ke atas; yang tidak ada di versi Anda dilaporkan "tidak tersedia" oleh --banding-solver).
+           Solver "acados": acados sudah di-build (<folder acados>/lib/libacados.so) dan acados_template terpasang
+           (pip install -e <folder acados>/interfaces/acados_template). Folder acados dicari otomatis, lihat
+           cari_folder_acados().
 
 Semua nilai fisik dan gain dibaca dari config.py; f(x) dan g(x) dari model.py.
 """
 
 from __future__ import annotations
 
+import ctypes
+import glob
+import importlib.util
 import math
+import os
 import sys
 import time
 
@@ -331,6 +345,242 @@ def qp_eksak(a, b, u_pd, u_lb, u_ub, rho, pakai_slack=True, eps=None):
     return u, d, True
 
 
+# =========================================================================================
+# =========================================================================================
+#                                   WORKSPACE ACADOS
+#   Solver config.CBF_QP_SOLVER = "acados". Pengaturan ACADOS_* di config.py (simulasi bagian 6b, robot fisik 5b).
+#   Constraint TIDAK ditulis di sini: acados memakai c(x, u, p) yang sama dari WORKPLACE PROGRAM.
+# =========================================================================================
+# =========================================================================================
+SOLVER_ACADOS = "acados"
+NAMA_OCP_ACADOS = "atera_cbf_qp"
+
+
+def cari_folder_acados():
+    """Folder acados (yang berisi interfaces/acados_template), atau "" bila tidak ditemukan. Urutan pencarian:
+    config.ACADOS_SOURCE_DIR, variabel ACADOS_SOURCE_DIR, folder "acados" di sebelah folder program ini (sampai 4
+    tingkat ke atas), ~/acados, lalu lokasi acados_template hasil pip install -e."""
+    calon = []
+    if str(config.ACADOS_SOURCE_DIR).strip():
+        calon.append(os.path.expanduser(str(config.ACADOS_SOURCE_DIR).strip()))
+    if os.environ.get("ACADOS_SOURCE_DIR"):
+        calon.append(os.environ["ACADOS_SOURCE_DIR"])
+    folder = os.path.dirname(os.path.abspath(__file__))
+    for _ in range(4):
+        calon.append(os.path.join(folder, "acados"))
+        folder = os.path.dirname(folder)
+    calon.append(os.path.join(os.path.expanduser("~"), "acados"))
+    try:                                            # acados_template yang sudah di-install pip -e
+        spec = importlib.util.find_spec("acados_template")
+        if spec is not None and spec.origin:
+            calon.append(os.path.join(os.path.dirname(spec.origin), "..", "..", ".."))
+    except (ImportError, ValueError):
+        pass
+    for path in calon:
+        if os.path.isdir(os.path.join(path, "interfaces", "acados_template")):
+            return os.path.abspath(path)
+    return ""
+
+
+def siapkan_acados():
+    """Siapkan acados supaya bisa di-import tanpa export manual. Mengembalikan folder acados."""
+    folder = cari_folder_acados()
+    if folder == "":
+        raise RuntimeError("folder acados tidak ditemukan. Isi config.ACADOS_SOURCE_DIR, atau taruh folder 'acados' "
+                           "di sebelah folder program ini / di ~/acados.")
+    lib = os.path.join(folder, "lib")
+    if len(glob.glob(os.path.join(lib, "libacados.*"))) == 0:
+        raise RuntimeError("acados belum di-build (tidak ada %s/libacados.so). Jalankan:\n"
+                           "    cd %s && git submodule update --recursive --init\n"
+                           "    mkdir -p build && cd build && cmake -DACADOS_WITH_QPOASES=OFF .. && make install -j4"
+                           % (lib, folder))
+    os.environ["ACADOS_SOURCE_DIR"] = folder
+    os.environ["LD_LIBRARY_PATH"] = lib + os.pathsep + os.environ.get("LD_LIBRARY_PATH", "")
+    # Muat library acados lebih dulu, supaya solver hasil generate menemukannya walaupun LD_LIBRARY_PATH tidak
+    # diatur sebelum Python dijalankan.
+    for nama in ("libblasfeo.so", "libhpipm.so", "libacados.so"):
+        path = os.path.join(lib, nama)
+        if os.path.exists(path):
+            ctypes.CDLL(path, mode=ctypes.RTLD_GLOBAL)
+    try:
+        import acados_template  # noqa: F401
+    except ImportError as kesalahan:
+        if kesalahan.name != "acados_template":
+            raise RuntimeError("acados_template butuh modul '%s'. Jalankan: pip install -e %s"
+                               % (kesalahan.name, os.path.join(folder, "interfaces", "acados_template")))
+        sys.path.insert(0, os.path.join(folder, "interfaces", "acados_template"))
+        try:
+            import acados_template  # noqa: F401
+        except ImportError as kesalahan2:
+            raise RuntimeError("acados_template butuh modul '%s'. Jalankan: pip install -e %s"
+                               % (kesalahan2.name, os.path.join(folder, "interfaces", "acados_template")))
+    return folder
+
+
+def workspace_acados(x, u, p_semua, c, f, g, rho, u_lb, u_ub):
+    """AcadosOcp CBF-QP (dipanggil SolverAcados). Mengembalikan (ocp, N).
+
+        stage 0 : state x dikunci ke state terukur (lbx_0 = ubx_0 = x tiap siklus), variabel keputusan u
+                  cost LINEAR_LS  1/2*(u - u_PD)' W (u - u_PD), W = 2  ->  (u - u_PD)^2   (yref_0 = u_PD tiap siklus)
+                  constraint c(x, u, p)/s >= 0 di con_h_expr_0 (c = WORKPLACE PROGRAM, sudah dimask dan memuat DOB;
+                  s_k = max(|a_k|, 1) diisi tiap siklus, jadi c/s bersatuan torsi [N m] dan HPIPM tidak menerima
+                  angka ribuan saat dtheta jauh di luar batas)
+                  slack (CBF_SLACK_AKTIF): soft constraint pada c/s, cost  zl*e + 1/2*Zl*e^2  dengan e = d/s,
+                  zl = rho_k*s_k, Zl = 2*eps*s_k^2  ->  sama persis dengan rho_k*d_k + eps*d_k^2
+                  batas arus u_min <= u <= u_max (lbu / ubu)
+        stage 1..N : prediksi x_{k+1} = x_k + DT*(f + g*u), tanpa cost dan tanpa constraint
+    Karena x dikunci dan c affine terhadap u, SQP_RTI menyelesaikan tepat SATU QP yang sama dengan QP solver lain.
+    """
+    from acados_template import AcadosModel, AcadosOcp
+
+    nh = int(c.shape[0])
+    n_horizon = int(config.ACADOS_N_HORIZON)
+    if n_horizon < 1:
+        raise RuntimeError("config.ACADOS_N_HORIZON harus >= 1.")
+
+    # ---- 1. Model: x, u, parameter p, dinamika diskrit, constraint stage 0
+    model_ocp = AcadosModel()
+    model_ocp.name = NAMA_OCP_ACADOS
+    model_ocp.x = x
+    model_ocp.u = u
+    model_ocp.p = p_semua
+    model_ocp.disc_dyn_expr = x + config.DT * (f + g * u)
+    model_ocp.con_h_expr_0 = c
+
+    ocp = AcadosOcp()
+    ocp.model = model_ocp
+    if hasattr(ocp.solver_options, "N_horizon"):
+        ocp.solver_options.N_horizon = n_horizon
+    else:                                           # acados < 0.4
+        ocp.dims.N = n_horizon
+    ocp.solver_options.tf = float(n_horizon)        # langkah waktu 1 -> cost tidak diskalakan
+    ocp.parameter_values = np.zeros(int(p_semua.shape[0]))
+
+    # ---- 2. Cost: (u - u_PD)^2 hanya di stage 0
+    ocp.cost.cost_type_0 = "LINEAR_LS"
+    ocp.cost.Vx_0 = np.zeros((config.NU, config.NX))
+    ocp.cost.Vu_0 = np.eye(config.NU)
+    ocp.cost.W_0 = 2.0 * np.eye(config.NU)
+    ocp.cost.yref_0 = np.zeros(config.NU)
+    ocp.cost.cost_type = "LINEAR_LS"
+    ocp.cost.Vx = np.zeros((0, config.NX))
+    ocp.cost.Vu = np.zeros((0, config.NU))
+    ocp.cost.W = np.zeros((0, 0))
+    ocp.cost.yref = np.zeros(0)
+    ocp.cost.cost_type_e = "LINEAR_LS"
+    ocp.cost.Vx_e = np.zeros((0, config.NX))
+    ocp.cost.W_e = np.zeros((0, 0))
+    ocp.cost.yref_e = np.zeros(0)
+
+    # ---- 3. Constraint: x terukur, c >= 0, batas arus
+    # Batas atas c "tak hingga": HPIPM memakai ACADOS_INFTY (batas itu tidak dimasukkan ke QP = constraint satu sisi).
+    # Dengan angka besar biasa (1e9) HPIPM ikut menghitung batas atas itu dan sering gagal numerik (NaN).
+    try:
+        from acados_template import ACADOS_INFTY as tak_hingga
+    except ImportError:                             # acados lama
+        tak_hingga = 1.0e10
+    if "HPIPM" not in str(config.ACADOS_QP_SOLVER):
+        tak_hingga = float(config.CBF_INFTY)        # QP solver lain tidak menerima constraint satu sisi
+    ocp.constraints.x0 = np.zeros(config.NX)                     # diganti state terukur tiap siklus
+    ocp.constraints.lh_0 = np.zeros(nh)
+    ocp.constraints.uh_0 = float(tak_hingga) * np.ones(nh)
+    ocp.constraints.idxbu = np.arange(config.NU)
+    ocp.constraints.lbu = np.array([float(u_lb)])
+    ocp.constraints.ubu = np.array([float(u_ub)])
+
+    # ---- 4. Slack per constraint (sama dengan QP solver lain: rho_k*d_k + CBF_SLACK_EPS*d_k^2)
+    if config.CBF_SLACK_AKTIF:
+        if not hasattr(ocp.constraints, "idxsh_0"):
+            raise RuntimeError("acados versi ini belum punya soft constraint di stage 0 (idxsh_0). Perbarui acados, "
+                               "atau isi CBF_SLACK_AKTIF = False.")
+        # nilai awal; tiap siklus diisi ulang SolverAcados.selesaikan() sesuai skala s_k
+        z_lin = np.asarray(rho, dtype=float)
+        z_kuad = 2.0 * float(config.CBF_SLACK_EPS) * np.ones(nh)
+        ocp.constraints.idxsh_0 = np.arange(nh)
+        ocp.cost.zl_0 = z_lin
+        ocp.cost.zu_0 = z_lin
+        ocp.cost.Zl_0 = z_kuad
+        ocp.cost.Zu_0 = z_kuad
+
+    # ---- 5. Opsi solver (config.py bagian ACADOS)
+    opsi = ocp.solver_options
+    opsi.integrator_type = "DISCRETE"
+    opsi.nlp_solver_type = str(config.ACADOS_NLP_SOLVER)
+    opsi.qp_solver = str(config.ACADOS_QP_SOLVER)
+    opsi.hessian_approx = "GAUSS_NEWTON"
+    opsi.qp_solver_iter_max = int(config.ACADOS_QP_ITER_MAX)
+    if "HPIPM" in opsi.qp_solver:
+        opsi.hpipm_mode = str(config.ACADOS_HPIPM_MODE)
+        # mu0 = parameter barrier awal HPIPM. Bobot slack rho_k*s_k bisa ~1e8: dengan mu0 bawaan (1) HPIPM sering
+        # berhenti dengan NaN tepat saat slack dibutuhkan. Hanya ada di acados yang cukup baru.
+        if float(config.ACADOS_QP_MU0) > 0.0 and isinstance(getattr(type(opsi), "qp_solver_mu0", None), property):
+            opsi.qp_solver_mu0 = float(config.ACADOS_QP_MU0)
+    opsi.print_level = int(config.ACADOS_PRINT_LEVEL)
+    return ocp, n_horizon
+
+
+class SolverAcados:
+    """Pembungkus AcadosOcpSolver untuk CBFQP: selesaikan(x, p, u_pd, a) -> (u, d, ok, teks)."""
+
+    def __init__(self, x, u, p_semua, c, f, g, rho, u_lb, u_ub):
+        siapkan_acados()
+        from acados_template import AcadosOcpSolver
+
+        self.nh = int(c.shape[0])
+        self.rho = np.asarray(rho, dtype=float)
+        self.eps = float(config.CBF_SLACK_EPS)
+        self.pakai_slack = bool(config.CBF_SLACK_AKTIF)
+        self.u_lb, self.u_ub = float(u_lb), float(u_ub)
+        # Skala tiap constraint s_k (parameter tambahan di belakang p): acados menyelesaikan c/s >= 0
+        skala = ca.SX.sym("skala", self.nh)
+        ocp, self.N = workspace_acados(x, u, ca.vertcat(p_semua, skala), c / skala, f, g, rho, u_lb, u_ub)
+
+        folder_kode = str(config.ACADOS_FOLDER_KODE)
+        if not os.path.isabs(folder_kode):
+            folder_kode = os.path.join(os.path.dirname(os.path.abspath(__file__)), folder_kode)
+        nama_json = "acados_ocp_%s.json" % NAMA_OCP_ACADOS
+        path_json = os.path.join(folder_kode, nama_json)
+        # ACADOS_BUILD = False dan kode C sudah ada: langsung dipakai (cepat). Selain itu kode C dibuat ulang.
+        bangun = bool(config.ACADOS_BUILD) or not os.path.exists(path_json)
+        if hasattr(ocp, "code_gen_options"):         # acados baru
+            ocp.code_gen_options.code_export_directory = folder_kode
+            ocp.code_gen_options.json_file = path_json
+            self.solver = AcadosOcpSolver(ocp, build=bangun, generate=bangun, verbose=False)
+        else:
+            ocp.code_export_directory = folder_kode
+            self.solver = AcadosOcpSolver(ocp, json_file=path_json, build=bangun, generate=bangun, verbose=False)
+
+    def selesaikan(self, x, p, u_pd, a):
+        """x, p (parameter WORKPLACE), u_pd, a = koefisien u tiap constraint (dari CBFQP.constraint_coefficients)."""
+        solver = self.solver
+        skala = np.maximum(np.abs(np.asarray(a, dtype=float)), 1.0)
+        p_acados = np.concatenate([p, skala])
+        solver.set(0, "lbx", x)
+        solver.set(0, "ubx", x)
+        for stage in range(self.N + 1):
+            solver.set(stage, "x", x)
+            solver.set(stage, "p", p_acados)
+        solver.set(0, "u", np.array([min(max(u_pd, self.u_lb), self.u_ub)]))
+        solver.cost_set(0, "yref", np.array([u_pd]))
+        if self.pakai_slack:
+            z_lin = self.rho * skala
+            z_kuad = 2.0 * self.eps * skala ** 2
+            for nama, nilai in (("zl", z_lin), ("zu", z_lin), ("Zl", z_kuad), ("Zu", z_kuad)):
+                solver.cost_set(0, nama, nilai)
+        status = int(solver.solve())
+        u = float(solver.get(0, "u")[0])
+        if self.pakai_slack:
+            d = np.asarray(solver.get(0, "sl"), dtype=float).ravel()[:self.nh] * skala
+        else:
+            d = np.zeros(self.nh)
+        return u, d, status == 0, "OK" if status == 0 else "acados status %d" % status
+
+
+# =========================================================================================
+#                                 AKHIR WORKSPACE ACADOS
+# =========================================================================================
+
+
 # =============================================================================
 # DOB (Disturbance Observer)
 # =============================================================================
@@ -406,14 +656,17 @@ class CBFQP:
                                "CBF-QP butuh c = a(x)*u + b(x).")
         self._coeff = ca.Function("cbf_coeff", [x, p_semua], [a, b])
 
+        self.u_lb = float(config.MIN_CURRENT_A * config.MOTOR_KT)       # batas arus: u_min <= u <= u_max
+        self.u_ub = float(config.MAX_CURRENT_A * config.MOTOR_KT)
+
         # QP solver (1 + NH variabel: u dan satu slack per constraint, bobot rho_k)
         self.plugin = str(config.CBF_QP_SOLVER if plugin is None else plugin)
         self.rho = bobot_slack(self.NH)
-        self.solver = buat_solver(self.plugin, self.NH)
+        if self.plugin == SOLVER_ACADOS:
+            self.solver = SolverAcados(x, u, p_semua, c, f, g, self.rho, self.u_lb, self.u_ub)
+        else:
+            self.solver = buat_solver(self.plugin, self.NH)
         self._uba = np.full(self.NH, float(config.CBF_INFTY))          # c + d <= CBF_INFTY ("tak hingga")
-
-        self.u_lb = float(config.MIN_CURRENT_A * config.MOTOR_KT)       # batas arus: u_min <= u <= u_max
-        self.u_ub = float(config.MAX_CURRENT_A * config.MOTOR_KT)
 
         # torsi nyata / torsi perintah yang dipakai g(x) (lihat docstring modul); boleh diganti saat berjalan
         self.rasio_torsi = float(config.RASIO_TORSI)
@@ -557,9 +810,11 @@ class CBFQP:
     def _catat_c(self, a, b):
         self.c = a * self.u + b
 
-    def _selesaikan(self, a, b):
+    def _selesaikan(self, a, b, x, p):
         """QP u + slack per constraint. Mengembalikan (u, d ndarray(NH), solver_ok, teks status)."""
         pakai_slack = bool(config.CBF_SLACK_AKTIF)
+        if isinstance(self.solver, SolverAcados):                       # "acados" (WORKSPACE ACADOS)
+            return self.solver.selesaikan(x, p, self.u_pd, a)
         if self.solver is None:                                         # "eksak"
             u, d, ok = qp_eksak(a, b, self.u_pd, self.u_lb, self.u_ub, self.rho, pakai_slack)
             return u, d, ok, "eksak" if ok else "tidak ada u yang memenuhi"
@@ -603,7 +858,7 @@ class CBFQP:
         self.u_interval = self._interval(a, b)
 
         t0 = time.perf_counter()
-        u, d, self.solver_ok, self.solver_status = self._selesaikan(a, b)
+        u, d, self.solver_ok, self.solver_status = self._selesaikan(a, b, x, p)
         self.solve_ms = (time.perf_counter() - t0) * 1000.0
 
         # Periksa ulang hasil solver (jangan percaya begitu saja): batas u, slack >= 0, dan c + d >= 0.
@@ -693,7 +948,11 @@ if __name__ == "__main__":
         print("Perbandingan QP solver CBF-QP (3000 kasus acak, mode DIAM, slack %s, rho %s)"
               % ("AKTIF" if config.CBF_SLACK_AKTIF else "MATI", " ".join("%.0e" % r for r in cbf.rho)))
         print("Batas waktu satu siklus kontrol: %.1f ms" % (1000.0 * config.DT))
-        for plugin in config.CBF_QP_SOLVER_BANDING:
+        # acados selalu terakhir: library HPIPM milik acados (dimuat global) bentrok dengan plugin "hpipm" CasADi
+        # bila keduanya dipakai di satu program (crash "double free").
+        daftar = [s for s in config.CBF_QP_SOLVER_BANDING if s != SOLVER_ACADOS]
+        daftar += [SOLVER_ACADOS] if SOLVER_ACADOS in config.CBF_QP_SOLVER_BANDING else []
+        for plugin in daftar:
             _, teks = _uji_solver(plugin, sampel, MODE_DIAM)
             print("  %-8s %s" % (plugin, teks))
         raise SystemExit(0)

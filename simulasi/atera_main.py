@@ -196,12 +196,12 @@ def main():
 
     pd = PDControl()
 
-    # CBF-QP memakai CasADi, selalu disiapkan sebelum jendela simulasi dibuka supaya tombol PD + CBF-QP bisa
-    # langsung dipakai. Bila gagal, simulasi tetap jalan dengan mode PD saja (tombol PD + CBF-QP dimatikan).
+    # CBF-QP (solver config.CBF_QP_SOLVER) selalu disiapkan sebelum jendela simulasi dibuka supaya tombol PD + CBF-QP
+    # bisa langsung dipakai. Bila gagal, simulasi tetap jalan dengan mode PD saja (tombol PD + CBF-QP dimatikan).
     # config.CBF_TAHU_ZETA = False (= robot fisik): model CBF-QP memakai zeta = 0 walau lantai dimiringkan, gangguan
     # kemiringan ditaksir DOB. True: CBF-QP membaca config.zeta tiap siklus (ikut berubah bila zeta_DEG diubah).
     cbf = None
-    print("Menyiapkan CBF-QP (CasADi) ...")
+    print("Menyiapkan CBF-QP (solver %s) ..." % config.CBF_QP_SOLVER)
     try:
         from cbf_qp import CBFQP
         cbf = CBFQP(zeta=None if config.CBF_TAHU_ZETA else 0.0)

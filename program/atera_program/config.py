@@ -94,50 +94,18 @@ KOMET_REM_LAMA_S = 2.0              # [s]
 KOMET_REM_SELESAI = 0.5             # [rad/s]
 
 # =============================================================================
-#                              5. PD
+#                              4. PD  (= simulasi)
 # =============================================================================
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
-# error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 15.81                     # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 02.28                      # [N m s/rad]
-Kp_theta = 0.19                     # [N m/rad]    hanya mode BALANCING tanpa W / S
+# error = setpoint - state,   arah = -1 / 0 / +1 dari D-Pad atas / bawah (keyboard W / S)
+Kp_psi = 15.81                      # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 2.28                       # [N m s/rad]
+Kp_theta = 0.19                     # [N m/rad]    hanya mode BALANCING tanpa D-Pad atas / bawah
 Kd_theta = 0.30                     # [N m s/rad]
-# Kvel*arah saat W / S ditahan. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
-# -> Kvel NEGATIF supaya W maju (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s), sama dengan robot fisik.
-Kvel = -1.50                        # [N m]
-
-# Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
-# (sama dengan apalah_bisa/tunning.py).
-BALANCE_DIRECTION_SIGN = -1.0
-# BUTUH PENGUJIAN ARAH KOREKSI: gain kecil, badan dimiringkan ke depan, roda harus berputar ke DEPAN.
-
-# =============================================================================
-#                              5b. PD HEADING (roda kiri dan kanan bergerak bersama)  (= robot fisik 4b)
-# =============================================================================
-# yaw = R*(theta_kanan - theta_kiri)/W_RODA (+ = berputar ke KIRI dilihat dari atas)
-# u_belok = Kp_yaw*(yaw - yaw_ref) + Kd_yaw*(dyaw - dyaw_ref); roda kiri u + u_belok, roda kanan u - u_belok
-#   A / D dilepas : yaw_ref tetap.   A / D ditahan : dyaw_ref = -belok*YAW_RATE_BELOK (saat DIAM = berputar di tempat).
-W_RODA = 0.258                      # [m] tengah ban kiri ke tengah ban kanan (diukur pengguna)
-YAW_AKTIF = True
-Kp_yaw = 0.30                       # [N m/rad]     ASUMSI (lihat robot fisik config.py 4b)
-Kd_yaw = 0.10                       # [N m s/rad]
-YAW_RATE_BELOK = 1.0                # [rad/s] kecepatan belok A / D
-A_YAW_MAKS = 3.0                    # [rad/s^2]
-YAW_TORSI_MAKS = 0.40               # [N m]
-# Mode BEBAS (tombol F): PD heading mati, belok A / D = selisih torsi tetap (= robot fisik 4b). ASUMSI: 0.02 N m.
-TORSI_BELOK = 0.02                  # [N m]
-
-# =============================================================================
-#                              6. CBF-QP
-# =============================================================================
-# Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 17.81                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 8.48                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 415.73                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 # Kvel*arah saat D-Pad atas / bawah ditekan (arah +1 = atas, -1 = bawah). Kecepatan tunak di lantai datar:
 #     v = -R*Kvel*arah/Kd_theta      -> Kvel NEGATIF supaya D-Pad atas berjalan ke DEPAN
-#     (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s; no-load DDSM115 1.05 m/s)
+#     (Kd_theta 0.30: Kvel -1.50 -> 0.25 m/s; no-load DDSM115 1.05 m/s)
 Kvel = -1.50                        # [N m]
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan simulasi/config.py). Tanpa ini pd_control.py juga memakai -1.
@@ -170,7 +138,7 @@ TORSI_BELOK = 0.02                  # [N m]
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
 Alpha_1 = 17.81                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 8.48                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 8.48                      # [1/s]  h1, h2 (psi, HOCBF orde 2)
 Alpha_3 = 415.73                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 
 # Semua Alpha_<nomor> berurutan di atas (otomatis dipakai cbf_qp.py dan ise.py).
@@ -178,11 +146,16 @@ NAMA_ALPHA = []
 while ("Alpha_%d" % (len(NAMA_ALPHA) + 1)) in globals():
     NAMA_ALPHA.append("Alpha_%d" % (len(NAMA_ALPHA) + 1))
 
-CBF_QP_SOLVER = "daqp"              # QP solver CBF-QP (plugin ca.conic CasADi), ikut di paket pip casadi.
+# QP solver CBF-QP (cbf_qp.py):
+#   "acados" : acados (HPIPM, N = ACADOS_N_HORIZON), pengaturan di bagian 5b
+#   "eksak"  : solusi pasti numpy (tanpa iterasi)
+#   plugin ca.conic CasADi: "daqp", "qpoases", "osqp", "proxqp", "qrqp"
 # Uji Raspi 20261020 (--banding-solver, 3000 kasus): daqp gagal 0 %, 0.20 ms; qpoases gagal 26 %; osqp gagal 28 %, 5.3 ms.
-# pilihan lain: "eksak" (solusi pasti numpy, tanpa iterasi), "osqp", "proxqp", "qrqp", "hpipm", "daqp",
-# "highs", "ipqp". Bandingkan di Raspberry Pi:  python3 cbf_qp.py --banding-solver
-CBF_QP_SOLVER_BANDING = ["eksak", "qpoases", "osqp", "proxqp", "qrqp", "hpipm", "daqp", "highs", "ipqp"]
+# Bandingkan di Raspberry Pi:  python3 cbf_qp.py --banding-solver
+CBF_QP_SOLVER = "daqp"
+# Daftar --banding-solver (acados selalu diuji terakhir). Tidak dimasukkan (uji 20261025): "hpipm" CasADi menolak
+# struktur QP ini, "highs" bisa macet (iterasi tanpa akhir), "ipqp" gagal di semua kasus.
+CBF_QP_SOLVER_BANDING = ["eksak", "daqp", "qpoases", "osqp", "proxqp", "qrqp", "acados"]
 # Slack per constraint (exact penalty, lihat cbf_qp.py):
 #   min (u - u_PD)^2 + sum (rho_k*d_k + CBF_SLACK_EPS*d_k^2),  c_k + d_k >= 0,  d_k >= 0
 # Selama semua constraint bisa dipenuhi: d = 0 dan u SAMA dengan QP lama (syarat: rho_k cukup besar, > ~2*|du|/|a_k|,
@@ -210,6 +183,29 @@ CBF_TOL_KOEFISIEN = 1.0e-12
 # ASUMSI: torsi roda fisik = datasheet. Uji delay 20261009 memberi ~0.238; bila itu yang benar, isi 0.238 di sini
 # (CBF-QP ikut memakai torsi itu) dan pakai gain hasil tuning profil TERUKUR.
 MOTOR_KT_EFEKTIF = 0.75             # [N m/A]  (RASIO_TORSI dihitung di akhir file)
+
+# =============================================================================
+#                              5b. ACADOS  (CBF_QP_SOLVER = "acados", WORKSPACE ACADOS di cbf_qp.py)
+# =============================================================================
+# OCP: stage 0 = CBF-QP (x dikunci ke state terukur, variabel u), stage 1..N = prediksi tanpa cost / constraint.
+ACADOS_N_HORIZON = 1                # N pada HPIPM (batasan skripsi: N = 1)
+ACADOS_NLP_SOLVER = "SQP_RTI"       # satu QP per siklus (constraint affine terhadap u -> hasil tepat). "SQP" juga bisa
+ACADOS_QP_SOLVER = "PARTIAL_CONDENSING_HPIPM"   # atau "FULL_CONDENSING_HPIPM"
+# Uji 20261025 (12000 kasus acak di sekitar safety set, termasuk yang butuh slack; acados v0.5.1, x86):
+#   ROBUST + mu0 1e5 : gagal 0 %, |u - u_eksak| < 1e-13 kecuali 1 kasus ekstrem (0.08 N m)
+#   ROBUST + mu0 1e4 : gagal 2 kasus;   SPEED : gagal 7 % (mu0 1e4) sampai 58 % (mu0 bawaan), saat slack dibutuhkan
+ACADOS_HPIPM_MODE = "ROBUST"        # "BALANCE", "SPEED_ABS", "SPEED", "ROBUST"
+ACADOS_QP_MU0 = 1.0e5               # barrier awal HPIPM (0 = bawaan hpipm_mode)
+ACADOS_QP_ITER_MAX = 50             # iterasi maksimum HPIPM per siklus
+ACADOS_PRINT_LEVEL = 0              # 0 = diam
+# True  = kode C solver dibuat dan di-compile ulang tiap program mulai (wajib setelah WORKPLACE / jumlah Alpha /
+#         ACADOS_* berubah; beberapa detik di Raspberry Pi).
+# False = pakai kode C di ACADOS_FOLDER_KODE yang sudah ada (mulai lebih cepat); dibuat otomatis bila belum ada.
+ACADOS_BUILD = True
+ACADOS_FOLDER_KODE = "c_generated_code"  # relatif terhadap folder cbf_qp.py
+# Folder acados (berisi interfaces/acados_template). Kosong = dicari otomatis: variabel ACADOS_SOURCE_DIR, folder
+# "acados" di sebelah / di atas folder program ini, ~/acados, atau lokasi pip install -e acados_template.
+ACADOS_SOURCE_DIR = ""
 
 # =============================================================================
 #                              6. MOTOR DDSM115  (wiki Waveshare DDSM115)
