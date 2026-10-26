@@ -99,14 +99,14 @@ KOMET_REM_SELESAI = 0.5             # [rad/s]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari D-Pad atas / bawah (keyboard W / S)
-Kp_psi = 15.81                      # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 2.28                       # [N m s/rad]
-Kp_theta = 0.19                     # [N m/rad]    hanya mode BALANCING tanpa D-Pad atas / bawah
-Kd_theta = 0.30                     # [N m s/rad]
+Kp_psi = 12.12                      # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 2.27                       # [N m s/rad]
+Kp_theta = 0.15                     # [N m/rad]    hanya mode BALANCING tanpa D-Pad atas / bawah
+Kd_theta = 0.32                     # [N m s/rad]
 # Kvel*arah saat D-Pad atas / bawah ditekan (arah +1 = atas, -1 = bawah). Kecepatan tunak di lantai datar:
 #     v = -R*Kvel*arah/Kd_theta      -> Kvel NEGATIF supaya D-Pad atas berjalan ke DEPAN
 #     (Kd_theta 0.30: Kvel -1.50 -> 0.25 m/s; no-load DDSM115 1.05 m/s)
-Kvel = -1.50                        # [N m]
+Kvel = -2.50                        # [N m]
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan simulasi/config.py). Tanpa ini pd_control.py juga memakai -1.
 BALANCE_DIRECTION_SIGN = -1.0
@@ -137,9 +137,9 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              5. CBF-QP  (= simulasi)
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 17.81                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 8.48                      # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 415.73                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
+Alpha_1 = 07.42                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 08.45                      # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 269.18                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 
 # Semua Alpha_<nomor> berurutan di atas (otomatis dipakai cbf_qp.py dan ise.py).
 NAMA_ALPHA = []
@@ -152,7 +152,7 @@ while ("Alpha_%d" % (len(NAMA_ALPHA) + 1)) in globals():
 #   plugin ca.conic CasADi: "daqp", "qpoases", "osqp", "proxqp", "qrqp"
 # Uji Raspi 20261020 (--banding-solver, 3000 kasus): daqp gagal 0 %, 0.20 ms; qpoases gagal 26 %; osqp gagal 28 %, 5.3 ms.
 # Bandingkan di Raspberry Pi:  python3 cbf_qp.py --banding-solver
-CBF_QP_SOLVER = "daqp"
+CBF_QP_SOLVER = "acados"
 # Daftar --banding-solver (acados selalu diuji terakhir). Tidak dimasukkan (uji 20261025): "hpipm" CasADi menolak
 # struktur QP ini, "highs" bisa macet (iterasi tanpa akhir), "ipqp" gagal di semua kasus.
 CBF_QP_SOLVER_BANDING = ["eksak", "daqp", "qpoases", "osqp", "proxqp", "qrqp", "acados"]

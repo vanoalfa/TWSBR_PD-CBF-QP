@@ -98,10 +98,10 @@ YAW_KOMET_DEG = 90.0                # [deg]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 15.81                     # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 02.28                      # [N m s/rad]
-Kp_theta = 0.19                     # [N m/rad]    hanya mode BALANCING tanpa W / S
-Kd_theta = 0.30                     # [N m s/rad]
+Kp_psi = 12.12                    # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 02.27                      # [N m s/rad]
+Kp_theta = 0.15                     # [N m/rad]    hanya mode BALANCING tanpa W / S
+Kd_theta = 0.32                     # [N m s/rad]
 # Kvel*arah saat W / S ditahan. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
 # -> Kvel NEGATIF supaya W maju (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s), sama dengan robot fisik.
 Kvel = -1.16                        # [N m]
@@ -131,9 +131,9 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 17.81                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 8.48                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 415.73                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
+Alpha_1 = 07.42                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 08.45                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 269.18                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
@@ -147,7 +147,7 @@ while ("Alpha_%d" % (len(NAMA_ALPHA) + 1)) in globals():
 #   plugin ca.conic CasADi: "daqp", "qpoases", "osqp", "proxqp", "qrqp"
 # Uji Raspi 20261020 (--banding-solver, 3000 kasus): daqp gagal 0 %, 0.20 ms; qpoases gagal 26 %; osqp gagal 28 %.
 # Bandingkan:  python3 cbf_qp.py --banding-solver
-CBF_QP_SOLVER = "daqp"
+CBF_QP_SOLVER = "acados"
 # Daftar --banding-solver (acados selalu diuji terakhir). Tidak dimasukkan (uji 20261025): "hpipm" CasADi menolak
 # struktur QP ini, "highs" bisa macet (iterasi tanpa akhir), "ipqp" gagal di semua kasus.
 CBF_QP_SOLVER_BANDING = ["eksak", "daqp", "qpoases", "osqp", "proxqp", "qrqp", "acados"]
@@ -438,9 +438,9 @@ OPTUNA_BATAS = {
     },
     "DATASHEET": {
         "Kp_psi":   (5.0, 25.0),
-        "Kd_psi":   (1.5, 3.5),
-        "Kd_theta": (0.1, 1.0),
-        "Kp_theta": (0.15, 1.0),
+        "Kd_psi":   (1.5, 5.5),
+        "Kd_theta": (0.1, 5.0),
+        "Kp_theta": (0.15, 5.0),
         "Alpha_1":  (5.00, 55.00),
         "Alpha_2":  (5.00, 55.00),
         "Alpha_3":  (1.00, 500.0),
