@@ -3531,3 +3531,735 @@ AttributeError: 'CBFQP' object has no attribute 'reset_dob'
 2026-10-27 08:36:07,096 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_083607_COBA PD+CBF_PERCOBAAN KE-01
 2026-10-27 08:36:07,097 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261027_083607_COBA PD+CBF_PERCOBAAN KE-01
 2026-10-27 08:36:09,323 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261027_083609_COBA PD_PERCOBAAN KE-02
+2026-10-27 13:28:44,172 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-27 13:28:44,226 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-27 13:28:44,230 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 13:28:44,473 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 13:28:44,507 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-27 13:28:48,727 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-27 13:28:48,728 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-27 13:28:48,728 | INFO | atera | Ada 1 masalah, lihat baris Masalah.
+2026-10-27 13:28:48,734 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 13:28:48,977 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 13:28:50,738 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 13:28:50,981 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 13:28:52,742 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 13:28:52,985 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 13:28:54,746 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 13:28:54,800 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-27 13:28:54,801 | INFO | atera | Kedua motor siap.
+2026-10-27 13:29:05,735 | INFO | atera | Dihentikan dari keyboard
+2026-10-27 13:29:08,513 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-27 13:29:08,567 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-27 13:29:08,568 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 13:29:08,622 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-27 13:29:08,646 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-27 13:29:11,743 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-27 13:29:11,744 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-27 13:29:11,744 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-27 13:29:38,013 | INFO | atera | plot realtime: laptop 10.16.110.152 tersambung
+2026-10-27 13:30:01,643 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-27 13:30:06,558 | INFO | atera | Kalibrasi selesai (sudut nol -2.93 deg, s = 0 di sini). Tekan MULAI.
+2026-10-27 13:30:07,194 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-27 13:30:12,108 | INFO | atera | Kalibrasi selesai (sudut nol -2.38 deg, s = 0 di sini). Tekan MULAI.
+2026-10-27 13:30:22,059 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-27 13:30:29,255 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_133029_COBA PD_PERCOBAAN KE-03
+2026-10-27 13:30:29,256 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261027_133029_COBA PD_PERCOBAAN KE-03
+2026-10-27 13:33:39,952 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_133339_COBA PD+CBF_PERCOBAAN KE-02
+2026-10-27 13:33:39,953 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261027_133339_COBA PD+CBF_PERCOBAAN KE-02
+2026-10-27 13:34:04,975 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_133404_COBA PD_PERCOBAAN KE-04
+2026-10-27 13:34:04,976 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261027_133404_COBA PD_PERCOBAAN KE-04
+2026-10-27 13:42:59,517 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_134259_COBA PD+CBF_PERCOBAAN KE-03
+2026-10-27 13:42:59,518 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261027_134259_COBA PD+CBF_PERCOBAAN KE-03
+2026-10-27 13:43:28,937 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_134328_COBA PD_PERCOBAAN KE-05
+2026-10-27 13:43:28,938 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261027_134328_COBA PD_PERCOBAAN KE-05
+2026-10-27 13:43:34,126 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_134334_COBA PD+CBF_PERCOBAAN KE-04
+2026-10-27 13:43:34,129 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261027_134334_COBA PD+CBF_PERCOBAAN KE-04
+2026-10-27 13:43:41,922 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_134341_COBA PD_PERCOBAAN KE-06
+2026-10-27 13:43:41,923 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261027_134341_COBA PD_PERCOBAAN KE-06
+2026-10-27 13:43:58,327 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261027_134358_COBA PD+CBF_PERCOBAAN KE-05
+2026-10-27 13:43:58,327 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261027_134358_COBA PD+CBF_PERCOBAAN KE-05
+2026-10-27 14:10:47,109 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-27 14:10:47,163 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-27 14:10:47,164 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:10:47,218 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-27 14:10:47,243 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-27 14:10:50,299 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-27 14:10:50,299 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-27 14:10:50,299 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-27 14:10:50,406 | INFO | atera | plot realtime: laptop 10.16.110.152 tersambung
+2026-10-27 14:10:51,178 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-27 14:10:56,092 | INFO | atera | Kalibrasi selesai (sudut nol -3.02 deg, s = 0 di sini). Tekan MULAI.
+2026-10-27 14:10:57,617 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-27 14:11:02,532 | INFO | atera | Kalibrasi selesai (sudut nol -2.29 deg, s = 0 di sini). Tekan MULAI.
+2026-10-27 14:11:12,577 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-27 14:11:14,543 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_141114_COBA PD_PERCOBAAN KE-07
+2026-10-27 14:11:14,543 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261027_141114_COBA PD_PERCOBAAN KE-07
+2026-10-27 14:18:07,036 | ERROR | ddsm115 | motor kanan: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:18:07,182 | INFO | atera | motor: motor kanan: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 -> tersimpan PERCOBAAN 20261027_141807_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-27 14:18:07,182 | INFO | atera | GANGGUAN: motor: motor kanan: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 | tersimpan: PERCOBAAN 20261027_141807_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-27 14:18:07,187 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:18:07,241 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-27 14:18:07,241 | INFO | atera | Kedua motor siap.
+2026-10-27 14:18:08,513 | INFO | atera | Roda sudah mati.
+2026-10-27 14:18:18,036 | INFO | atera | Balancing, mode PD+CBF, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-27 14:21:54,221 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_142154_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-27 14:21:54,221 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261027_142154_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-27 14:23:29,682 | INFO | atera | PENGUJIAN dimulai (30 s): dorong robot sekarang.
+2026-10-27 14:23:43,552 | ERROR | ddsm115 | motor kanan: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:43,626 | INFO | atera | motor: motor kanan: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 -> tersimpan PERCOBAAN 20261027_142343_COBA PD_PERCOBAAN KE-08, PENGUJIAN (belum 30 s) 20261027_142343_COBA PD_PENGUJIAN KE-01
+2026-10-27 14:23:43,626 | INFO | atera | GANGGUAN: motor: motor kanan: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 | tersimpan: PERCOBAAN 20261027_142343_COBA PD_PERCOBAAN KE-08, PENGUJIAN (belum 30 s) 20261027_142343_COBA PD_PENGUJIAN KE-01
+2026-10-27 14:23:43,631 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:23:43,874 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:45,633 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:23:45,876 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:47,637 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:23:47,880 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:49,641 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:23:49,884 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:51,646 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:23:51,889 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:53,075 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:53,646 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:23:53,889 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:53,930 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:54,645 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:55,205 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:55,646 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:23:55,889 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:56,300 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:57,646 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:23:57,889 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:58,045 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:59,646 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:23:59,890 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:23:59,890 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:00,065 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:01,647 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:01,890 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:03,647 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:03,890 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:05,647 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:05,890 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:07,647 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:07,890 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:09,647 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:09,890 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:11,647 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:11,890 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:13,647 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:13,890 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:14,171 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:14,651 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:15,021 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:15,647 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:15,890 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:16,006 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:16,531 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:17,116 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:17,647 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:17,891 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:17,891 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:18,156 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:18,726 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:19,261 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:19,648 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:19,891 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:19,891 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:20,196 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:20,516 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:20,806 | INFO | atera | MULAI ditolak: motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:21,648 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:21,891 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:23,648 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:23,891 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:25,648 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:25,891 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:27,648 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:27,891 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:29,648 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:29,891 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:31,653 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:31,896 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:33,653 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:33,896 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:35,653 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:35,896 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:37,653 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:37,897 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:39,654 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:39,897 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:41,659 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:41,902 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:43,659 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:43,902 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:45,659 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:45,902 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:47,659 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:47,902 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:50,288 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-27 14:24:50,342 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-27 14:24:50,343 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:50,586 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:50,609 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-27 14:24:53,735 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-27 14:24:53,736 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-27 14:24:53,736 | INFO | atera | Ada 1 masalah, lihat baris Masalah.
+2026-10-27 14:24:53,742 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:53,985 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:54,813 | INFO | atera | plot realtime: laptop 10.16.110.152 tersambung
+2026-10-27 14:24:55,746 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:55,989 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:57,750 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:57,994 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:24:59,756 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:24:59,999 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:01,756 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:01,999 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:03,756 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:03,999 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:05,756 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:05,999 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:07,756 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:07,999 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:09,761 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:10,004 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:11,761 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:12,004 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:13,761 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:14,004 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:15,761 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:16,005 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:17,762 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:18,005 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:19,762 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:20,005 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:21,767 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:22,010 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:23,767 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:24,010 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:25,767 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:26,010 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:27,767 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:28,010 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:29,767 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:30,010 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:31,767 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:32,010 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:33,767 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:34,011 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:35,763 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-27 14:25:37,768 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-27 14:25:39,772 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:40,015 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:41,777 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:42,020 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:43,782 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:44,025 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:45,782 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:46,025 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:47,782 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:48,025 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:49,782 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:50,025 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:51,782 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:52,025 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:53,782 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:54,026 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:55,783 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:56,026 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:57,783 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:25:58,026 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:25:59,783 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:00,026 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:01,783 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:02,026 | ERROR | ddsm115 | motor kanan: tidak ada balasan (1/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:03,783 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:04,026 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:05,783 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:06,026 | ERROR | ddsm115 | motor kanan: tidak ada balasan (1/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:07,782 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:08,025 | ERROR | ddsm115 | motor kanan: tidak ada balasan (1/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:09,786 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:10,029 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:11,791 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:12,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:13,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:14,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:15,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:16,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:17,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:18,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:19,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:20,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:21,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:22,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:23,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:24,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:25,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:26,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:27,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:28,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:29,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:30,035 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:31,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:32,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:33,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:34,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:35,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:36,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:37,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:38,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:39,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:40,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:41,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:42,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:43,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:44,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:45,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:46,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:47,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:48,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:49,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:50,036 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:51,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:52,037 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:53,794 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:54,037 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:55,794 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:56,037 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:57,794 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:26:58,037 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:26:59,794 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:00,037 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:01,794 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:02,037 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:03,794 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:04,037 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:05,794 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:06,037 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:07,794 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:08,037 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:09,794 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:10,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:11,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:12,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:13,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:14,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:15,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:16,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:17,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:18,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:19,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:20,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:21,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:22,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:23,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:24,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:25,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:26,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:27,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:28,038 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:29,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:30,039 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:31,796 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:32,039 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:33,796 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:34,039 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:35,796 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:36,039 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:37,796 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:38,039 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:39,796 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:40,039 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:41,796 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:42,039 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:43,796 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:44,039 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:45,801 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:46,044 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:47,801 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:48,045 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:49,801 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:50,045 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:51,802 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:27:52,045 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:27:52,898 | INFO | atera | Dihentikan dari keyboard
+2026-10-27 14:29:34,731 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-27 14:29:34,785 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-27 14:29:34,789 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:35,032 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:35,122 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-27 14:29:39,367 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-27 14:29:39,367 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-27 14:29:39,367 | INFO | atera | Ada 1 masalah, lihat baris Masalah.
+2026-10-27 14:29:39,374 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:39,617 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:40,029 | INFO | atera | plot realtime: laptop 10.16.110.152 tersambung
+2026-10-27 14:29:41,378 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:41,621 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:43,383 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:43,626 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:45,383 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:45,626 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:47,383 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:47,626 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:49,383 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:49,626 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:51,383 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:51,626 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:53,383 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:53,626 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:55,383 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:55,627 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:57,384 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:57,627 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:29:59,384 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:29:59,627 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:01,384 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:01,627 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:03,384 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:03,627 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:05,384 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:05,627 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:07,384 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:07,628 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:09,385 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:09,628 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:11,385 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:11,628 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:13,385 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:13,628 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:15,385 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:15,628 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:17,385 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:17,628 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:19,385 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:19,628 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:21,385 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:21,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:23,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:23,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:25,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:25,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:27,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:27,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:29,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:29,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:31,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:31,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:33,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:33,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:35,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:35,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:37,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:37,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:39,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:39,630 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:41,387 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:41,630 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:43,386 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:43,629 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:45,391 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:45,616 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:30:47,392 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:47,606 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:30:49,393 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:49,606 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:30:51,393 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:51,606 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 126, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:30:53,393 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:53,606 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:30:55,392 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:55,598 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:30:57,395 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:57,639 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:30:59,396 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:30:59,639 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:01,396 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:01,639 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:03,396 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:03,639 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:05,396 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:05,639 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:07,400 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:07,644 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:09,405 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:09,648 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:11,410 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:11,653 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:13,415 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:13,658 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:15,420 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:15,663 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:17,425 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:17,668 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:19,430 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:19,673 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:21,434 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:21,662 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:23,438 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:23,658 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:25,440 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:25,662 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:27,444 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:27,659 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:29,446 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:29,660 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:31,447 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:31,663 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:33,450 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:33,667 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:35,453 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:35,696 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:31:37,457 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:37,677 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 254, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:39,458 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:39,674 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:41,460 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:41,676 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:43,462 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:43,669 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:45,466 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:45,679 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:47,466 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:47,675 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 254, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:49,466 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:49,673 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:51,470 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:51,683 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:53,474 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:53,690 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:55,477 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:55,700 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:55,774 | INFO | atera | Dihentikan dari keyboard
+2026-10-27 14:31:58,071 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-27 14:31:58,125 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-27 14:31:58,126 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:31:58,347 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:31:58,425 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-27 14:32:01,557 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-27 14:32:01,558 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-27 14:32:01,558 | INFO | atera | Ada 1 masalah, lihat baris Masalah.
+2026-10-27 14:32:01,563 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:01,784 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:02,396 | INFO | atera | plot realtime: laptop 10.16.110.152 tersambung
+2026-10-27 14:32:03,565 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:03,789 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:05,569 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:05,794 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:07,570 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:07,796 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:09,573 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:09,801 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:11,578 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:11,799 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 126, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:13,581 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:13,805 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 62, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:15,582 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:15,810 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:17,587 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:17,811 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:19,588 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:19,811 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:21,589 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:21,816 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:23,588 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:23,808 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:25,590 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:25,812 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:27,594 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:27,817 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 126, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:29,594 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:29,813 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:31,595 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:31,817 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 126, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:33,599 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:33,830 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:35,601 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:35,828 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:37,605 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:37,830 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:39,607 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:39,837 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:41,608 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:41,838 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:43,610 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:43,834 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:45,611 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:45,836 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:47,613 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:47,839 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:32:49,616 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:32:49,690 | INFO | atera | Dihentikan dari keyboard
+2026-10-27 14:36:01,967 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-27 14:36:02,021 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-27 14:36:02,026 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:02,249 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:02,335 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-27 14:36:06,616 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-27 14:36:06,616 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-27 14:36:06,616 | INFO | atera | Ada 1 masalah, lihat baris Masalah.
+2026-10-27 14:36:06,622 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:06,845 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:08,625 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:08,852 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:10,627 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:10,853 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 254, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:12,628 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:12,853 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:14,628 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:14,847 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:16,632 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:16,859 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 63, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:18,635 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:18,859 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:20,634 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:20,856 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:22,636 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:22,856 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:24,637 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:24,862 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:26,637 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:26,861 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:28,643 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:28,886 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:36:30,643 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:30,865 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:32,645 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:32,889 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:36:34,649 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:34,873 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:36,653 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:36,878 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:38,654 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:38,864 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:40,655 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:40,861 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:42,657 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:42,858 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:44,660 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:44,866 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 248, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:46,662 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:46,867 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:48,659 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-27 14:36:50,659 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-27 14:36:52,668 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:52,888 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:54,670 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:54,892 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:56,673 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:56,890 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:36:58,675 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:36:58,888 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 248, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:00,678 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:00,881 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:02,681 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:02,887 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:04,683 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:04,889 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:06,685 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:06,890 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:08,687 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:08,901 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:10,686 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:10,893 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:12,689 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:12,912 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:14,692 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:14,912 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:16,694 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:16,917 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:18,697 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:18,915 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:20,701 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:20,925 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:22,705 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:22,924 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:24,709 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:24,937 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:26,712 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:26,934 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 254, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:28,715 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:28,936 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:30,713 | ERROR | ddsm115 | motor kanan: port /dev/ttyACM1 tidak ada -> USB-RS485 tidak tercolok atau nama port berubah (cek: ls /dev/ttyACM*)
+2026-10-27 14:37:32,718 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:32,936 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:34,716 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:34,928 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:36,719 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:36,925 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:38,720 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:38,926 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:40,722 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:40,925 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:42,726 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:42,936 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:44,728 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:44,931 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:46,732 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:46,936 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:48,732 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:48,975 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:37:50,736 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:50,980 | ERROR | ddsm115 | motor kanan: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-27 14:37:52,740 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:52,949 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 248, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:54,745 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:54,968 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:56,748 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:56,959 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:37:58,749 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:37:58,964 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:00,751 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:00,964 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:02,754 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:02,967 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:04,757 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:04,962 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 254, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:06,758 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:06,965 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 248, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:08,760 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:08,971 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:10,762 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:10,975 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:12,766 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:12,976 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:14,767 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:14,975 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:16,771 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:16,980 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:18,771 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:18,990 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:20,771 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:20,995 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:22,772 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:23,000 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:24,776 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:25,002 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:26,778 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:26,999 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 124, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:28,780 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:29,002 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:30,783 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:31,005 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:32,787 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:33,006 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 0, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:34,787 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:35,007 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 252, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:36,787 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:37,006 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 126, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:38,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:39,011 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 126, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:40,792 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:41,013 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 126, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:42,793 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:43,009 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 62, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:44,795 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:45,013 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 126, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:46,799 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:47,019 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 126, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:48,800 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:49,021 | ERROR | ddsm115 | motor kanan: balasan rusak (ID 62, CRC salah) -> gangguan di kabel RS485 atau baudrate bukan 115200
+2026-10-27 14:38:50,801 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 14:38:50,970 | INFO | atera | Dihentikan dari keyboard
