@@ -3512,3 +3512,22 @@ AttributeError: 'CBFQP' object has no attribute 'reset_dob'
 2026-10-26 22:18:48,607 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
 2026-10-26 22:18:48,808 | INFO | atera | psi = 40.6 deg (> 40 deg) -> tersimpan PERCOBAAN 20261026_221848_COBA PD_PERCOBAAN KE-09
 2026-10-26 22:18:48,809 | INFO | atera | KOMET: psi = 40.6 deg (> 40 deg) | tersimpan: PERCOBAAN 20261026_221848_COBA PD_PERCOBAAN KE-09
+2026-10-27 08:30:40,888 | INFO | ddsm115 | motor kiri dibuka di /dev/ttyACM0
+2026-10-27 08:30:40,942 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-27 08:30:40,946 | INFO | ddsm115 | motor kanan dibuka di /dev/ttyACM1
+2026-10-27 08:30:41,000 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-27 08:30:41,089 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-27 08:30:45,292 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-27 08:30:45,292 | INFO | atera | plot realtime: menunggu laptop di 192.168.8.219:5005
+2026-10-27 08:30:45,292 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-27 08:31:08,237 | INFO | atera | plot realtime: laptop 192.168.8.234 tersambung
+2026-10-27 08:32:54,251 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-27 08:32:59,166 | INFO | atera | Kalibrasi selesai (sudut nol -3.20 deg, s = 0 di sini). Tekan MULAI.
+2026-10-27 08:33:06,739 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN, X = roda mati.
+2026-10-27 08:33:42,572 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_083342_COBA PD_PERCOBAAN KE-01
+2026-10-27 08:33:42,572 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261027_083342_COBA PD_PERCOBAAN KE-01
+2026-10-27 08:33:44,168 | INFO | atera | Mode BALANCING: Kp_theta aktif, setpoint roda di sini (s = 0, arah sekarang). B = DIAM.
+2026-10-27 08:33:45,407 | INFO | atera | Mode DIAM: Kp_theta mati.
+2026-10-27 08:36:07,096 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261027_083607_COBA PD+CBF_PERCOBAAN KE-01
+2026-10-27 08:36:07,097 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261027_083607_COBA PD+CBF_PERCOBAAN KE-01
+2026-10-27 08:36:09,323 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261027_083609_COBA PD_PERCOBAAN KE-02
