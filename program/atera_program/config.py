@@ -109,7 +109,7 @@ Kd_theta = 0.32                     # [N m s/rad]
 Kvel = -1.50                        # [N m]
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan simulasi/config.py). Tanpa ini pd_control.py juga memakai -1.
-BALANCE_DIRECTION_SIGN = -1.0
+BALANCE_DIRECTION_SIGN = 1.0
 
 # =============================================================================
 #                              4b. PD HEADING (roda kiri dan kanan bergerak bersama)
