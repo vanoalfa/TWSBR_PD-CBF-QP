@@ -58,7 +58,7 @@ dpsi_setpoint = 0.0                 # [rad/s]
 #                              3. SAFETY SET DAN KOMET
 # =============================================================================
 # Safety set CBF-QP (= simulasi): h1, h2 = psi, h3, h4 = dtheta
-psi_max_DEG = 5.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
+psi_max_DEG = 10.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
 psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 # Sedikit di bawah batas motor (no-load DDSM115 200 rpm = 20.9 rad/s; data robot 20261015: |dtheta| tidak pernah
 # > ~21 rad/s). Uji model planar 16-10: dengan 13 rad/s barrier dtheta melarang roda mengejar badan setelah dorongan
@@ -106,10 +106,10 @@ Kd_theta = 0.32                     # [N m s/rad]
 # Kvel*arah saat D-Pad atas / bawah ditekan (arah +1 = atas, -1 = bawah). Kecepatan tunak di lantai datar:
 #     v = -R*Kvel*arah/Kd_theta      -> Kvel NEGATIF supaya D-Pad atas berjalan ke DEPAN
 #     (Kd_theta 0.30: Kvel -1.50 -> 0.25 m/s; no-load DDSM115 1.05 m/s)
-Kvel = -1.50                        # [N m]
+Kvel = -2.00                        # [N m]
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan simulasi/config.py). Tanpa ini pd_control.py juga memakai -1.
-BALANCE_DIRECTION_SIGN = 1.0
+BALANCE_DIRECTION_SIGN = -1.0
 
 # =============================================================================
 #                              4b. PD HEADING (roda kiri dan kanan bergerak bersama)
