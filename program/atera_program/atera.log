@@ -6631,3 +6631,195 @@ Attempted to execute OS command:
 2026-10-29 14:20:12,781 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
 2026-10-29 14:20:16,657 | INFO | atera | torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) -> tersimpan PERCOBAAN 20261029_142016_COBA PD_PERCOBAAN KE-24
 2026-10-29 14:20:16,658 | INFO | atera | KOMET: torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) | tersimpan: PERCOBAAN 20261029_142016_COBA PD_PERCOBAAN KE-24
+2026-10-29 14:24:58,597 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 14:24:58,651 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 14:24:58,652 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-29 14:24:58,706 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-29 14:24:58,731 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-29 14:25:01,797 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-29 14:25:01,798 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-29 14:25:01,798 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-29 14:25:02,393 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 14:25:07,309 | INFO | atera | Kalibrasi selesai (sudut nol -4.18 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 14:25:07,315 | INFO | atera | plot realtime: laptop 10.16.110.136 tersambung
+2026-10-29 14:25:08,607 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 14:25:13,524 | INFO | atera | Kalibrasi selesai (sudut nol -3.51 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 14:25:34,158 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 14:25:51,683 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-29 14:26:10,746 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261029_142610_COBA PD_PERCOBAAN KE-25, PENGUJIAN 20261029_142610_COBA PD_PENGUJIAN KE-01
+2026-10-29 14:26:10,747 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261029_142610_COBA PD_PERCOBAAN KE-25, PENGUJIAN 20261029_142610_COBA PD_PENGUJIAN KE-01
+2026-10-29 14:26:34,853 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-29 14:26:44,852 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261029_142644_COBA PD+CBF_PERCOBAAN KE-05, PENGUJIAN 20261029_142644_COBA PD+CBF_PENGUJIAN KE-01 + BANDING dengan PD KE-01
+2026-10-29 14:26:44,852 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261029_142644_COBA PD+CBF_PERCOBAAN KE-05, PENGUJIAN 20261029_142644_COBA PD+CBF_PENGUJIAN KE-01 + BANDING dengan PD KE-01
+2026-10-29 14:26:50,574 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-29 14:26:52,390 | INFO | atera | PENGUJIAN selesai (1.8 s), tersimpan: 20261029_142652_COBA PD_PENGUJIAN KE-02
+2026-10-29 14:26:55,150 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261029_142655_COBA PD_PERCOBAAN KE-26
+2026-10-29 14:26:55,151 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261029_142655_COBA PD_PERCOBAAN KE-26
+2026-10-29 14:26:57,281 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-29 14:27:08,292 | INFO | atera | PENGUJIAN selesai (11.0 s), tersimpan: 20261029_142708_COBA PD+CBF_PENGUJIAN KE-02 + BANDING dengan PD KE-02
+2026-10-29 14:29:21,260 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261029_142921_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-29 14:29:21,261 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261029_142921_COBA PD+CBF_PERCOBAAN KE-06
+2026-10-29 14:29:28,632 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261029_142928_COBA PD_PERCOBAAN KE-27
+2026-10-29 14:30:36,596 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 14:30:36,650 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 14:30:36,651 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-29 14:30:36,704 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-29 14:30:36,730 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-29 14:30:39,799 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-29 14:30:39,799 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-29 14:30:39,799 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-29 14:30:40,008 | INFO | atera | plot realtime: laptop 10.16.110.136 tersambung
+2026-10-29 14:31:04,097 | INFO | atera | Dihentikan dari keyboard
+2026-10-29 14:31:05,772 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 14:31:05,826 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 14:31:05,827 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-29 14:31:05,881 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-29 14:31:05,905 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-29 14:31:08,976 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-29 14:31:08,977 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-29 14:31:08,977 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-29 14:31:09,794 | INFO | atera | plot realtime: laptop 10.16.110.136 tersambung
+2026-10-29 14:31:26,699 | INFO | atera | Dihentikan dari keyboard
+2026-10-29 14:32:44,802 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 14:32:44,856 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 14:32:44,857 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-29 14:32:44,911 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-29 14:32:44,935 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-29 14:32:48,006 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-29 14:32:48,007 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-29 14:32:48,007 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-29 14:32:48,318 | INFO | atera | plot realtime: laptop 10.16.110.136 tersambung
+2026-10-29 14:32:56,056 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 14:33:00,972 | INFO | atera | Kalibrasi selesai (sudut nol -2.36 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 14:33:38,938 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 14:33:43,855 | INFO | atera | Kalibrasi selesai (sudut nol -1.85 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 14:34:00,350 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 14:34:22,694 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-29 14:34:30,698 | INFO | atera | PENGUJIAN selesai (8.0 s), tersimpan: 20261029_143430_COBA PD_PENGUJIAN KE-03
+2026-10-29 14:34:33,465 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261029_143433_COBA PD_PERCOBAAN KE-28
+2026-10-29 14:34:33,466 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261029_143433_COBA PD_PERCOBAAN KE-28
+2026-10-29 14:34:35,225 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-29 14:34:50,348 | INFO | atera | PENGUJIAN selesai (15.1 s), tersimpan: 20261029_143450_COBA PD+CBF_PENGUJIAN KE-03 + BANDING dengan PD KE-03
+2026-10-29 14:34:52,812 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261029_143452_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-29 14:34:52,813 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261029_143452_COBA PD+CBF_PERCOBAAN KE-07
+2026-10-29 14:39:37,815 | INFO | atera | Mode kontrol: PD
+2026-10-29 14:40:30,703 | ERROR | ddsm115 | motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-29 14:40:30,709 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 14:40:30,763 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 14:40:30,763 | INFO | atera | Kedua motor siap.
+2026-10-29 14:40:53,464 | ERROR | ddsm115 | motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-29 14:40:53,471 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 14:40:53,606 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 14:40:53,606 | INFO | atera | Kedua motor siap.
+2026-10-29 14:40:54,139 | ERROR | ddsm115 | motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-29 14:40:55,474 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 14:40:55,528 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 14:40:55,528 | INFO | atera | Kedua motor siap.
+2026-10-29 14:40:58,532 | INFO | atera | plot realtime: laptop 10.16.110.136 terputus (jaringan terlalu lambat / putus)
+2026-10-29 14:48:59,781 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 14:48:59,835 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 14:48:59,837 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-29 14:48:59,891 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-29 14:48:59,914 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-29 14:49:02,977 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-29 14:49:02,977 | WARNING | atera | plot realtime gagal membuka port 5005: [Errno 98] Address already in use
+2026-10-29 14:49:02,977 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-29 14:49:24,292 | INFO | atera | Dihentikan dari keyboard
+2026-10-29 14:49:35,039 | INFO | atera | Dihentikan dari keyboard
+2026-10-29 14:49:37,300 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 14:49:37,354 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 14:49:37,355 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-29 14:49:37,409 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-29 14:49:37,433 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-29 14:49:40,498 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-29 14:49:40,499 | INFO | atera | plot realtime: menunggu laptop di 10.238.219.54:5005
+2026-10-29 14:49:40,499 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-29 14:49:58,811 | INFO | atera | plot realtime: laptop 10.238.219.177 tersambung
+2026-10-29 14:50:35,284 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 14:50:40,199 | INFO | atera | Kalibrasi selesai (sudut nol -2.99 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 14:50:43,442 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 14:50:48,357 | INFO | atera | Kalibrasi selesai (sudut nol -2.77 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 14:52:39,674 | INFO | atera | Mode kontrol: PD+CBF
+2026-10-29 15:03:27,258 | INFO | atera | plot realtime: laptop 10.238.219.177 terputus (jaringan terlalu lambat / putus)
+2026-10-29 15:20:34,184 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 15:20:34,238 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 15:20:34,239 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-29 15:20:34,293 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-29 15:20:34,327 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-29 15:20:37,418 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-29 15:20:37,419 | INFO | atera | plot realtime: menunggu laptop di 10.238.219.54:5005
+2026-10-29 15:20:37,419 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-29 15:20:51,194 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:20:56,115 | INFO | atera | Kalibrasi selesai (sudut nol -3.44 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:20:56,121 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:21:01,040 | INFO | atera | Kalibrasi selesai (sudut nol -3.40 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:21:18,249 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:21:23,166 | INFO | atera | Kalibrasi selesai (sudut nol -3.39 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:21:23,173 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:21:28,089 | INFO | atera | Kalibrasi selesai (sudut nol -3.40 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:21:28,095 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:21:33,010 | INFO | atera | Kalibrasi selesai (sudut nol -3.40 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:24:17,490 | INFO | atera | Dihentikan dari keyboard
+2026-10-29 15:24:22,322 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 15:24:22,376 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 15:24:22,377 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-29 15:24:22,431 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-29 15:24:22,454 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-29 15:24:25,527 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-29 15:24:25,528 | INFO | atera | plot realtime: menunggu laptop di 10.238.219.54:5005
+2026-10-29 15:24:25,528 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-29 15:24:26,365 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:24:31,279 | INFO | atera | Kalibrasi selesai (sudut nol -3.46 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:25:13,110 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 15:27:51,005 | INFO | atera | Dihentikan dari keyboard
+2026-10-29 15:27:51,032 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261029_152751_COBA PD_PERCOBAAN KE-29
+2026-10-29 15:28:04,930 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 15:28:04,984 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 15:28:04,985 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-29 15:28:05,039 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-29 15:28:05,063 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-29 15:28:08,135 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-29 15:28:08,136 | INFO | atera | plot realtime: menunggu laptop di 10.238.219.54:5005
+2026-10-29 15:28:08,136 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-29 15:28:08,136 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:28:13,048 | INFO | atera | Kalibrasi selesai (sudut nol -2.92 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:28:13,054 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:28:17,970 | INFO | atera | Kalibrasi selesai (sudut nol -2.94 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:28:42,533 | INFO | atera | plot realtime: laptop 10.238.219.177 tersambung
+2026-10-29 15:29:06,467 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:29:11,382 | INFO | atera | Robot bergerak saat kalibrasi (simpangan gyro 23.4 deg/s). Ulangi Tombol Y.
+2026-10-29 15:29:15,336 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:29:20,251 | INFO | atera | Kalibrasi selesai (sudut nol -3.17 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:29:27,565 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 15:29:32,480 | ERROR | ddsm115 | motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-29 15:29:32,526 | INFO | atera | motor: motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 -> tersimpan PERCOBAAN 20261029_152932_COBA PD_PERCOBAAN KE-30
+2026-10-29 15:29:32,527 | INFO | atera | GANGGUAN: motor: motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 | tersimpan: PERCOBAAN 20261029_152932_COBA PD_PERCOBAAN KE-30
+2026-10-29 15:29:32,531 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 15:29:32,586 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 15:29:32,586 | INFO | atera | Kedua motor siap.
+2026-10-29 15:29:35,488 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 15:29:44,907 | INFO | atera | torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) -> tersimpan PERCOBAAN 20261029_152944_COBA PD_PERCOBAAN KE-31
+2026-10-29 15:29:44,908 | INFO | atera | KOMET: torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) | tersimpan: PERCOBAAN 20261029_152944_COBA PD_PERCOBAAN KE-31
+2026-10-29 15:29:48,218 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 15:30:03,143 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261029_153003_COBA PD_PERCOBAAN KE-32
+2026-10-29 15:30:03,144 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261029_153003_COBA PD_PERCOBAAN KE-32
+2026-10-29 15:30:05,511 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 15:30:59,617 | INFO | atera | plot realtime: laptop 10.238.219.177 terputus (jaringan terlalu lambat / putus)
+2026-10-29 15:31:52,615 | INFO | atera | torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) -> tersimpan PERCOBAAN 20261029_153152_COBA PD_PERCOBAAN KE-33
+2026-10-29 15:31:52,615 | INFO | atera | KOMET: torsi jenuh lebih dari 2 s (robot diangkat / tertahan?) | tersimpan: PERCOBAAN 20261029_153152_COBA PD_PERCOBAAN KE-33
+2026-10-29 15:31:55,894 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 15:32:23,225 | INFO | atera | plot realtime: laptop 10.238.219.177 tersambung
+2026-10-29 15:32:55,857 | INFO | atera | Roda dimatikan. -> tersimpan PERCOBAAN 20261029_153255_COBA PD_PERCOBAAN KE-34
+2026-10-29 15:32:55,858 | INFO | atera | Roda dimatikan. | tersimpan: PERCOBAAN 20261029_153255_COBA PD_PERCOBAAN KE-34
+2026-10-29 15:33:00,141 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-29 15:33:05,043 | INFO | atera | Kalibrasi selesai (sudut nol -2.94 deg, s = 0 di sini). Tekan MULAI.
+2026-10-29 15:33:12,060 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 15:33:23,791 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-29 15:34:55,378 | ERROR | ddsm115 | motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-29 15:34:55,465 | INFO | atera | motor: motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 -> tersimpan PERCOBAAN 20261029_153455_COBA PD_PERCOBAAN KE-35, PENGUJIAN 20261029_153455_COBA PD_PENGUJIAN KE-04
+2026-10-29 15:34:55,465 | INFO | atera | GANGGUAN: motor: motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 | tersimpan: PERCOBAAN 20261029_153455_COBA PD_PERCOBAAN KE-35, PENGUJIAN 20261029_153455_COBA PD_PENGUJIAN KE-04
+2026-10-29 15:34:55,470 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-29 15:34:55,527 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-29 15:34:55,527 | INFO | atera | Kedua motor siap.
+2026-10-29 15:35:23,018 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-29 15:35:39,019 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261029_153539_COBA PD_PERCOBAAN KE-36

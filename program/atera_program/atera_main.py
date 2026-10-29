@@ -771,6 +771,11 @@ class Atera:
                  % (self.loop_hz, config.CONTROL_HZ, self.kerja_ms, self.overrun, ise.simpan_berjalan(),
                     self.joystick.name if self.joystick.connected else "TIDAK ADA",
                     "aktif" if self.keyboard.aktif else "tidak")]
+        if self.state == BALANCING:                    # waktu rekaman, tampil di semua halaman GUI
+            sekarang = time.monotonic()
+            baris.append("Rekam: PERCOBAAN %.1f s | %s" % (
+                sekarang - self.t0, (">>> PENGUJIAN %.1f s <<< (L3 = selesai dan simpan)" % (sekarang - self.t_uji0))
+                if self.uji_berjalan else "PENGUJIAN tidak berjalan (L3 = mulai)"))
         baris += self.bungkus("Pesan: ", self.pesan)
         baris += self.bungkus("Plot realtime: ", self.plot_status, 2)    # 2 baris: perintah laptop + IP selalu utuh
         masalah = [m for m in self.masalah() if m[0] != INFO]

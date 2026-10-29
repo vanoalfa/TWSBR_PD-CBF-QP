@@ -213,8 +213,8 @@ ACADOS_SOURCE_DIR = ""
 # Nama port TETAP per adaptor USB-RS485 (nomor seri adaptor, ls -l /dev/serial/by-id/): tidak tertukar walau USB
 # dicabut-pasang atau Raspi dinyalakan ulang (nama /dev/ttyACM0 / ttyACM1 bisa bertukar). Bila roda KIRI fisik terbaca
 # sebagai motor kanan di GUI halaman Hardware, tukar kedua nomor seri di bawah. Cadangan lama: "/dev/ttyACM0" / "/dev/ttyACM1".
-LEFT_MOTOR_PORT = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00"
-RIGHT_MOTOR_PORT = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00"
+RIGHT_MOTOR_PORT = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00"
+LEFT_MOTOR_PORT = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00"
 LEFT_MOTOR_ID = 1                   # tiap motor punya USB-RS485 sendiri, ID boleh sama
 RIGHT_MOTOR_ID = 1
 MOTOR_BAUDRATE = 115200             # 8N1, frame 10 byte, CRC-8/MAXIM, maks 500 Hz
