@@ -104,7 +104,7 @@ class Atera:
         self.cbf = None
         self.cbf_alasan = "belum disiapkan"
         self.perekam = ise.PerekamISE()            # PERCOBAAN: MULAI sampai X / R3 / KOMET
-        self.perekam_uji = ise.PerekamISE()        # PENGUJIAN: L3, DURASI_PENGUJIAN detik
+        self.perekam_uji = ise.PerekamISE()        # PENGUJIAN: L3 mulai, L3 lagi selesai
         self.gain = {nama: float(getattr(config, nama)) for nama in NAMA_GAIN}
         self.gain["psi_max_DEG"] = float(config.psi_max_DEG)
         self.gain["zeta_DEG"] = float(config.zeta_DEG)
@@ -328,7 +328,7 @@ class Atera:
         elif aksi == "BEBAS":
             self.ganti_bebas()
         elif aksi == "PENGUJIAN":
-            self.mulai_pengujian()
+            self.ganti_pengujian()
         elif aksi == "SIMPAN":
             if self.state != BALANCING:
                 self.atur_pesan("R3 hanya saat balancing (data sudah tersimpan saat roda dimatikan).")
@@ -441,7 +441,7 @@ class Atera:
         self.kirim_plot(("RESET",))
         self.perbarui_plot_mode()
         self.atur_pesan("Balancing, mode %s, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, "
-                        "L3 = PENGUJIAN, X = roda mati." % self.mode_kontrol)
+                        "L3 = PENGUJIAN mulai / selesai, X = roda mati." % self.mode_kontrol)
 
     def simpan(self, perekam):
         nama = perekam.simpan(latar=True)
@@ -450,7 +450,7 @@ class Atera:
     def simpan_semua(self, sebab):
         teks = "PERCOBAAN " + self.simpan(self.perekam)
         if self.uji_berjalan:
-            teks += ", PENGUJIAN (belum %.0f s) %s" % (config.DURASI_PENGUJIAN, self.simpan(self.perekam_uji))
+            teks += ", PENGUJIAN %s" % self.simpan(self.perekam_uji)
             self.uji_berjalan = False
         LOGGER.info("%s -> tersimpan %s", sebab, teks)
         return teks
@@ -483,17 +483,20 @@ class Atera:
         else:
             self.atur_pesan("Mode kontrol: %s" % mode)
 
-    def mulai_pengujian(self):
-        if self.state != BALANCING:
+    def ganti_pengujian(self):
+        """L3: PENGUJIAN mulai; L3 lagi: PENGUJIAN selesai dan disimpan (tanpa batas waktu). X, KOMET, ganti mode
+        kontrol, dan keluar program juga menyimpan PENGUJIAN yang sedang berjalan (simpan_semua)."""
+        if self.uji_berjalan:
+            self.uji_berjalan = False
+            self.atur_pesan("PENGUJIAN selesai (%.1f s), tersimpan: %s"
+                            % (time.monotonic() - self.t_uji0, self.simpan(self.perekam_uji)))
+        elif self.state != BALANCING:
             self.atur_pesan("PENGUJIAN hanya bisa saat balancing.")
-        elif self.uji_berjalan:
-            self.atur_pesan("PENGUJIAN masih berjalan (%.1f / %.0f s)."
-                            % (time.monotonic() - self.t_uji0, config.DURASI_PENGUJIAN))
         else:
             self.perekam_uji.mulai(self.mode_kontrol, ise.JENIS_PENGUJIAN)
             self.t_uji0 = time.monotonic()
             self.uji_berjalan = True
-            self.atur_pesan("PENGUJIAN dimulai (%.0f s): dorong robot sekarang." % config.DURASI_PENGUJIAN)
+            self.atur_pesan("PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.")
 
     # --------------------------------------------------------- loop kontrol
     def baca_state(self):
@@ -640,9 +643,6 @@ class Atera:
             t_uji = sekarang - self.t_uji0
             self.perekam_uji.tambah(t_uji, x, *error, self.u_PD, self.u, self.status_cbf, self.gain, 0.0, nilai_c,
                                     ekstra)
-            if t_uji >= config.DURASI_PENGUJIAN:
-                self.uji_berjalan = False
-                self.atur_pesan("PENGUJIAN selesai, tersimpan: " + self.simpan(self.perekam_uji))
 
         self.lama_jenuh = self.lama_jenuh + dt if abs(self.u) >= 0.999 * config.u_max else 0.0
         if 0.0 < config.SATURASI_MAKS_S < self.lama_jenuh:
@@ -792,8 +792,8 @@ class Atera:
         if self.state == BALANCING:
             baris.append("  PERCOBAAN %.1f s | ISE psi %.6f rad^2 s" % (time.monotonic() - self.t0, self.perekam.ise_psi))
             if self.uji_berjalan:
-                baris.append("  PENGUJIAN %.1f / %.0f s | ISE psi %.6f rad^2 s" % (
-                    time.monotonic() - self.t_uji0, config.DURASI_PENGUJIAN, self.perekam_uji.ise_psi))
+                baris.append("  PENGUJIAN %.1f s (L3 lagi = selesai dan simpan) | ISE psi %.6f rad^2 s" % (
+                    time.monotonic() - self.t_uji0, self.perekam_uji.ise_psi))
         if self.state == KOMET:
             baris.append("  pengereman KOMET: %s" % self.rem_status)
         baris.append("  terakhir disimpan: %s" % (self.perekam.file_terakhir or "-"))

@@ -333,7 +333,7 @@ class PenghubungKontrol:
 def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
     """Isi proses jendela plot realtime (bentuk dan garis batasnya sama dengan gambar di ise.py):
         Gambar 1 : sumbu X = psi,   sumbu Y = dpsi
-        Gambar 2 : sumbu X = theta, sumbu Y = dtheta
+        Gambar 2 : dtheta terhadap waktu (theta tidak digambar: posisi roda terus bertambah saat robot berjalan)
         Gambar 3 : sumbu X = s = R*theta, sumbu Y = 0
         bawah    : arus tiap motor terhadap waktu
     Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang.
@@ -343,7 +343,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
     Warna kurva = mode kontrol (PD ungu, PD+CBF biru). Kurva PEMBANDING (pengujian terakhir tiap mode) digambar
     pudar di belakang kurva sekarang; di Gambar 3 pembanding PD di atas garis 0, pembanding PD+CBF di bawahnya.
     judul = mode kontrol awal. Kiriman khusus: ("RESET",), ("MODE", mode), ("MASK", mask constraint CBF),
-    ("PEMBANDING", mode, label, psi, dpsi, theta, dtheta)."""
+    ("PEMBANDING", mode, label, psi, dpsi, theta, dtheta, t)."""
     os.environ["QT_QPA_PLATFORM"] = platform
     try:
         import numpy as np
@@ -409,12 +409,13 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         gambar1.set_ylabel("dpsi [rad/s]")
         judul_gambar1()
 
-        # Gambar 2: X = theta, Y = dtheta
-        garis_theta, = gambar2.plot([], [], color=warna[mode_plot], linewidth=1.4)
-        titik_theta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang")
-        gambar2.set_xlabel("theta [rad]   (s = R*theta)")
+        # Gambar 2: X = waktu, Y = dtheta
+        garis_dtheta, = gambar2.plot([], [], color=warna[mode_plot], linewidth=1.4)
+        titik_dtheta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang")
+        gambar2.set_xlabel("waktu [s]")
         gambar2.set_ylabel("dtheta [rad/s]")
-        gambar2.set_title("Gambar 2", fontsize=10)
+        gambar2.set_title("Gambar 2   dtheta(t)", fontsize=10)
+        gambar2.set_xlim(0.0, config.PLOT_RENTANG)
 
         # Gambar 3: X = s, Y = 0
         garis_s, = gambar3.plot([], [], color=warna[mode_plot], linewidth=2.0)
@@ -454,7 +455,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     if isi[0] == "MODE":
                         # Mode kontrol diganti: warna kurva sekarang ikut mode baru.
                         mode_plot = isi[1] if isi[1] in warna else ise.MODE_PD
-                        for garis in (garis_psi, garis_theta, garis_s):
+                        for garis in (garis_psi, garis_dtheta, garis_s):
                             garis.set_color(warna[mode_plot])
                         judul_jendela()
                         ada_baru = True
@@ -468,10 +469,10 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                         ada_baru = True
                         continue
                     if isi[0] == "PEMBANDING":
-                        _, m, label, p_psi, p_dpsi, p_theta, p_dtheta = isi
+                        _, m, label, p_psi, p_dpsi, p_theta, p_dtheta, p_t = isi
                         g1, g2, g3 = pembanding[m]
                         g1.set_data(p_psi, p_dpsi)
-                        g2.set_data(p_theta, p_dtheta)
+                        g2.set_data(p_t, p_dtheta)
                         g3.set_data([config.R * v for v in p_theta], [tinggi_s[m]] * len(p_theta))
                         for g in (g1, g2, g3):
                             g.set_label("pembanding " + label)
@@ -502,9 +503,10 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                     data_arus.append(arus)
                 ada_baru = True
             if ada_baru and len(data_t) == 0:
-                for garis in (garis_psi, garis_theta, garis_s, garis_arus, titik_psi, titik_theta, titik_s):
+                for garis in (garis_psi, garis_dtheta, garis_s, garis_arus, titik_psi, titik_dtheta, titik_s):
                     garis.set_data([], [])
-                ax_arus.set_xlim(0.0, config.PLOT_RENTANG)
+                for ax in (gambar2, ax_arus):
+                    ax.set_xlim(0.0, config.PLOT_RENTANG)
                 fig.canvas.draw_idle()
             if ada_baru and len(data_t) > 0:
                 while len(data_t) > 0 and data_t[0] < data_t[-1] - config.PLOT_RENTANG:
@@ -521,14 +523,15 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                 jarak = config.R * theta
 
                 garis_psi.set_data(psi, dpsi)
-                garis_theta.set_data(theta, dtheta)
+                garis_dtheta.set_data(data_t, dtheta)
                 garis_s.set_data(jarak, np.zeros(len(jarak)))
                 garis_arus.set_data(data_t, data_arus)
                 if not math.isnan(data_psi[-1]):
                     titik_psi.set_data([data_psi[-1]], [data_dpsi[-1]])
-                    titik_theta.set_data([data_theta[-1]], [data_dtheta[-1]])
+                    titik_dtheta.set_data([data_t[-1]], [data_dtheta[-1]])
                     titik_s.set_data([config.R * data_theta[-1]], [0.0])
-                ax_arus.set_xlim(max(0.0, data_t[-1] - config.PLOT_RENTANG), max(config.PLOT_RENTANG, data_t[-1]))
+                for ax in (gambar2, ax_arus):
+                    ax.set_xlim(max(0.0, data_t[-1] - config.PLOT_RENTANG), max(config.PLOT_RENTANG, data_t[-1]))
                 fig.canvas.draw_idle()
             fig.canvas.flush_events()
             time.sleep(0.05)
@@ -638,7 +641,7 @@ class JendelaKontrol:
         keterangan = {"w": "W\nmaju", "a": "A\nkiri", "s": "S\nmundur", "d": "D\nkanan",
                       "b": "B\nmode BALANCING", "f": "F\nmode BEBAS", "o": "O\ndorong depan", "p": "P\ndorong belakang",
                       "q": "Q\nkeluar + simpan", "r": "R\nreset robot", "e": "E\nsimpan data",
-                      "t": "T\nmode pengujian"}
+                      "t": "T\npengujian"}
         for huruf in ("w", "a", "s", "d", "b", "f", "o", "p", "q", "r", "e", "t"):
             tombol = QtWidgets.QPushButton(keterangan[huruf])
             tombol.setFixedSize(92, 46)
@@ -1329,7 +1332,7 @@ class Simulasi:
         """Kurva pembanding satu mode (data = hasil ise.baca_csv) dikirim ke plot realtime."""
         if self.plot is not None:
             self.plot_kiriman.append(("PEMBANDING", mode, label, list(data["psi_rad"]), list(data["dpsi_rad_s"]),
-                                      list(data["theta_rad"]), list(data["dtheta_rad_s"])))
+                                      list(data["theta_rad"]), list(data["dtheta_rad_s"]), list(data["t_s"])))
 
     def dorong(self, arah):
         """arah = +1 didorong ke depan (O), -1 didorong ke belakang (P)."""
@@ -1636,7 +1639,7 @@ class Simulasi:
             self.giliran_baris = (self.giliran_baris + 1) % config.JUMLAH_BARIS_MAKS
             if isi_baris[i] == " " and ("baris%d" % i) not in self.id_teks:
                 continue                # baris kosong yang belum pernah dipakai
-            if isi_baris[i].startswith(("TUNING", "komet", "MODE PENGUJIAN")):
+            if isi_baris[i].startswith(("TUNING", "komet", "PENGUJIAN")):
                 warna = config.WARNA_PERINGATAN
             else:
                 warna = config.WARNA_BIASA

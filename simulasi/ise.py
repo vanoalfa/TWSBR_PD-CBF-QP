@@ -27,7 +27,8 @@ Warna garis:
 
 Isi gambar:
     Gambar 1: sumbu X = psi,   sumbu Y = dpsi       kotak barrier psi dan dpsi, garis KOMET psi
-    Gambar 2: sumbu X = theta, sumbu Y = dtheta     garis barrier dtheta (theta tidak punya barrier)
+    Gambar 2: sumbu X = waktu, sumbu Y = dtheta     garis barrier dtheta (theta tidak digambar: posisi roda terus
+                                                    bertambah saat robot berjalan)
     Gambar 3: sumbu X = s = R*theta [m], sumbu Y = 0   barrier s_min dan s_max, garis KOMET s
 Garis barrier aktif (merah):
     - bagian yang membentuk kotak barrier : garis tebal menyambung
@@ -63,7 +64,7 @@ import config
 FOLDER_PLOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), config.ISE_PLOT_DIR)
 
 JENIS_PERCOBAAN = "PERCOBAAN"       # perekaman biasa (E / Q / KOMET)
-JENIS_PENGUJIAN = "PENGUJIAN"       # mode pengujian (tombol T): dari dorongan O / P selama beberapa detik
+JENIS_PENGUJIAN = "PENGUJIAN"       # tombol T mulai, T lagi selesai
 JENIS_PERBANDINGAN = "PERBANDINGAN"  # perekam perbandingan (tombol 3): PD vs PD+CBF dari dorongan O / P
 
 
@@ -282,7 +283,7 @@ def gambar_penanda_psi(ax, sumbu="x"):
 
 def gambar_safety_set(gambar1, gambar2, psi_max=None, mask=None):
     """Gambar 1: kotak barrier psi x dpsi + penanda |psi| + KOMET psi (hitam).
-    Gambar 2: garis barrier dtheta saja (sumbu theta tanpa batas). Batas sumbu tetap.
+    Gambar 2: garis barrier dtheta saja (sumbu X = waktu, diatur pemanggil). Batas sumbu tetap.
     psi_max [rad]: None = config.psi_max. mask: constraint CBF aktif (None = semua aktif).
     Mengembalikan dict garis barrier (dipakai atur_safety_set bila psi_max / mask berubah)."""
     if psi_max is None:
@@ -296,7 +297,6 @@ def gambar_safety_set(gambar1, gambar2, psi_max=None, mask=None):
     batas = config.PLOT_BATAS
     gambar1.set_xlim(-batas["psi"], batas["psi"])
     gambar1.set_ylim(-batas["dpsi"], batas["dpsi"])
-    gambar2.set_xlim(-batas["theta"], batas["theta"])
     gambar2.set_ylim(-batas["dtheta"], batas["dtheta"])
     return artis
 
@@ -546,11 +546,13 @@ class PerekamISE:
         gambar1.grid(True, color="0.85")
         legenda(gambar1)
 
-        # Gambar 2: X = theta, Y = dtheta
-        gambar2.plot(theta, dtheta, color=warna, linewidth=1.0)
-        gambar2.plot(theta[0], dtheta[0], "o", color="tab:green", label="awal")
-        gambar2.plot(theta[-1], dtheta[-1], "x", color="black", markersize=9, label="akhir")
-        gambar2.set_xlabel("theta [rad]   (s = R*theta)")
+        # Gambar 2: X = waktu, Y = dtheta
+        waktu = [baris[0] for baris in self.data]
+        gambar2.plot(waktu, dtheta, color=warna, linewidth=1.0)
+        gambar2.plot(waktu[0], dtheta[0], "o", color="tab:green", label="awal")
+        gambar2.plot(waktu[-1], dtheta[-1], "x", color="black", markersize=9, label="akhir")
+        gambar2.set_xlim(0.0, max(waktu[-1], config.DT))
+        gambar2.set_xlabel("waktu [s]")
         gambar2.set_ylabel("dtheta [rad/s]")
         gambar2.set_title("Gambar 2\nISE theta = %.6f rad^2 s   |   ISE dtheta = %.6f (rad/s)^2 s"
                           % (self.ise_theta, self.ise_dtheta), fontsize=10)
@@ -966,13 +968,14 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN, nam
     gambar1.grid(True, color="0.85")
     legenda(gambar1)
 
-    # Gambar 2: X = theta, Y = dtheta
-    gambar2.plot(potong_pd["theta_rad"], potong_pd["dtheta_rad_s"], color=config.PLOT_WARNA_PD, linewidth=1.0, label=label_pd)
-    gambar2.plot(potong_cbf["theta_rad"], potong_cbf["dtheta_rad_s"], color=config.PLOT_WARNA_PD_CBF, linewidth=1.0,
+    # Gambar 2: X = waktu, Y = dtheta
+    gambar2.plot(potong_pd["t_s"], potong_pd["dtheta_rad_s"], color=config.PLOT_WARNA_PD, linewidth=1.0, label=label_pd)
+    gambar2.plot(potong_cbf["t_s"], potong_cbf["dtheta_rad_s"], color=config.PLOT_WARNA_PD_CBF, linewidth=1.0,
                  label=label_cbf)
-    gambar2.set_xlabel("theta [rad]   (s = R*theta)")
+    gambar2.set_xlim(0.0, max(t_banding, config.DT))
+    gambar2.set_xlabel("waktu [s]")
     gambar2.set_ylabel("dtheta [rad/s]")
-    gambar2.set_title("Gambar 2", fontsize=10)
+    gambar2.set_title("Gambar 2   dtheta(t)", fontsize=10)
     gambar2.grid(True, color="0.85")
     legenda(gambar2, perpanjangan=False)
 

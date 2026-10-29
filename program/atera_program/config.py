@@ -279,7 +279,6 @@ UI_HZ = 10.0
 LOOP_MIN_RASIO = 0.8                # loop di bawah 80 % CONTROL_HZ -> peringatan
 LOG_FILE = "atera.log"
 ISE_PLOT_DIR = "PLOT_EVALUASI/ATERA_RASPI"   # hasil robot fisik: <jenis>/<PD atau CBFQP>/ (lihat ise.py)
-DURASI_PENGUJIAN = 30.0             # [s] lama satu PENGUJIAN (L3), sama dengan simulasi
 # ASUMSI: robot dianggap pulih setelah gangguan bila |psi| < EVAL_PSI_PULIH_DEG terus-menerus EVAL_PULIH_LAMA_S detik
 EVAL_PSI_PULIH_DEG = 2.0            # [deg]
 EVAL_PULIH_LAMA_S = 1.0             # [s]

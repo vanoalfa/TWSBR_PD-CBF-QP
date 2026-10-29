@@ -236,8 +236,10 @@ CONTROL_HZ = 200.0
 DT = 1.0 / CONTROL_HZ               # [s]
 ISE_PLOT_DIR = "PLOT_EVALUASI"
 
-# ASUMSI: satu pengujian (tombol T) = DURASI_PENGUJIAN detik waktu simulasi sejak dorongan O / P dimulai.
-DURASI_PENGUJIAN = 30.0             # [s]
+# PENGUJIAN (tombol T) tanpa batas waktu: T mulai, T lagi selesai (sama dengan L3 robot fisik).
+# ASUMSI: satu rekaman PERBANDINGAN (tombol 3) = DURASI_PERBANDINGAN detik waktu simulasi sejak dorongan O / P, supaya
+# PD dan PD+CBF dibandingkan pada durasi yang sama.
+DURASI_PERBANDINGAN = 30.0          # [s]
 # zeta baru dipakai bila nilainya di jendela Kontrol tidak berubah selama ini (supaya robot tidak diletakkan
 # ulang berkali-kali saat angkanya masih diketik).
 ZETA_TUNGGU = 0.5                   # [s]

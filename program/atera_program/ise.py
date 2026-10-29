@@ -3,7 +3,7 @@
 Folder hasil (di dalam atera_program, HHmmSS = jam saat disimpan):
     PLOT_EVALUASI/ATERA_RASPI/PERCOBAAN/PD/     YYYYMMDD_HHmmSS_COBA PD_PERCOBAAN KE-XX.csv / .png / .eps
     PLOT_EVALUASI/ATERA_RASPI/PERCOBAAN/CBFQP/  YYYYMMDD_HHmmSS_COBA PD+CBF_PERCOBAAN KE-XX.csv / .png / .eps
-    PLOT_EVALUASI/ATERA_RASPI/PENGUJIAN/PD/ dan .../PENGUJIAN/CBFQP/   (L3, DURASI_PENGUJIAN detik)
+    PLOT_EVALUASI/ATERA_RASPI/PENGUJIAN/PD/ dan .../PENGUJIAN/CBFQP/   (L3 mulai, L3 lagi selesai)
     PLOT_EVALUASI/ATERA_RASPI/<PERCOBAAN atau PENGUJIAN>/BANDING/      (hasil --bandingkan)
 Nomor KE-XX naik otomatis per tanggal, mode, dan jenis. Kolom CSV sama dengan simulasi/ise.py.
 Kolom CSV tambahan (KOLOM_EKSTRA, sesudah zeta_DEG): arah (perintah maju / mundur: 0 lepas, +1 / -1 D-Pad atas /
@@ -41,7 +41,8 @@ Plot realtime DI LAPTOP (plot_realtime() di bawah), laptop dan Raspi satu WiFi /
     Raspi  : python3 atera_main.py --plot             Raspi membuka port config.PLOT_PORT dan mengirim data
     laptop : python3 ise.py --plot-realtime <IP Raspi> dari folder atera_program (IP tampil di GUI atera_main.py)
 Laptop yang menyambung ke Raspi (bukan sebaliknya), jadi bisa dari WSL tanpa membuka port di Windows. Isinya sama
-dengan plot realtime simulasi: Gambar 1 psi - dpsi, Gambar 2 theta - dtheta, Gambar 3 s, dan arus terhadap waktu.
+dengan plot realtime simulasi: Gambar 1 psi - dpsi, Gambar 2 dtheta terhadap waktu, Gambar 3 s, dan arus terhadap
+waktu.
 Garis batas memakai nilai config.py RASPI (dikirim saat tersambung), bukan config.py laptop.
 """
 
@@ -75,7 +76,7 @@ MODE_PD_CBF = "PD+CBF"
 FOLDER_MODE = {MODE_PD: "PD", MODE_PD_CBF: "CBFQP"}
 WARNA_MODE = {MODE_PD: config.PLOT_WARNA_PD, MODE_PD_CBF: config.PLOT_WARNA_PD_CBF}
 JENIS_PERCOBAAN = "PERCOBAAN"       # MULAI sampai X / R3 / KOMET
-JENIS_PENGUJIAN = "PENGUJIAN"       # L3: DURASI_PENGUJIAN detik sejak tombol ditekan
+JENIS_PENGUJIAN = "PENGUJIAN"       # L3 mulai, L3 lagi selesai
 
 KOLOM_GAIN_PD = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"]
 KOLOM_GAIN = KOLOM_GAIN_PD + config.NAMA_ALPHA + ["psi_max_DEG"]
@@ -504,16 +505,6 @@ def _fase_psi(ax, kumpulan, psi_max_deg, mask=None):
     _rapikan(ax, "Bidang fase psi - dpsi  (psi_max = %g deg)" % psi_max_deg, "psi [rad]", "dpsi [rad/s]")
 
 
-def _fase_theta(ax, kumpulan, mask=None):
-    """Bidang fase theta - dtheta: hanya barrier dtheta (theta tidak punya barrier; batas jarak ada di grafik s)."""
-    _batas(ax, config.dtheta_max, _aktif(mask, "dtheta"), tebal=True)
-    for label, warna, data in kumpulan:
-        ax.plot(data["theta_rad"], data["dtheta_rad_s"], color=warna, linewidth=0.8, label=label, zorder=2)
-    ax.set_xlim(-config.PLOT_BATAS["theta"], config.PLOT_BATAS["theta"])
-    ax.set_ylim(-config.PLOT_BATAS["dtheta"], config.PLOT_BATAS["dtheta"])
-    _rapikan(ax, "Bidang fase theta - dtheta", "theta [rad]   (s = R*theta)", "dtheta [rad/s]")
-
-
 def teks_mask(mask):
     """'h1 h2 ...' constraint aktif, '' bila mask None."""
     if mask is None:
@@ -531,7 +522,9 @@ def _tabel(ax, kolom, isi, lebar):
 
 
 def gambar_percobaan(data, nama, path_png):
-    """PNG + EPS satu percobaan: grafik terhadap waktu, bidang fase dengan safety set, dan tabel metrik."""
+    """PNG + EPS satu percobaan: grafik terhadap waktu, bidang fase psi - dpsi dengan safety set, dan tabel metrik.
+    (Bidang fase theta - dtheta tidak digambar: theta = posisi roda yang terus bertambah saat robot berjalan dengan
+    D-Pad, dan dtheta(t) sudah ada di grafik terhadap waktu.)"""
     mode = MODE_PD_CBF if " PD+CBF_" in nama else MODE_PD
     m = metrik(data)
     warna = WARNA_MODE[mode]
@@ -553,7 +546,7 @@ def gambar_percobaan(data, nama, path_png):
                   config.dtheta_max, config.PLOT_BATAS["dtheta"], _aktif(mask, "dtheta"))
     _grafik_s(fig.add_subplot(kisi[1, 1]), satu, "Jarak tempuh s(t) = R*theta", mask)
 
-    ax = fig.add_subplot(kisi[2, 0])
+    ax = fig.add_subplot(kisi[2, :])
     if mode == MODE_PD_CBF:
         koreksi = [koreksi_cbf(data, i) for i in range(len(t))]
         gagal = [st == "GAGAL" for st in data["status_cbf"]]
@@ -569,7 +562,7 @@ def gambar_percobaan(data, nama, path_png):
     _rapikan(ax, "Torsi satu roda u_PD dan u (u_PD di luar batas arus terpotong di grafik)", "t [s]", "u [N m]",
              barrier=False)
 
-    ax = fig.add_subplot(kisi[2, 1])
+    ax = fig.add_subplot(kisi[3, 1])
     ax.plot(t, data["ISE_psi"], color=warna, label="ISE psi [rad^2 s]")
     ax.set_title("ISE kumulatif", fontsize=10)
     ax.set_xlabel("t [s]")
@@ -582,7 +575,6 @@ def gambar_percobaan(data, nama, path_png):
     ax.legend(garis, [g.get_label() for g in garis], fontsize=7, loc="upper left")
 
     _fase_psi(fig.add_subplot(kisi[3, 0]), satu, data["psi_max_deg"], mask)
-    _fase_theta(fig.add_subplot(kisi[3, 1]), satu, mask)
 
     baris = [(judul, _f(m[k], fmt)) for judul, k, fmt, _ in BARIS_METRIK]
     setengah = (len(baris) + 1) // 2
@@ -606,8 +598,7 @@ def _gambar_barrier(gambar1, gambar2, gambar3, mask):
            _aktif(mask, "psi"), _aktif(mask, "dpsi"))
     _penanda_psi(gambar1, "x")
     _komet(gambar1, math.radians(config.SAFE_TILT_DEG), "KOMET |psi| = %g deg" % config.SAFE_TILT_DEG, "x")
-    _batas(gambar2, config.dtheta_max, _aktif(mask, "dtheta"), tebal=True)
-    gambar2.set_xlim(-config.PLOT_BATAS["theta"], config.PLOT_BATAS["theta"])
+    _batas(gambar2, config.dtheta_max, _aktif(mask, "dtheta"), tebal=True)          # Gambar 2: dtheta(t)
     gambar2.set_ylim(-config.PLOT_BATAS["dtheta"], config.PLOT_BATAS["dtheta"])
     _batas(gambar3, config.s_max, _aktif(mask, "s"), tebal=True, sumbu="x")
     _komet(gambar3, config.S_KOMET, "KOMET |s| = %g m" % config.S_KOMET, "x")
@@ -693,8 +684,8 @@ def plot_realtime(ip_raspi, port=None):
 
     garis_psi, = gambar1.plot([], [], color=warna[MODE_PD], linewidth=1.4, zorder=2)
     titik_psi, = gambar1.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
-    garis_theta, = gambar2.plot([], [], color=warna[MODE_PD], linewidth=1.4, zorder=2)
-    titik_theta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
+    garis_dtheta, = gambar2.plot([], [], color=warna[MODE_PD], linewidth=1.4, zorder=2)
+    titik_dtheta, = gambar2.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
     garis_s, = gambar3.plot([], [], color=warna[MODE_PD], linewidth=2.0, zorder=2)
     titik_s, = gambar3.plot([], [], "o", color="black", markersize=6, label="sekarang", zorder=3)
     garis_arus, = ax_arus.plot([], [], color="tab:green")
@@ -703,8 +694,9 @@ def plot_realtime(ip_raspi, port=None):
     ax_arus.set_ylim(-1.2 * config.MAX_CURRENT_A, 1.2 * config.MAX_CURRENT_A)
     ax_arus.set(xlabel="waktu [s]", ylabel="arus per motor [A]")
     gambar1.set(xlabel="psi [rad]", ylabel="dpsi [rad/s]")
-    gambar2.set(xlabel="theta [rad]   (s = R*theta)", ylabel="dtheta [rad/s]")
-    gambar2.set_title("Gambar 2", fontsize=10)
+    gambar2.set(xlabel="waktu [s]", ylabel="dtheta [rad/s]")
+    gambar2.set_title("Gambar 2   dtheta(t)", fontsize=10)
+    gambar2.set_xlim(0.0, config.PLOT_RENTANG)
     gambar3.axhline(0.0, color="gray", linewidth=0.6, zorder=1.0)
     gambar3.set_ylim(-1.0, 1.0)
     gambar3.set_yticks([0.0])
@@ -788,7 +780,7 @@ def plot_realtime(ip_raspi, port=None):
                         data = {k: [] for k in kolom}
                     elif isi[0] == "MODE":
                         keadaan["mode"], keadaan["gerak"] = isi[1], isi[2]
-                        for garis in (garis_psi, garis_theta, garis_s):
+                        for garis in (garis_psi, garis_dtheta, garis_s):
                             garis.set_color(warna.get(isi[1], config.PLOT_WARNA_PD))
                         tulisan()
                     elif isi[0] == "MASK":
@@ -815,15 +807,16 @@ def plot_realtime(ip_raspi, port=None):
                     data = {k: v[buang:] for k, v in data.items()}
                 theta = np.array(data["theta"], dtype=float)
                 garis_psi.set_data(data["psi"], data["dpsi"])
-                garis_theta.set_data(theta, data["dtheta"])
+                garis_dtheta.set_data(data["t"], data["dtheta"])
                 garis_s.set_data(config.R * theta, np.zeros(len(theta)))
                 garis_arus.set_data(data["t"], data["arus"])
                 if data["t"] and math.isfinite(data["psi"][-1]):
                     titik_psi.set_data([data["psi"][-1]], [data["dpsi"][-1]])
-                    titik_theta.set_data([data["theta"][-1]], [data["dtheta"][-1]])
+                    titik_dtheta.set_data([data["t"][-1]], [data["dtheta"][-1]])
                     titik_s.set_data([config.R * data["theta"][-1]], [0.0])
                 akhir = data["t"][-1] if data["t"] else 0.0
-                ax_arus.set_xlim(max(0.0, akhir - config.PLOT_RENTANG), max(config.PLOT_RENTANG, akhir))
+                for ax in (gambar2, ax_arus):
+                    ax.set_xlim(max(0.0, akhir - config.PLOT_RENTANG), max(config.PLOT_RENTANG, akhir))
                 fig.canvas.draw_idle()
             fig.canvas.flush_events()
             time.sleep(1.0 / config.PLOT_HZ)
@@ -916,15 +909,14 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis):
     _grafik_waktu(fig.add_subplot(kisi[1, 0]), kumpulan, "dtheta_rad_s", "dtheta(t)", "dtheta [rad/s]",
                   config.dtheta_max, config.PLOT_BATAS["dtheta"], _aktif(mask, "dtheta"))
     _grafik_s(fig.add_subplot(kisi[1, 1]), kumpulan, "s(t) = R*theta", mask)
-    ax = fig.add_subplot(kisi[2, 0])
+    ax = fig.add_subplot(kisi[2, :])
     _grafik_waktu(ax, kumpulan, "u_Nm", "Torsi ke motor u(t)", "u [N m]", None, None)
     ax.axhline(config.u_max, color="black", linewidth=0.8, linestyle=":")
     ax.axhline(-config.u_max, color="black", linewidth=0.8, linestyle=":")
     ax.set_ylim(-1.4 * config.u_max, 1.4 * config.u_max)
-    _grafik_waktu(fig.add_subplot(kisi[2, 1]), kumpulan, "ISE_psi", "ISE psi kumulatif", "ISE psi [rad^2 s]", None,
-                  None)
     _fase_psi(fig.add_subplot(kisi[3, 0]), kumpulan, psi_max_deg, mask)
-    _fase_theta(fig.add_subplot(kisi[3, 1]), kumpulan, mask)
+    _grafik_waktu(fig.add_subplot(kisi[3, 1]), kumpulan, "ISE_psi", "ISE psi kumulatif", "ISE psi [rad^2 s]", None,
+                  None)
     ax = fig.add_subplot(kisi[4, :])
     _tabel(ax, ["0 - %.1f s" % t_banding, label[MODE_PD], label[MODE_PD_CBF], "PD+CBF terhadap PD"], isi,
            [0.34, 0.22, 0.22, 0.18])

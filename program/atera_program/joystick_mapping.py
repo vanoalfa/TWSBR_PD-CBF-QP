@@ -11,7 +11,7 @@ Fungsi tombol (Konteks_ATERA.md, ditambah L3 / R3 untuk perekaman ISE):
     LT / RT  : halaman GUI ke kiri / kanan
     MULAI    : mulai balancing, mode gerak DIAM (setelah kalibrasi)
     QUIT     : keluar program
-    L3       : mulai satu PENGUJIAN (direkam config.DURASI_PENGUJIAN detik; dorong robot dengan tangan)
+    L3       : PENGUJIAN mulai (dorong robot dengan tangan); L3 lagi: PENGUJIAN selesai dan disimpan
     R3       : simpan PERCOBAAN sekarang, perekaman baru dimulai (robot tetap balancing)
 Perintah gerak: arah -1 / 0 / +1 dan belok -1 / 0 / +1, dari D-Pad atau analog kiri, di semua mode gerak:
 D-Pad atas / bawah = maju / mundur (Kvel; di BALANCING dilepas = setpoint theta baru di titik itu), kiri / kanan = belok
@@ -77,9 +77,10 @@ AKSI = {
     "R3": "SIMPAN",
 }
 
-# ASUMSI: analog kiri code 0 = maju/mundur (stik ke atas bernilai negatif = maju), code 1 = belok (kanan = positif).
-ANALOG_MAJU = 0
-ANALOG_BELOK = 1
+# Analog kiri (uji robot 20261029: code 0 dan 1 tertukar): code 1 = maju/mundur (stik ke atas bernilai negatif = maju),
+# code 0 = belok (kanan = positif, dikali config.JOYSTICK_ANALOG_BELOK_TANDA). Nama di ABS_MAP tidak diubah.
+ANALOG_MAJU = 1
+ANALOG_BELOK = 0
 
 BANTUAN = (
     "Tombol Y : kalibrasi IMU (robot diam, tegak di titik seimbang) + s = 0 di sini",
@@ -90,7 +91,7 @@ BANTUAN = (
     "D-Pad    : atas / bawah = maju / mundur (Kvel), di BALANCING dilepas = setpoint baru di titik itu",
     "           kiri / kanan = belok (tanpa atas / bawah: berputar di tempat). Analog kiri sama dengan D-Pad",
     "Tombol A : mode BEBAS nyala / mati: tanpa PD heading dan Kp_theta (bisa ditarik tali). Mati = DIAM",
-    "L3       : mulai PENGUJIAN %.0f s (dorong robot dengan tangan setelah menekan L3)" % config.DURASI_PENGUJIAN,
+    "L3       : PENGUJIAN mulai (lalu dorong robot dengan tangan), L3 lagi = selesai dan simpan",
     "R3       : simpan PERCOBAAN sekarang, rekaman baru dimulai",
     "LT / RT  : halaman GUI",
     "QUIT     : keluar (roda dimatikan, data disimpan)",
