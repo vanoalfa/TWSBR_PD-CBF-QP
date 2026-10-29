@@ -235,6 +235,12 @@ L_IMU = 0.312739                    # [m] jarak CoM kedua roda (poros) ke IMU, d
 CONTROL_HZ = 200.0
 DT = 1.0 / CONTROL_HZ               # [s]
 ISE_PLOT_DIR = "PLOT_EVALUASI"
+# Panel yang disimpan juga satu per file (.png + .eps, TANPA judul, untuk LaTeX) di subfolder PANEL/ setiap gambar
+# evaluasi disimpan (percobaan, pengujian, perbandingan, dan BANDING). Pilihan: "psi", "dpsi", "dtheta", "s",
+# "u" (torsi), "ise", "fase_psi" (bidang fase psi - dpsi), "tabel" (metrik). [] = tidak ada. Sekali jalan: --panel psi,u
+EVAL_PANEL = ["psi", "dpsi", "dtheta", "u", "fase_psi"]
+# True: setiap PENGUJIAN PD+CBF (tombol T) disimpan, dibuat juga gambar BANDING dengan PENGUJIAN PD terakhir hari itu.
+EVAL_BANDING_OTOMATIS = True
 
 # PENGUJIAN (tombol T) tanpa batas waktu: T mulai, T lagi selesai (sama dengan L3 robot fisik).
 # ASUMSI: satu rekaman PERBANDINGAN (tombol 3) = DURASI_PERBANDINGAN detik waktu simulasi sejak dorongan O / P, supaya

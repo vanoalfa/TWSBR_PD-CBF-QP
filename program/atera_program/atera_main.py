@@ -105,6 +105,7 @@ class Atera:
         self.cbf_alasan = "belum disiapkan"
         self.perekam = ise.PerekamISE()            # PERCOBAAN: MULAI sampai X / R3 / KOMET
         self.perekam_uji = ise.PerekamISE()        # PENGUJIAN: L3 mulai, L3 lagi selesai
+        self.uji_pd_terakhir = ""                  # PENGUJIAN PD terakhir sesi ini (pasangan BANDING otomatis)
         self.gain = {nama: float(getattr(config, nama)) for nama in NAMA_GAIN}
         self.gain["psi_max_DEG"] = float(config.psi_max_DEG)
         self.gain["zeta_DEG"] = float(config.zeta_DEG)
@@ -444,8 +445,23 @@ class Atera:
                         "L3 = PENGUJIAN mulai / selesai, X = roda mati." % self.mode_kontrol)
 
     def simpan(self, perekam):
-        nama = perekam.simpan(latar=True)
-        return nama if nama else "(tidak ada data)"
+        """Simpan di latar. PENGUJIAN PD+CBF: BANDING otomatis dengan PENGUJIAN PD terakhir hari itu
+        (config.EVAL_BANDING_OTOMATIS)."""
+        pasangan = ""
+        uji = perekam is self.perekam_uji
+        if uji and perekam.mode == ise.MODE_PD_CBF and config.EVAL_BANDING_OTOMATIS:
+            pasangan = self.uji_pd_terakhir or ise.pengujian_pd_terakhir()
+        nama = perekam.simpan(latar=True, banding_pd=pasangan)
+        if not nama:
+            return "(tidak ada data)"
+        if uji and perekam.mode == ise.MODE_PD:
+            self.uji_pd_terakhir = nama
+        if pasangan:
+            cocok = ise.POLA_NAMA.match(pasangan + ".csv")
+            nama += " + BANDING dengan PD KE-%s" % (cocok.group(5) if cocok else pasangan)
+        elif uji and perekam.mode == ise.MODE_PD_CBF and config.EVAL_BANDING_OTOMATIS:
+            nama += " (belum ada PENGUJIAN PD hari ini untuk BANDING)"
+        return nama
 
     def simpan_semua(self, sebab):
         teks = "PERCOBAAN " + self.simpan(self.perekam)
@@ -887,6 +903,8 @@ class Atera:
                    "  python3 ise.py --daftar                     daftar dan metrik percobaan",
                    "  python3 ise.py --bandingkan --pd 3 --cbf 5   PD KE-03 vs PD+CBF KE-05 (folder BANDING)",
                    "  tambahkan --pengujian untuk hasil PENGUJIAN (L3)",
+                   "  PENGUJIAN PD (LB, L3 .. L3) lalu PD+CBF (RB, L3 .. L3): BANDING otomatis di PENGUJIAN/BANDING",
+                   "  panel terpilih (config.EVAL_PANEL) tersimpan sendiri di subfolder PANEL/ (.eps tanpa judul)",
                    "", "Plot realtime di laptop: Raspi  python3 atera_main.py --plot",
                    "  laptop (satu WiFi, folder atera_program)  python3 ise.py --plot-realtime %s" % self.plot_ip,
                    "  merah = barrier CBF mode gerak ini, abu-abu = tidak dipakai, hitam = KOMET, "

@@ -79,7 +79,8 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
   R        reset: robot diletakkan ulang di posisi awal, ISE dan plot realtime mulai dari 0 (data yang
            belum disimpan DIBUANG; tekan E dulu bila ingin disimpan). Nilai parameter tetap.
   T        PENGUJIAN mulai (perekaman biasa tetap berjalan; dorong dengan O / P). T lagi: PENGUJIAN selesai dan
-           disimpan (_PENGUJIAN KE-XX). Tanpa batas waktu (robot fisik: L3).
+           disimpan (_PENGUJIAN KE-XX). Tanpa batas waktu (robot fisik: L3). Urutan: 1 (PD), T .. T, lalu
+           2 (PD + CBF-QP), T .. T: PENGUJIAN PD+CBF otomatis dibandingkan dengan PENGUJIAN PD terakhir (BANDING).
   KOMET    |psi| > SAFE_TILT_DEG, |s| > S_KOMET (hanya mode BALANCING tanpa W / S), atau |yaw - yaw_ref| > YAW_KOMET_DEG
            (berputar, bukan mode BEBAS): motor dimatikan,
            perekaman berhenti (pengujian yang sedang berjalan langsung disimpan). Lanjutkan dengan R, E, atau Q.
@@ -119,6 +120,31 @@ def simpan_ise(perekam):
         print("Tersimpan: %s.csv, .png, .eps" % perekam.path_terakhir)
     else:
         print("ISE tidak disimpan:", perekam.alasan)
+    return nama
+
+
+_UJI_PD_TERAKHIR = [""]       # PENGUJIAN PD terakhir sesi ini (pasangan BANDING otomatis)
+
+
+def simpan_uji(perekam_uji):
+    """Simpan PENGUJIAN (tombol T). PENGUJIAN PD+CBF: gambar BANDING otomatis dengan PENGUJIAN PD terakhir hari itu
+    (config.EVAL_BANDING_OTOMATIS). Mengembalikan nama file ("" = tidak tersimpan)."""
+    mode = perekam_uji.mode
+    nama = simpan_ise(perekam_uji)
+    if nama == "":
+        return ""
+    if mode == ise.MODE_PD:
+        _UJI_PD_TERAKHIR[0] = nama
+    elif config.EVAL_BANDING_OTOMATIS:
+        pasangan = _UJI_PD_TERAKHIR[0] or ise.pengujian_pd_terakhir()
+        if pasangan == "":
+            print("BANDING otomatis dilewati: belum ada PENGUJIAN PD hari ini (tekan 1, T, dorong, T dulu).")
+        else:
+            print("BANDING otomatis: %s vs %s" % (pasangan, nama))
+            try:
+                ise.perintah_bandingkan(None, None, None, ise.JENIS_PENGUJIAN, nama_pd=pasangan, nama_cbf=nama)
+            except Exception as kesalahan:
+                print("GAGAL membuat gambar BANDING -> %s: %s" % (type(kesalahan).__name__, kesalahan))
     return nama
 
 
@@ -289,7 +315,7 @@ def main():
                 if not mode_banding:
                     if pengujian_berjalan:
                         print("PENGUJIAN (T) disimpan dulu sebelum perekam perbandingan dinyalakan.")
-                        simpan_ise(perekam_uji)
+                        simpan_uji(perekam_uji)
                         pengujian_berjalan = False
                     mode_banding = True
                     banding_berjalan = False
@@ -313,7 +339,7 @@ def main():
                     print("PEREKAM PERBANDINGAN (3) masih menyala: matikan dulu dengan 3 sebelum PENGUJIAN (T).")
                 elif pengujian_berjalan:
                     print("PENGUJIAN selesai (%.1f s)." % t_uji)
-                    simpan_ise(perekam_uji)
+                    simpan_uji(perekam_uji)
                     pengujian_berjalan = False
                 elif komet:
                     print("komet: tekan R dulu sebelum memulai pengujian.")
@@ -351,7 +377,7 @@ def main():
                 else:
                     if pengujian_berjalan:
                         print("Ganti mode kontrol: PENGUJIAN %s disimpan dulu." % mode)
-                        simpan_ise(perekam_uji)
+                        simpan_uji(perekam_uji)
                         pengujian_berjalan = False
                     if banding_berjalan:
                         print("Rekaman perbandingan yang sedang berjalan dibatalkan (tidak disimpan).")
@@ -507,7 +533,7 @@ def main():
                       "Tekan R (ulang), E (simpan data), atau Q (keluar + simpan)." % sebab)
                 if pengujian_berjalan:
                     print("komet saat pengujian: pengujian disimpan sampai saat komet.")
-                    simpan_ise(perekam_uji)
+                    simpan_uji(perekam_uji)
                     pengujian_berjalan = False
                 if banding_berjalan:
                     print("komet saat rekaman perbandingan: disimpan sampai saat komet.")
@@ -659,7 +685,7 @@ def main():
             simpan_pembanding(sim, perekam_banding, pembanding)
         if pengujian_berjalan:
             print("PENGUJIAN belum diselesaikan (T): disimpan sampai saat ini.")
-            simpan_ise(perekam_uji)
+            simpan_uji(perekam_uji)
         if not mode_banding:
             simpan_ise(perekam)
         else:

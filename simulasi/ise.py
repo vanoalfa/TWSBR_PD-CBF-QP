@@ -10,6 +10,9 @@ Hasil disimpan di dua subfolder PLOT_EVALUASI (HHmmSS = jam, menit, detik saat d
 Nomor KE-XX naik otomatis per tanggal, per mode, dan per jenis (PERCOBAAN / PENGUJIAN).
 File lama (langsung di PLOT_EVALUASI, atau tanpa HHmmSS) tetap terbaca sebagai PERCOBAAN.
 Bila gain diubah saat sedang direkam, nama file diberi akhiran _TUNING.
+Panel terpilih (config.EVAL_PANEL): setiap gambar disimpan, tiap panel juga disimpan sendiri TANPA judul di subfolder
+PANEL/ (PLOT_EVALUASI/<jenis>/PANEL/<nama>_psi.eps, ...). PENGUJIAN PD+CBF (tombol T) otomatis dibandingkan (BANDING)
+dengan PENGUJIAN PD terakhir hari itu (config.EVAL_BANDING_OTOMATIS).
 
 Kolom c_h1, c_h2, ... (hanya mode PD + CBF-QP): nilai tiap constraint CBF-QP (urutan DAFTAR_C di cbf_qp.py) pada
 torsi u yang dipakai siklus itu. c >= 0 = terpenuhi, c ~ 0 = constraint sedang aktif (membatasi u), c < 0 =
@@ -110,8 +113,13 @@ Perintah ise.py (tambahkan --pengujian untuk hasil mode pengujian di folder PLOT
   python3 ise.py --daftar --perbandingan
   python3 ise.py --bandingkan --perbandingan --pd 1 --cbf 1
         sama, untuk hasil perekam perbandingan (tombol 3); gambar BANDING-nya juga dibuat otomatis oleh atera_main.py
+  python3 ise.py --panel-ulang [--pengujian] [--panel psi,u]
+        buat file panel (PANEL/) dari semua CSV; --panel juga bisa ditambahkan ke --bandingkan
 Hasil: PLOT_EVALUASI/PERCOBAAN/YYYYMMDD_BANDING PD KE-03 vs PD+CBF KE-05.png
        PLOT_EVALUASI/PENGUJIAN/YYYYMMDD_BANDING PENGUJIAN PD KE-01 vs PD+CBF KE-01.png
+       (PENGUJIAN PD+CBF dengan tombol T otomatis dibandingkan dengan PENGUJIAN PD terakhir hari itu)
+Panel: PLOT_EVALUASI/<jenis>/PANEL/<nama>_<panel>.png / .eps, satu grafik per file TANPA judul (untuk LaTeX).
+       Pilihan panel (config.EVAL_PANEL atau --panel): psi, dpsi, dtheta, s, u, ise, fase_psi, tabel
 """
 
 
@@ -568,11 +576,194 @@ class PerekamISE:
         fig.tight_layout()
         simpan_gambar(fig, path_png)
         plt.close(fig)
+        panel_satu(path_csv, nama, self.mode)
 
         self.file_terakhir = nama
         self.path_terakhir = os.path.join(folder, nama)
         self.data = []
         return nama
+
+
+# =============================================================================
+# Panel: satu grafik per file (config.EVAL_PANEL), TANPA judul, untuk LaTeX
+# =============================================================================
+NAMA_PANEL = ("psi", "dpsi", "dtheta", "s", "u", "ise", "fase_psi", "tabel")
+UKURAN_PANEL_BAKU = (7.0, 3.6)                 # [inci] grafik terhadap waktu
+UKURAN_PANEL = {"fase_psi": (6.4, 4.8)}        # tabel: tingginya mengikuti jumlah baris
+PANEL_PILIHAN = None                           # diisi --panel di terminal (None = config.EVAL_PANEL)
+
+
+def _ise_kumulatif(t, error):
+    """ISE kumulatif tiap sampel (sama dengan hitung_ise, tetapi sebagai list)."""
+    hasil, ise, t_sebelumnya = [], 0.0, 0.0
+    for ti, ei in zip(t, error):
+        ise = ise + (ei ** 2) * (ti - t_sebelumnya)
+        t_sebelumnya = ti
+        hasil.append(ise)
+    return hasil
+
+
+def _grafik_waktu(ax, kumpulan, kolom, ylabel, batas=None, aktif=(True, True), sumbu=None):
+    """Kurva kolom terhadap waktu tiap (label, warna, data). batas = (min, max) barrier, sumbu = batas sumbu Y."""
+    for label, warna, data in kumpulan:
+        ax.plot(data["t_s"], data[kolom], color=warna, linewidth=1.0, label=label, zorder=2)
+    if batas is not None:
+        gambar_garis_barrier(ax, batas, aktif, "y")
+    if sumbu is not None:
+        ax.set_ylim(-sumbu, sumbu)
+    ax.set_xlabel("t [s]")
+    ax.set_ylabel(ylabel)
+    ax.grid(True, color="0.85")
+
+
+def _panel(ax, nama, kumpulan, psi_max_deg, mask, mode_detail=None, tabel=None):
+    """Gambar panel `nama` (NAMA_PANEL) di ax. kumpulan: list (label, warna, data hasil baca_csv). mode_detail: mode
+    satu percobaan (u_PD ikut digambar), atau None untuk perbandingan. tabel: (judul kolom, isi, lebar kolom)."""
+    batas = config.PLOT_BATAS
+    psi_max = math.radians(psi_max_deg)
+    if nama == "psi":
+        _grafik_waktu(ax, kumpulan, "psi_rad", "psi [rad]", (-psi_max, psi_max), aktif_barrier(mask, "psi"),
+                      batas["psi"])
+        gambar_penanda_psi(ax, "y")
+        gambar_komet(ax, math.radians(config.SAFE_TILT_DEG), "KOMET |psi| = %g deg" % config.SAFE_TILT_DEG, "y")
+        ax.set_title("Sudut badan psi(t)   (psi_max = %g deg)" % psi_max_deg, fontsize=10)
+        legenda(ax, perpanjangan=False)
+    elif nama == "dpsi":
+        _grafik_waktu(ax, kumpulan, "dpsi_rad_s", "dpsi [rad/s]", (config.dpsi_min, config.dpsi_max),
+                      aktif_barrier(mask, "dpsi"), batas["dpsi"])
+        ax.set_title("Kecepatan sudut badan dpsi(t)", fontsize=10)
+        legenda(ax, perpanjangan=False)
+    elif nama == "dtheta":
+        _grafik_waktu(ax, kumpulan, "dtheta_rad_s", "dtheta [rad/s]", (config.dtheta_min, config.dtheta_max),
+                      aktif_barrier(mask, "dtheta"), batas["dtheta"])
+        ax.set_title("Kecepatan roda dtheta(t)", fontsize=10)
+        legenda(ax, perpanjangan=False)
+    elif nama == "s":
+        for _, _, data in kumpulan:
+            data["s_m"] = [config.R * v for v in data["theta_rad"]]
+        _grafik_waktu(ax, kumpulan, "s_m", "s [m]", (config.s_min, config.s_max), aktif_barrier(mask, "s"),
+                      batas["s"])
+        gambar_komet(ax, config.S_KOMET, "KOMET |s| = %g m" % config.S_KOMET, "y")
+        ax.set_title("Jarak tempuh s(t) = R*theta", fontsize=10)
+        legenda(ax, perpanjangan=False)
+    elif nama == "u":
+        if mode_detail is not None:
+            _, warna, data = kumpulan[0]
+            t = data["t_s"]
+            if mode_detail == MODE_PD_CBF:
+                koreksi = [abs(u - max(config.u_min, min(config.u_max, upd))) > config.CBF_TOL_AKTIF
+                           for u, upd in zip(data["u_Nm"], data["u_PD_Nm"])]
+                ax.fill_between(t, -config.u_max, config.u_max, where=koreksi, color="#c8e6c9", step="mid",
+                                zorder=0.5, linewidth=0, label="CBF-QP mengoreksi")
+            ax.plot(t, data["u_PD_Nm"], color="gray", linewidth=0.8, linestyle="--", label="u_PD", zorder=2)
+            ax.plot(t, data["u_Nm"], color=warna, linewidth=1.0, label="u (ke motor)", zorder=2.1)
+            ax.set_xlabel("t [s]")
+            ax.set_ylabel("u [N m]")
+            ax.grid(True, color="0.85")
+        else:
+            _grafik_waktu(ax, kumpulan, "u_Nm", "u [N m]")
+        ax.axhline(config.u_max, color="black", linewidth=0.8, linestyle=":", label="batas arus")
+        ax.axhline(config.u_min, color="black", linewidth=0.8, linestyle=":")
+        ax.set_ylim(-1.4 * config.u_max, 1.4 * config.u_max)        # u_PD di luar ini terpotong di grafik
+        ax.set_title("Torsi satu roda u(t)", fontsize=10)
+        ax.legend(fontsize=7, loc="upper right")
+    elif nama == "ise":
+        for _, _, data in kumpulan:
+            data["ISE_psi_kum"] = _ise_kumulatif(data["t_s"], data["error_psi"])
+            data["ISE_dpsi_kum"] = _ise_kumulatif(data["t_s"], data["error_dpsi"])
+        if mode_detail is not None:
+            _grafik_waktu(ax, [("ISE psi [rad^2 s]", kumpulan[0][1], kumpulan[0][2])], "ISE_psi_kum", "ISE psi [rad^2 s]")
+        else:
+            _grafik_waktu(ax, kumpulan, "ISE_psi_kum", "ISE psi [rad^2 s]")
+        if mode_detail is not None:
+            ax2 = ax.twinx()
+            ax2.plot(kumpulan[0][2]["t_s"], kumpulan[0][2]["ISE_dpsi_kum"], color="tab:brown", linewidth=0.9,
+                     label="ISE dpsi [(rad/s)^2 s]")
+            ax2.set_ylabel("ISE dpsi [(rad/s)^2 s]")
+            garis = ax.get_lines() + ax2.get_lines()
+            ax.legend(garis, [g.get_label() for g in garis], fontsize=7, loc="upper left")
+        else:
+            ax.legend(fontsize=7, loc="upper left")
+        ax.set_title("ISE kumulatif", fontsize=10)
+    elif nama == "fase_psi":
+        gambar_kotak_safety(ax, (-psi_max, psi_max), (config.dpsi_min, config.dpsi_max),
+                            aktif_barrier(mask, "psi"), aktif_barrier(mask, "dpsi"))
+        gambar_penanda_psi(ax, "x")
+        gambar_komet(ax, math.radians(config.SAFE_TILT_DEG), "KOMET |psi| = %g deg" % config.SAFE_TILT_DEG, "x")
+        for label, warna, data in kumpulan:
+            ax.plot(data["psi_rad"], data["dpsi_rad_s"], color=warna, linewidth=0.8, label=label, zorder=2)
+        ax.set_xlim(-batas["psi"], batas["psi"])
+        ax.set_ylim(-batas["dpsi"], batas["dpsi"])
+        ax.set_xlabel("psi [rad]")
+        ax.set_ylabel("dpsi [rad/s]")
+        ax.grid(True, color="0.85")
+        ax.set_title("Bidang fase psi - dpsi   (psi_max = %g deg)" % psi_max_deg, fontsize=10)
+        legenda(ax)
+    elif nama == "tabel":
+        kolom, isi, lebar = tabel
+        ax.axis("off")
+        gambar = ax.table(cellText=isi, colLabels=kolom, cellLoc="center", colWidths=lebar, bbox=[0, 0, 1, 1])
+        gambar.auto_set_font_size(False)
+        gambar.set_fontsize(8.5)
+
+
+def tabel_ringkas(data):
+    """(judul kolom, isi, lebar) tabel metrik satu percobaan untuk panel "tabel"."""
+    h = ringkasan(data)
+    isi = [["Durasi [s]", "%.1f" % h["durasi"]],
+           ["ISE psi [rad^2 s]", "%.6f" % h["ise_psi"]],
+           ["ISE dpsi [(rad/s)^2 s]", "%.6f" % h["ise_dpsi"]],
+           ["ISE theta [rad^2 s]", "%.6f" % h["ise_theta"]],
+           ["ISE dtheta [(rad/s)^2 s]", "%.6f" % h["ise_dtheta"]],
+           ["|psi| maks [deg]  (batas %.1f)" % data["psi_max_deg"], "%.2f" % math.degrees(h["psi_maks"])],
+           ["|dpsi| maks [rad/s]  (batas %.2f)" % config.dpsi_max, "%.3f" % h["dpsi_maks"]],
+           ["|dtheta| maks [rad/s]  (batas %.2f)" % config.dtheta_max, "%.3f" % h["dtheta_maks"]],
+           ["|s| maks [m]  (batas %.2f)" % config.s_max, "%.3f" % h["s_maks"]],
+           ["|u| maks [N m]  (batas %.2f)" % config.u_max, "%.3f" % h["u_maks"]],
+           ["CBF-QP berstatus OK [% waktu]", "-" if h["cbf_ok"] is None else "%.1f" % h["cbf_ok"]],
+           ["CBF-QP berstatus SLACK [% waktu]", "%.1f" % h["slack"]]]
+    return ["Metrik", "Nilai"], isi, [0.65, 0.35]
+
+
+def pilihan_panel():
+    """Panel yang disimpan sendiri-sendiri: --panel di terminal, atau config.EVAL_PANEL."""
+    pilihan = PANEL_PILIHAN if PANEL_PILIHAN is not None else list(getattr(config, "EVAL_PANEL", []))
+    salah = [p for p in pilihan if p not in NAMA_PANEL]
+    if salah:
+        print("Panel tidak dikenal (dilewati): %s. Pilihan: %s" % (", ".join(salah), ", ".join(NAMA_PANEL)))
+    return [p for p in pilihan if p in NAMA_PANEL]
+
+
+def simpan_panel(folder, nama, kumpulan, psi_max_deg, mask, mode_detail=None, tabel=None):
+    """Panel terpilih (pilihan_panel()) disimpan satu per file, TANPA judul (judul diganti caption LaTeX), di
+    <folder>/PANEL/<nama>_<panel>.png dan .eps. Mengembalikan daftar path .eps."""
+    hasil = []
+    for p in pilihan_panel():
+        if p == "tabel" and tabel is None:
+            continue
+        ukuran = UKURAN_PANEL.get(p, UKURAN_PANEL_BAKU)
+        if p == "tabel":
+            ukuran = (9.0 if len(tabel[0]) > 2 else 6.0, 0.30 * (len(tabel[1]) + 1) + 0.3)
+        fig = plt.figure(figsize=ukuran)
+        ax = fig.add_subplot(1, 1, 1)
+        _panel(ax, p, kumpulan, psi_max_deg, mask, mode_detail, tabel)
+        ax.set_title("")
+        fig.tight_layout()
+        os.makedirs(os.path.join(folder, "PANEL"), exist_ok=True)
+        path_png = os.path.join(folder, "PANEL", "%s_%s.png" % (nama, p))
+        simpan_gambar(fig, path_png)
+        plt.close(fig)
+        hasil.append(path_png[:-4] + ".eps")
+    return hasil
+
+
+def panel_satu(path_csv, nama, mode):
+    """File panel satu percobaan dari CSV-nya. Mengembalikan daftar path .eps."""
+    data = baca_csv(path_csv)
+    if len(data["t_s"]) == 0:
+        return []
+    return simpan_panel(os.path.dirname(path_csv), nama, [(mode, warna_mode(mode), data)], data["psi_max_deg"],
+                        data["mask"], mode, tabel_ringkas(data))
 
 
 # =============================================================================
@@ -1008,6 +1199,9 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN, nam
     fig.tight_layout()
     simpan_gambar(fig, path_png)
     plt.close(fig)
+    panel = simpan_panel(folder_jenis(jenis), nama,
+                         [(label_pd, config.PLOT_WARNA_PD, potong_pd), (label_cbf, config.PLOT_WARNA_PD_CBF, potong_cbf)],
+                         data_cbf["psi_max_deg"], data_cbf["mask"], None, (judul_kolom, tabel, [0.32, 0.24, 0.24, 0.20]))
 
     # -------------------------------------------------------------- terminal
     print("PD     :", coba_pd["nama"])
@@ -1023,7 +1217,25 @@ def perintah_bandingkan(nomor_pd, nomor_cbf, tanggal, jenis=JENIS_PERCOBAAN, nam
     for teks in catatan:
         print("PERHATIAN:", teks)
     print("Tersimpan:", path_png)
+    if panel:
+        print("Panel (%d file .eps): %s" % (len(panel), os.path.join(folder_jenis(jenis), "PANEL")))
     return nama
+
+
+def pengujian_pd_terakhir(tanggal=None):
+    """Nama PENGUJIAN PD terakhir pada tanggal itu (None = hari ini), atau "" bila tidak ada."""
+    tanggal = tanggal or datetime.now().strftime("%Y%m%d")
+    cocok = [p for p in daftar_percobaan(JENIS_PENGUJIAN) if p["mode"] == MODE_PD and p["tanggal"] == tanggal]
+    return cocok[-1]["nama"] if cocok else ""
+
+
+def perintah_panel_ulang(jenis):
+    """File panel (PANEL/) untuk semua CSV satu jenis."""
+    if not pilihan_panel():
+        print("Tidak ada panel dipilih: isi config.EVAL_PANEL atau --panel psi,dpsi,...")
+        return
+    for p in daftar_percobaan(jenis):
+        print("Panel %s: %d file" % (p["nama"], len(panel_satu(p["path"], p["nama"], p["mode"]))))
 
 
 def main():
@@ -1035,8 +1247,13 @@ def main():
     parser.add_argument("--tanggal", type=str, default=None)
     parser.add_argument("--pengujian", action="store_true")
     parser.add_argument("--perbandingan", action="store_true")
+    parser.add_argument("--panel-ulang", action="store_true")
+    parser.add_argument("--panel", type=str, default=None)
     parser.add_argument("-h", "--help", action="store_true")
     pilihan = parser.parse_args()
+    if pilihan.panel is not None:
+        global PANEL_PILIHAN
+        PANEL_PILIHAN = [p.strip() for p in pilihan.panel.split(",") if p.strip()]
 
     jenis = JENIS_PERCOBAAN
     if pilihan.pengujian:
@@ -1047,6 +1264,8 @@ def main():
         perintah_daftar(jenis)
     elif pilihan.bandingkan:
         perintah_bandingkan(pilihan.pd, pilihan.cbf, pilihan.tanggal, jenis)
+    elif pilihan.panel_ulang:
+        perintah_panel_ulang(jenis)
     else:
         print(BANTUAN)
 

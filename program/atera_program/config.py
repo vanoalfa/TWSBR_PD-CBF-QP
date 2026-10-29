@@ -210,8 +210,11 @@ ACADOS_SOURCE_DIR = ""
 # =============================================================================
 #                              6. MOTOR DDSM115  (wiki Waveshare DDSM115)
 # =============================================================================
-LEFT_MOTOR_PORT = "/dev/ttyACM0"
-RIGHT_MOTOR_PORT = "/dev/ttyACM1"
+# Nama port TETAP per adaptor USB-RS485 (nomor seri adaptor, ls -l /dev/serial/by-id/): tidak tertukar walau USB
+# dicabut-pasang atau Raspi dinyalakan ulang (nama /dev/ttyACM0 / ttyACM1 bisa bertukar). Bila roda KIRI fisik terbaca
+# sebagai motor kanan di GUI halaman Hardware, tukar kedua nomor seri di bawah. Cadangan lama: "/dev/ttyACM0" / "/dev/ttyACM1".
+LEFT_MOTOR_PORT = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00"
+RIGHT_MOTOR_PORT = "/dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00"
 LEFT_MOTOR_ID = 1                   # tiap motor punya USB-RS485 sendiri, ID boleh sama
 RIGHT_MOTOR_ID = 1
 MOTOR_BAUDRATE = 115200             # 8N1, frame 10 byte, CRC-8/MAXIM, maks 500 Hz
@@ -279,6 +282,12 @@ UI_HZ = 10.0
 LOOP_MIN_RASIO = 0.8                # loop di bawah 80 % CONTROL_HZ -> peringatan
 LOG_FILE = "atera.log"
 ISE_PLOT_DIR = "PLOT_EVALUASI/ATERA_RASPI"   # hasil robot fisik: <jenis>/<PD atau CBFQP>/ (lihat ise.py)
+# Panel yang disimpan juga satu per file (.png + .eps, TANPA judul, untuk LaTeX) di subfolder PANEL/ setiap gambar
+# evaluasi disimpan (percobaan, pengujian, dan BANDING). Pilihan: "psi", "dpsi", "dtheta", "s", "u" (torsi), "ise",
+# "fase_psi" (bidang fase psi - dpsi), "tabel" (metrik). [] = tidak ada. Bisa diganti sekali jalan: ise.py --panel psi,u
+EVAL_PANEL = ["psi", "dpsi", "dtheta", "u", "fase_psi"]
+# True: setiap PENGUJIAN PD+CBF disimpan, dibuat juga gambar BANDING dengan PENGUJIAN PD terakhir hari itu.
+EVAL_BANDING_OTOMATIS = True
 # ASUMSI: robot dianggap pulih setelah gangguan bila |psi| < EVAL_PSI_PULIH_DEG terus-menerus EVAL_PULIH_LAMA_S detik
 EVAL_PSI_PULIH_DEG = 2.0            # [deg]
 EVAL_PULIH_LAMA_S = 1.0             # [s]
