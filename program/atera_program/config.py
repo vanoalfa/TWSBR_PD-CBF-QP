@@ -58,7 +58,7 @@ dpsi_setpoint = 0.0                 # [rad/s]
 #                              3. SAFETY SET DAN KOMET
 # =============================================================================
 # Safety set CBF-QP (= simulasi): h1, h2 = psi, h3, h4 = dtheta
-psi_max_DEG = 5.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
+psi_max_DEG = 15.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
 psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 # Sedikit di bawah batas motor (no-load DDSM115 200 rpm = 20.9 rad/s; data robot 20261015: |dtheta| tidak pernah
 # > ~21 rad/s). Uji model planar 16-10: dengan 13 rad/s barrier dtheta melarang roda mengejar badan setelah dorongan
