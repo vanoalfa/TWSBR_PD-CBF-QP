@@ -7259,3 +7259,102 @@ Attempted to execute OS command:
 2026-10-30 13:01:11,726 | INFO | atera | PENGUJIAN selesai (19.8 s), tersimpan: 20261030_130111_COBA PD+CBF_PENGUJIAN KE-09 + BANDING dengan PD KE-22
 2026-10-30 13:01:14,460 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
 2026-10-30 13:02:50,635 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261030_130250_COBA PD+CBF_PERCOBAAN KE-09
+2026-10-30 13:06:12,833 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-30 13:06:12,888 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-30 13:06:12,889 | INFO | ddsm115 | motor kanan dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30058884-if00
+2026-10-30 13:06:12,943 | INFO | ddsm115 | motor kanan siap (mode current loop)
+2026-10-30 13:06:12,966 | INFO | atera | Menyiapkan CBF-QP (solver acados) ...
+2026-10-30 13:06:16,040 | INFO | atera | Menyiapkan plot realtime untuk laptop ...
+2026-10-30 13:06:16,040 | INFO | atera | plot realtime: menunggu laptop di 10.16.110.202:5005
+2026-10-30 13:06:16,040 | INFO | atera | Hardware siap. Tekan Tombol Y untuk kalibrasi.
+2026-10-30 13:06:16,248 | INFO | atera | plot realtime: laptop 10.16.111.142 tersambung
+2026-10-30 13:07:10,398 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-30 13:07:15,315 | INFO | atera | Kalibrasi selesai (sudut nol -3.57 deg, s = 0 di sini). Tekan MULAI.
+2026-10-30 13:07:17,616 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-30 13:07:22,532 | INFO | atera | Kalibrasi selesai (sudut nol -3.07 deg, s = 0 di sini). Tekan MULAI.
+2026-10-30 13:07:30,432 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-30 13:07:37,784 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:07:45,334 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:08:44,953 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:08:56,076 | ERROR | ddsm115 | motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1
+2026-10-30 13:08:56,141 | INFO | atera | motor: motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 -> tersimpan PERCOBAAN 20261030_130856_COBA PD_PERCOBAAN KE-15, PENGUJIAN 20261030_130856_COBA PD_PENGUJIAN KE-23
+2026-10-30 13:08:56,141 | INFO | atera | GANGGUAN: motor: motor kiri: 6 kali gagal berturut-turut: tidak ada balasan (0/10 byte) -> catu daya motor (12-24 V) mati, kabel RS485 A/B lepas atau tertukar, atau ID motor bukan 1 | tersimpan: PERCOBAAN 20261030_130856_COBA PD_PERCOBAAN KE-15, PENGUJIAN 20261030_130856_COBA PD_PENGUJIAN KE-23
+2026-10-30 13:08:56,146 | INFO | ddsm115 | motor kiri dibuka di /dev/serial/by-id/usb-1a86_USB_Single_Serial_5A30065203-if00
+2026-10-30 13:08:56,201 | INFO | ddsm115 | motor kiri siap (mode current loop)
+2026-10-30 13:08:56,201 | INFO | atera | Kedua motor siap.
+2026-10-30 13:09:30,999 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-30 13:09:44,350 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:09:56,863 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:10:36,041 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:10:47,879 | INFO | atera | PENGUJIAN selesai (11.8 s), tersimpan: 20261030_131047_COBA PD_PENGUJIAN KE-24
+2026-10-30 13:10:49,431 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:10:52,336 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:11:11,225 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:11:19,164 | INFO | atera | PENGUJIAN selesai (7.9 s), tersimpan: 20261030_131119_COBA PD_PENGUJIAN KE-25
+2026-10-30 13:11:21,008 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:11:25,000 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:11:59,817 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:12:10,351 | INFO | atera | PENGUJIAN selesai (10.5 s), tersimpan: 20261030_131210_COBA PD_PENGUJIAN KE-26
+2026-10-30 13:12:11,611 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:12:33,106 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:12:42,249 | INFO | atera | PENGUJIAN selesai (9.1 s), tersimpan: 20261030_131242_COBA PD_PENGUJIAN KE-27
+2026-10-30 13:12:45,856 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:12:50,460 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:12:54,018 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:13:10,465 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:13:12,375 | ERROR | atera | IMU: MPU6050 tidak menjawab di alamat 0x68 -> cek kabel SDA/SCL/VCC/GND; bila pin AD0 terhubung ke 3.3 V alamatnya 0x69 (cek: i2cdetect -y 1)
+2026-10-30 13:13:12,527 | INFO | atera | IMU gagal dibaca saat balancing: MPU6050 tidak menjawab di alamat 0x68 -> cek kabel SDA/SCL/VCC/GND; bila pin AD0 terhubung ke 3.3 V alamatnya 0x69 (cek: i2cdetect -y 1) -> tersimpan PERCOBAAN 20261030_131312_COBA PD_PERCOBAAN KE-16, PENGUJIAN 20261030_131312_COBA PD_PENGUJIAN KE-28
+2026-10-30 13:13:12,528 | INFO | atera | GANGGUAN: IMU gagal dibaca saat balancing: MPU6050 tidak menjawab di alamat 0x68 -> cek kabel SDA/SCL/VCC/GND; bila pin AD0 terhubung ke 3.3 V alamatnya 0x69 (cek: i2cdetect -y 1) | tersimpan: PERCOBAAN 20261030_131312_COBA PD_PERCOBAAN KE-16, PENGUJIAN 20261030_131312_COBA PD_PENGUJIAN KE-28
+2026-10-30 13:13:12,634 | INFO | atera | IMU terhubung kembali.
+2026-10-30 13:13:33,692 | ERROR | atera | IMU: MPU6050 tidak menjawab di alamat 0x68 -> cek kabel SDA/SCL/VCC/GND; bila pin AD0 terhubung ke 3.3 V alamatnya 0x69 (cek: i2cdetect -y 1)
+2026-10-30 13:13:51,832 | INFO | atera | IMU terhubung kembali.
+2026-10-30 13:13:52,086 | ERROR | atera | IMU: MPU6050 tidak menjawab di alamat 0x68 -> cek kabel SDA/SCL/VCC/GND; bila pin AD0 terhubung ke 3.3 V alamatnya 0x69 (cek: i2cdetect -y 1)
+2026-10-30 13:13:52,835 | INFO | atera | IMU terhubung kembali.
+2026-10-30 13:14:06,426 | INFO | atera | Balancing, mode PD, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-30 13:14:11,626 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:14:27,972 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:14:40,059 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:14:44,088 | INFO | atera | psi = 40.7 deg (> 40 deg) -> tersimpan PERCOBAAN 20261030_131444_COBA PD_PERCOBAAN KE-17, PENGUJIAN 20261030_131444_COBA PD_PENGUJIAN KE-29
+2026-10-30 13:14:44,089 | INFO | atera | KOMET: psi = 40.7 deg (> 40 deg) | tersimpan: PERCOBAAN 20261030_131444_COBA PD_PERCOBAAN KE-17, PENGUJIAN 20261030_131444_COBA PD_PENGUJIAN KE-29
+2026-10-30 13:16:08,777 | INFO | atera | Kalibrasi IMU ... jaga robot tidak bergerak dan TEGAK di titik seimbang.
+2026-10-30 13:16:13,693 | INFO | atera | Kalibrasi selesai (sudut nol -2.55 deg, s = 0 di sini). Tekan MULAI.
+2026-10-30 13:16:13,698 | INFO | atera | Mode kontrol: PD+CBF
+2026-10-30 13:16:21,990 | INFO | atera | Balancing, mode PD+CBF, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-30 13:16:38,674 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261030_131638_COBA PD+CBF_PERCOBAAN KE-10
+2026-10-30 13:16:38,674 | INFO | atera | Mode PD. Rekaman lama tersimpan: PERCOBAAN 20261030_131638_COBA PD+CBF_PERCOBAAN KE-10
+2026-10-30 13:16:40,887 | INFO | atera | ganti mode -> tersimpan PERCOBAAN 20261030_131640_COBA PD_PERCOBAAN KE-18
+2026-10-30 13:16:40,888 | INFO | atera | Mode PD+CBF. Rekaman lama tersimpan: PERCOBAAN 20261030_131640_COBA PD_PERCOBAAN KE-18
+2026-10-30 13:16:43,883 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:16:58,936 | INFO | atera | Mode BALANCING: Kp_theta aktif, setpoint roda di sini (s = 0, arah sekarang). B = DIAM.
+2026-10-30 13:17:08,240 | INFO | atera | Mode DIAM: Kp_theta mati.
+2026-10-30 13:17:11,148 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:17:22,683 | INFO | atera | PENGUJIAN selesai (11.5 s), tersimpan: 20261030_131722_COBA PD+CBF_PENGUJIAN KE-10 + BANDING dengan PD KE-29
+2026-10-30 13:17:25,573 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:17:29,990 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:17:46,403 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:17:56,921 | INFO | atera | PENGUJIAN selesai (10.5 s), tersimpan: 20261030_131756_COBA PD+CBF_PENGUJIAN KE-11 + BANDING dengan PD KE-29
+2026-10-30 13:17:59,510 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:18:03,083 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:18:27,376 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:18:49,702 | INFO | atera | PENGUJIAN selesai (22.3 s), tersimpan: 20261030_131849_COBA PD+CBF_PENGUJIAN KE-12 + BANDING dengan PD KE-29
+2026-10-30 13:18:54,045 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:19:06,599 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:19:25,559 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:19:44,252 | INFO | atera | PENGUJIAN selesai (18.7 s), tersimpan: 20261030_131944_COBA PD+CBF_PENGUJIAN KE-13 + BANDING dengan PD KE-29
+2026-10-30 13:20:35,762 | INFO | atera | Mode BALANCING: Kp_theta aktif, setpoint roda di sini (s = 0, arah sekarang). B = DIAM.
+2026-10-30 13:20:39,037 | INFO | atera | Mode DIAM: Kp_theta mati.
+2026-10-30 13:20:42,749 | INFO | atera | Mode BALANCING: Kp_theta aktif, setpoint roda di sini (s = 0, arah sekarang). B = DIAM.
+2026-10-30 13:20:49,701 | INFO | atera | Mode DIAM: Kp_theta mati.
+2026-10-30 13:20:52,792 | INFO | atera | Mode BALANCING: Kp_theta aktif, setpoint roda di sini (s = 0, arah sekarang). B = DIAM.
+2026-10-30 13:21:09,547 | INFO | atera | Mode DIAM: Kp_theta mati.
+2026-10-30 13:21:18,746 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:21:21,977 | INFO | atera | PENGUJIAN selesai (3.2 s), tersimpan: 20261030_132121_COBA PD+CBF_PENGUJIAN KE-14 + BANDING dengan PD KE-29
+2026-10-30 13:21:40,326 | INFO | atera | Mode BEBAS: PD heading dan Kp_theta mati; robot bisa ditarik tali. A = DIAM.
+2026-10-30 13:21:46,814 | INFO | atera | Mode BEBAS mati: mode DIAM, arah sekarang = setpoint heading.
+2026-10-30 13:21:57,635 | INFO | atera | PENGUJIAN dimulai: dorong robot sekarang. Tekan L3 lagi untuk selesai dan simpan.
+2026-10-30 13:22:00,867 | ERROR | atera | IMU: MPU6050 tidak menjawab di alamat 0x68 -> cek kabel SDA/SCL/VCC/GND; bila pin AD0 terhubung ke 3.3 V alamatnya 0x69 (cek: i2cdetect -y 1)
+2026-10-30 13:22:00,975 | INFO | atera | IMU gagal dibaca saat balancing: MPU6050 tidak menjawab di alamat 0x68 -> cek kabel SDA/SCL/VCC/GND; bila pin AD0 terhubung ke 3.3 V alamatnya 0x69 (cek: i2cdetect -y 1) -> tersimpan PERCOBAAN 20261030_132200_COBA PD+CBF_PERCOBAAN KE-11, PENGUJIAN 20261030_132200_COBA PD+CBF_PENGUJIAN KE-15 + BANDING dengan PD KE-29
+2026-10-30 13:22:00,975 | INFO | atera | GANGGUAN: IMU gagal dibaca saat balancing: MPU6050 tidak menjawab di alamat 0x68 -> cek kabel SDA/SCL/VCC/GND; bila pin AD0 terhubung ke 3.3 V alamatnya 0x69 (cek: i2cdetect -y 1) | tersimpan: PERCOBAAN 20261030_132200_COBA PD+CBF_PERCOBAAN KE-11, PENGUJIAN 20261030_132200_COBA PD+CBF_PENGUJIAN KE-15 + BANDING dengan PD KE-29
+2026-10-30 13:22:01,081 | INFO | atera | IMU terhubung kembali.
+2026-10-30 13:22:32,949 | INFO | atera | Balancing, mode PD+CBF, gerak DIAM. D-Pad = gerak / belok, B = BALANCING, A = BEBAS, L3 = PENGUJIAN mulai / selesai, X = roda mati.
+2026-10-30 13:23:08,198 | INFO | atera | program keluar -> tersimpan PERCOBAAN 20261030_132308_COBA PD+CBF_PERCOBAAN KE-12
