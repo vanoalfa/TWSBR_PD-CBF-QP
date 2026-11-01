@@ -13,7 +13,8 @@ Fungsi tombol (Konteks_ATERA.md, ditambah L3 / R3 untuk perekaman ISE):
     QUIT     : keluar program
     L3       : PENGUJIAN mulai (dorong robot dengan tangan); L3 lagi: PENGUJIAN selesai dan disimpan
     R3       : simpan PERCOBAAN sekarang, perekaman baru dimulai (robot tetap balancing)
-Perintah gerak: arah -1 / 0 / +1 dan belok -1 / 0 / +1, dari D-Pad atau analog kiri, di semua mode gerak:
+Perintah gerak: arah -1 / 0 / +1 dan belok -1 / 0 / +1, dari D-Pad (analog kiri hanya bila
+config.JOYSTICK_ANALOG_GERAK = True; bawaan False: analog kiri hanya ditekan sebagai L3), di semua mode gerak:
 D-Pad atas / bawah = maju / mundur (Kvel; di BALANCING dilepas = setpoint theta baru di titik itu), kiri / kanan = belok
 (tanpa atas / bawah: berputar di tempat).
 
@@ -89,6 +90,8 @@ BANTUAN = (
     "LB / RB  : mode kontrol PD / PD + CBF-QP",
     "Tombol B : mode BALANCING nyala / mati: Kp_theta aktif, setpoint roda (s = 0 dan arah) di sini. Mati = DIAM",
     "D-Pad    : atas / bawah = maju / mundur (Kvel), di BALANCING dilepas = setpoint baru di titik itu",
+    "           kiri / kanan = belok (tanpa atas / bawah: berputar di tempat). Analog kiri TIDAK menggerakkan robot"
+    if not config.JOYSTICK_ANALOG_GERAK else
     "           kiri / kanan = belok (tanpa atas / bawah: berputar di tempat). Analog kiri sama dengan D-Pad",
     "Tombol A : mode BEBAS nyala / mati: tanpa PD heading dan Kp_theta (bisa ditarik tali). Mati = DIAM",
     "L3       : PENGUJIAN mulai (lalu dorong robot dengan tangan), L3 lagi = selesai dan simpan",
@@ -219,9 +222,11 @@ class Joystick:
         "Kanan" = belok kanan, "Kiri" = belok kiri, jadi cukup DPAD_MAP yang harus benar.
         Analog kiri: belok dibalik dengan config.JOYSTICK_ANALOG_BELOK_TANDA = -1."""
         arah = _dari_nama(config.DPAD_MAJU_CODE, self._dpad.get(config.DPAD_MAJU_CODE, 0), "Atas", "Bawah")
+        belok = _dari_nama(config.DPAD_BELOK_CODE, self._dpad.get(config.DPAD_BELOK_CODE, 0), "Kanan", "Kiri")
+        if not config.JOYSTICK_ANALOG_GERAK:          # analog kiri hanya untuk L3 (PENGUJIAN), tidak menggerakkan
+            return arah, belok
         if arah == 0:
             arah = _arah(-self._analog.get(ANALOG_MAJU, 0.0))
-        belok = _dari_nama(config.DPAD_BELOK_CODE, self._dpad.get(config.DPAD_BELOK_CODE, 0), "Kanan", "Kiri")
         if belok == 0:
             belok = _arah(float(config.JOYSTICK_ANALOG_BELOK_TANDA) * self._analog.get(ANALOG_BELOK, 0.0))
         return arah, belok
