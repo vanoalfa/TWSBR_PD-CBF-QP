@@ -265,6 +265,9 @@ DPAD_BELOK_CODE = 16
 # Arah D-Pad dibaca dari NAMA di joystick_mapping.DPAD_MAP ("Kiri"/"Kanan"/"Atas"/"Bawah"). Bila belok
 # lewat analog kiri masih terbalik, ganti ke -1.0 (D-Pad tidak terpengaruh). ASUMSI: 1.0 (belum diuji).
 JOYSTICK_ANALOG_BELOK_TANDA = 1.0
+# Analog kiri: False = hanya dipakai sebagai tombol L3 (PENGUJIAN), tidak menggerakkan robot (gerak lewat D-Pad).
+# True = analog kiri ikut menggerakkan robot seperti D-Pad.
+JOYSTICK_ANALOG_GERAK = False
 
 # Keyboard terminal (SSH / terminal tempat GUI berjalan), tombolnya lihat joystick_mapping.TOMBOL_KEYBOARD.
 # Terminal tidak memberi tahu saat tombol DILEPAS: W A S D dianggap masih ditahan selama pengulangan otomatis
