@@ -58,7 +58,7 @@ dpsi_setpoint = 0.0                 # [rad/s]
 #                              3. SAFETY SET DAN KOMET
 # =============================================================================
 # Safety set CBF-QP (= simulasi): h1, h2 = psi, h3, h4 = dtheta
-psi_max_DEG = 15.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
+psi_max_DEG = 5.0                  # [deg]    batas psi yang dijaga CBF (h1, h2)
 psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 # Sedikit di bawah batas motor (no-load DDSM115 200 rpm = 20.9 rad/s; data robot 20261015: |dtheta| tidak pernah
 # > ~21 rad/s). Uji model planar 16-10: dengan 13 rad/s barrier dtheta melarang roda mengejar badan setelah dorongan
@@ -99,10 +99,10 @@ KOMET_REM_SELESAI = 0.5             # [rad/s]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari D-Pad atas / bawah (keyboard W / S)
-Kp_psi = 50.29 #DOBS 12.12                      # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 8.66 #DOBS 2.27                       # [N m s/rad]
-Kp_theta = 1.39 #DOBS 0.15                     # [N m/rad]    hanya mode BALANCING tanpa D-Pad atas / bawah
-Kd_theta = 0.77 #DOBS 0.32                     # [N m s/rad]
+Kp_psi = 12.12                      # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 2.27                       # [N m s/rad]
+Kp_theta = 0.15                     # [N m/rad]    hanya mode BALANCING tanpa D-Pad atas / bawah
+Kd_theta = 0.32                     # [N m s/rad]
 # Kvel*arah saat D-Pad atas / bawah ditekan (arah +1 = atas, -1 = bawah). Kecepatan tunak di lantai datar:
 #     v = -R*Kvel*arah/Kd_theta      -> Kvel NEGATIF supaya D-Pad atas berjalan ke DEPAN
 #     (Kd_theta 0.30: Kvel -1.50 -> 0.25 m/s; no-load DDSM115 1.05 m/s)
@@ -137,9 +137,9 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              5. CBF-QP  (= simulasi)
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 47.38 #DOBS 07.42                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 38.30 #DOBS 08.45                      # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 138.99 #DOBS 269.18                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
+Alpha_1 = 07.42                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 08.45                      # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 269.18                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 
 # Semua Alpha_<nomor> berurutan di atas (otomatis dipakai cbf_qp.py dan ise.py).
 NAMA_ALPHA = []
@@ -162,14 +162,14 @@ CBF_QP_SOLVER_BANDING = ["eksak", "daqp", "qpoases", "osqp", "proxqp", "qrqp", "
 # untuk ATERA rho >= 10 sudah cukup). Bila constraint bertabrakan, yang bobotnya KECIL dilonggarkan dulu = PRIORITAS.
 # Urutan = DAFTAR_C (h1 .. h4). ASUMSI prioritas: psi (h1, h2) > dtheta (h3, h4).
 # Beda dengan segway_cbf.py dosen (satu slack bersama, penalti kuadrat): alasannya di docstring cbf_qp.py.
-CBF_SLACK_AKTIF = False              # False = tanpa slack (perilaku lama: tidak ada solusi -> GAGAL -> u_PD)
+CBF_SLACK_AKTIF = True              # False = tanpa slack (perilaku lama: tidak ada solusi -> GAGAL -> u_PD)
 CBF_RHO_SLACK = [1.0e6, 1.0e6, 1.0e2, 1.0e2]    # h1 h2 (psi) | h3 h4 (dtheta)
 CBF_SLACK_EPS = 1.0e-4              # suku kuadrat kecil (supaya QP solver punya Hessian positif)
 CBF_TOL_SLACK = 1.0e-6              # slack di atas ini -> status SLACK
 # Barrier psi memakai psi_max - CBF_MARGIN_DEG (menutup jeda DOB saat dorongan mulai / berhenti).
 CBF_MARGIN_DEG = 1.0                # [deg] ASUMSI (dosen 0.5 deg dengan DOB 2 ms; robot nyata DOB 20 ms)
 # DOB (Disturbance Observer, class DOB di cbf_qp.py): d_hat = low-pass(percepatan terukur - model).
-DOB_AKTIF = False                    # True: d_hat dipakai CBF-QP. False: d_hat hanya dihitung dan dicatat di CSV
+DOB_AKTIF = True                    # True: d_hat dipakai CBF-QP. False: d_hat hanya dihitung dan dicatat di CSV
 # Noise turunan gyro saat robot diam (data 20261015 KE-04): 0.7 rad/s^2 -> 0.36 (tau 10 ms), 0.26 (20 ms), 0.16 (50 ms)
 DOB_TAU_S = 0.020                   # [s] konstanta waktu low-pass DOB (dosen 0.002 s di simulasi tanpa noise)
 DOB_BATAS = 200.0                   # [rad/s^2] batas |d_hat| (pengaman bila sensor sesaat salah)
@@ -182,7 +182,7 @@ CBF_TOL_KOEFISIEN = 1.0e-12
 # Torsi roda nyata per A arus perintah. Gain dan Alpha di atas dituning dengan 0.75 (profil DATASHEET).
 # ASUMSI: torsi roda fisik = datasheet. Uji delay 20261009 memberi ~0.238; bila itu yang benar, isi 0.238 di sini
 # (CBF-QP ikut memakai torsi itu) dan pakai gain hasil tuning profil TERUKUR.
-MOTOR_KT_EFEKTIF = 0.238             # [N m/A]  (RASIO_TORSI dihitung di akhir file)
+MOTOR_KT_EFEKTIF = 0.75             # [N m/A]  (RASIO_TORSI dihitung di akhir file)
 
 # =============================================================================
 #                              5b. ACADOS  (CBF_QP_SOLVER = "acados", WORKSPACE ACADOS di cbf_qp.py)
@@ -228,7 +228,7 @@ ENCODER_RELATIVE_TO_BODY = True     # encoder mengukur roda relatif terhadap bad
 DTHETA_SOURCE = "posisi"            # "posisi" (turunan encoder, disarankan) atau "rpm" (tertinggal ~0.1 s)
 DTHETA_FILTER_TAU_S = 0.020         # [s] low-pass dtheta
 
-MOTOR_KT = 0.238                     # [N m/A] datasheet
+MOTOR_KT = 0.75                     # [N m/A] datasheet
 MOTOR_CURRENT_FULL_SCALE_A = 8.0    # current loop: -32767..32767 <-> -8..8 A
 MOTOR_RAW_FULL_SCALE = 32767
 MOTOR_POSITION_COUNTS = 32768       # posisi 0..32767 <-> 0..360 deg
@@ -265,9 +265,6 @@ DPAD_BELOK_CODE = 16
 # Arah D-Pad dibaca dari NAMA di joystick_mapping.DPAD_MAP ("Kiri"/"Kanan"/"Atas"/"Bawah"). Bila belok
 # lewat analog kiri masih terbalik, ganti ke -1.0 (D-Pad tidak terpengaruh). ASUMSI: 1.0 (belum diuji).
 JOYSTICK_ANALOG_BELOK_TANDA = 1.0
-# False: analog kiri TIDAK menggerakkan robot (hanya D-Pad). Analog kiri dipakai sebagai tombol L3 (PENGUJIAN) saja,
-# supaya stik yang ikut tergeser saat L3 ditekan tidak membuat robot maju / mundur. True: analog kiri = D-Pad.
-JOYSTICK_ANALOG_GERAK = False
 
 # Keyboard terminal (SSH / terminal tempat GUI berjalan), tombolnya lihat joystick_mapping.TOMBOL_KEYBOARD.
 # Terminal tidak memberi tahu saat tombol DILEPAS: W A S D dianggap masih ditahan selama pengulangan otomatis

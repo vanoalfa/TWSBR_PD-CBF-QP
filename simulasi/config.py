@@ -67,7 +67,7 @@ dtheta_setpoint = 0.0               # [rad/s]
 #                              4. SAFETY SET DAN KOMET
 # =============================================================================
 # Safety set CBF-QP (batas simetris: min = -max): h1, h2 = psi, h3, h4 = dtheta
-psi_max_DEG = 10.0                  # [deg]    batas psi yang dijaga CBF (h1, h2); bisa diubah di jendela Kontrol
+psi_max_DEG = 5.0                  # [deg]    batas psi yang dijaga CBF (h1, h2); bisa diubah di jendela Kontrol
                                     #          (= robot fisik; 10 deg supaya koreksi CBF-QP terlihat jelas dibanding PD)
 psi_max = math.radians(psi_max_DEG) # [rad]    |psi|    <= psi_max
 # ASUMSI: sedikit di bawah batas kecepatan motor DDSM115 (no-load 200 rpm = 20.9 rad/s, wiki Waveshare), = robot fisik.
@@ -98,13 +98,13 @@ YAW_KOMET_DEG = 90.0                # [deg]
 # u_PD = BALANCE_DIRECTION_SIGN * (Kp_psi*error_psi + Kd_psi*error_dpsi
 #                                  + Kp_theta*error_theta + Kd_theta*error_dtheta) + Kvel*arah
 # error = setpoint - state,   arah = -1 / 0 / +1 dari W / S (robot fisik: D-Pad atas / bawah)
-Kp_psi = 50.29 #DOBS 12.12                    # [N m/rad]    semua gain menghasilkan torsi SATU roda
-Kd_psi = 8.66 #DOBS 02.27                      # [N m s/rad]
-Kp_theta = 1.39 #DOBS 0.15                     # [N m/rad]    hanya mode BALANCING tanpa W / S
-Kd_theta = 0.77 #DOBS 0.32                     # [N m s/rad]
+Kp_psi = 12.12                    # [N m/rad]    semua gain menghasilkan torsi SATU roda
+Kd_psi = 02.27                      # [N m s/rad]
+Kp_theta = 0.15                     # [N m/rad]    hanya mode BALANCING tanpa W / S
+Kd_theta = 0.32                     # [N m s/rad]
 # Kvel*arah saat W / S ditahan. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
 # -> Kvel NEGATIF supaya W maju (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s), sama dengan robot fisik.
-Kvel = -2.00                        # [N m]
+Kvel = -1.16                        # [N m]
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan apalah_bisa/tunning.py).
@@ -131,9 +131,9 @@ TORSI_BELOK = 0.02                  # [N m]
 #                              6. CBF-QP
 # =============================================================================
 # Gain (input manual, default 0; alpha_i(h) = Alpha_i * h)
-Alpha_1 = 47.38 #DOBS 07.42                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_2 = 38.30 #DOBS 08.45                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
-Alpha_3 = 138.99 #DOBS 269.18                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
+Alpha_1 = 07.42                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_2 = 08.45                     # [1/s]  h1, h2 (psi, HOCBF orde 2)
+Alpha_3 = 269.18                    # [1/s]  h3, h4 (dtheta, CBF orde 1)
 
 # Nama semua Alpha di atas: Alpha_1, Alpha_2, ... (berurutan, berhenti di nomor pertama yang tidak ada).
 # Alpha baru cukup ditambahkan di atas, lalu otomatis dipakai cbf_qp.py, simulasi.py (jendela Kontrol), dan ise.py (kolom CSV).
@@ -152,13 +152,13 @@ CBF_QP_SOLVER = "acados"
 # struktur QP ini, "highs" bisa macet (iterasi tanpa akhir), "ipqp" gagal di semua kasus.
 CBF_QP_SOLVER_BANDING = ["eksak", "daqp", "qpoases", "osqp", "proxqp", "qrqp", "acados"]
 # Slack, margin, DOB (= robot fisik, penjelasan lengkap di cbf_qp.py dan program/atera_program/config.py)
-CBF_SLACK_AKTIF = False
+CBF_SLACK_AKTIF = True
 # bobot slack per constraint (exact penalty, urutan DAFTAR_C h1..h4): yang kecil dilonggarkan dulu bila bertabrakan
 CBF_RHO_SLACK = [1.0e6, 1.0e6, 1.0e2, 1.0e2]    # h1 h2 (psi) | h3 h4 (dtheta)
 CBF_SLACK_EPS = 1.0e-4
 CBF_TOL_SLACK = 1.0e-6
 CBF_MARGIN_DEG = 1.0                # [deg] barrier psi = psi_max - margin (garis merah plot tetap di psi_max)
-DOB_AKTIF = False                    # True: d_hat dipakai CBF-QP. False: hanya dicatat
+DOB_AKTIF = True                    # True: d_hat dipakai CBF-QP. False: hanya dicatat
 DOB_TAU_S = 0.020                   # [s]
 DOB_BATAS = 200.0                   # [rad/s^2]
 # True  = CBF-QP (dan DOB) memakai kemiringan lantai config.zeta: ikut berubah saat zeta_DEG diubah di jendela Kontrol
@@ -206,7 +206,7 @@ ENCODER_RELATIVE_TO_BODY = True
 # BUTUH PENGUJIAN ENCODER: arus 0, tahan roda di lantai, miringkan badan 10 deg dengan tangan;
 # posisi encoder berubah ~10 deg = True, tidak berubah = False.
 
-MOTOR_KT = 0.238                     # [N m/A]  torque constant (datasheet)
+MOTOR_KT = 0.75                     # [N m/A]  torque constant (datasheet)
 # BUTUH PENGUJIAN BEBAN TAMBAHAN (ddsm115_inersia_testing.py --j-add --g-ref): uji inersia 20261004 memberi
 # G = K/J = 260 rad/s^2 per A perintah, yaitu K = 0.24 N m/A untuk j_theta = 9.2e-4 (bukan 0.75).
 MOTOR_STALL_CURRENT_A = 2.7         # [A]      locked-rotor current (datasheet; rated 1.5 A / 0.96 N m)
@@ -277,7 +277,7 @@ PLOT_WARNA_PD_CBF = "tab:blue"      # kurva mode PD + CBF-QP (biru)
 # Hasil testing/DELAY/atera_delay_testing.py, 20261009.
 # K efektif = G x j_theta, G = 255 (kiri) dan 264 (kanan) rad/s^2 per A -> 0.234 dan 0.243 N m/A.
 # ASUMSI: benar bila j_theta = 9.2e-4 (lihat BUTUH PENGUJIAN BEBAN TAMBAHAN di atas).
-MOTOR_KT_EFEKTIF = 0.238            # [N m/A] torsi roda nyata per A arus perintah (rata-rata kiri dan kanan)
+MOTOR_KT_EFEKTIF = 0.75 #0.238            # [N m/A] torsi roda nyata per A arus perintah (rata-rata kiri dan kanan)
 # torsi nyata / torsi perintah. Dipakai simulasi.py (torsi roda di PyBullet) DAN cbf_qp.py (g(x) di model CBF-QP),
 # supaya CBF-QP menghitung dengan tenaga roda yang sama dengan yang dipakai simulasi.
 RASIO_TORSI = MOTOR_KT_EFEKTIF / MOTOR_KT
@@ -438,11 +438,11 @@ OPTUNA_BATAS = {
     "TERUKUR": {
         "Kp_psi":   (5.0, 80.0),
         "Kd_psi":   (0.5, 9.0),
-        "Kd_theta": (0.0, 5.5),
-        "Kp_theta": (0.15, 5.0),
-        "Alpha_1":  (5.00, 55.28),
-        "Alpha_2":  (5.00, 55.28),
-        "Alpha_3":  (11.00, 500.0),
+        "Kd_theta": (0.0, 1.5),
+        "Kp_theta": (0.15, 4.0),
+        "Alpha_1":  (5.00, 28.28),
+        "Alpha_2":  (5.00, 28.28),
+        "Alpha_3":  (11.00, 100.0),
     },
     "DATASHEET": {
         "Kp_psi":   (5.0, 25.0),
