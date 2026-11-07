@@ -620,13 +620,15 @@ UJI1_SUDUT_BANDUL_DEG = [30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]   # [deg] phi
 UJI_TENANG_S = 1.0                  # [s] robot diletakkan lalu dibiarkan tenang (TIDAK direkam)
 UJI_SEBELUM_PUKUL_S = 1.0           # [s] UJI 1: perekaman dimulai sekian detik sebelum pukulan
 UJI_JEDA_KOMET_S = 1.5              # [s] setelah KOMET: motor mati, robot dibiarkan jatuh (tidak direkam), lalu diulang
-# Robot "stabil (diam)" = |psi|, |dpsi|, |dtheta| di bawah batas ini terus-menerus UJI_STABIL_LAMA_S detik
-# (sama dengan syarat stabil tuning). Perekaman selesai saat robot stabil.
+# Robot "berdiri stabil (diam)" = |psi| < UJI_STABIL_PSI_DEG terus-menerus DAN poros roda bergeser kurang dari
+# UJI_DIAM_GESER_M selama UJI_STABIL_LAMA_S detik. Perekaman selesai saat robot diam.
+# (20261107: dinilai dari POSISI, bukan dari |dpsi| / |dtheta|. Pengujian 20261107 menunjukkan PD+CBF-QP 10 / 15 deg
+#  berdiri tegak dan tidak berpindah, tetapi rodanya bergetar kecil, sehingga syarat |dpsi| / |dtheta| tidak pernah
+#  terpenuhi dan pengujian macet.)
 UJI_STABIL_PSI_DEG = 5.0            # [deg]
-UJI_STABIL_DPSI_DEG_S = 5.0         # [deg/s]
-UJI_STABIL_DTHETA_DEG_S = 6.0       # [deg/s]
+UJI_DIAM_GESER_M = 0.01             # [m]
 UJI_STABIL_LAMA_S = 5.0             # [s]
-UJI_STABIL_BATAS_S = 30.0           # [s] UJI 1: batas tunggu stabil sejak pukulan. ASUMSI: lewat batas = GAGAL
+UJI_STABIL_BATAS_S = 30.0           # [s] UJI 1: batas tunggu diam sejak pukulan. ASUMSI: lewat batas = GAGAL
 
 # UJI 2: lintasan dari posisi awal robot ke depan (+Y): bidang datar bawah -> tanjakan -> bidang datar atas.
 # Bidang datar bawah = lantai PyBullet. Tanjakan = papan tipis (seperti papan miring robot fisik) bersandar ke panggung
@@ -645,13 +647,20 @@ UJI2_WARNA_PANGGUNG = [0.62, 0.62, 0.66, 1.0]
 UJI2_CBF_ZETA_DEG = 7.5             # [deg]
 UJI2_DIAM_AWAL_S = 1.0              # [s] diam di bidang datar bawah (direkam) sebelum naik
 UJI2_LEPAS_ATAS_M = 0.3             # [m] Kvel dilepas setelah poros roda sejauh ini masuk bidang datar atas
-UJI2_DIAM_ATAS_S = 1.0              # [s] di bidang atas: robot diam (batas UJI_STABIL_*) sekian detik, lalu mundur
+# Di bidang atas: Kvel dilepas, robot BERHENTI UJI2_DIAM_ATAS_S detik (waktu tetap, tanpa syarat), lalu SELALU mundur.
+UJI2_DIAM_ATAS_S = 1.0              # [s]
 UJI2_LEPAS_TURUN_M = 0.0            # [m] mundur (Kvel) dilepas setelah poros roda melewati tepi atas tanjakan sejauh ini
-# Robot macet saat turun (belum sampai bidang bawah dan |dtheta| < UJI_STABIL_DTHETA_DEG_S selama UJI2_KETUKAN_DIAM_S):
-# diberi satu ketukan Kvel arah mundur selama UJI2_KETUKAN_S, paling banyak UJI2_KETUKAN_MAKS kali. Bila tetap tidak
-# sampai bawah dan sudah stabil, perekaman selesai dengan catatan "berhenti di tanjakan" (BERHASIL, tidak KOMET).
-# Ketukan terlihat di kolom CSV "arah" (-1).
+# NAIK: bila poros roda tidak maju UJI2_NAIK_MACET_M dalam UJI2_NAIK_MACET_S detik -> GAGAL "tidak kuat naik"
+# (contoh PD+CBF-QP psi_max 5 deg: diam di tanjakan 7.5 deg butuh psi 6.2 deg, barrier psi hanya 4 deg).
+UJI2_NAIK_MACET_S = 10.0            # [s]
+UJI2_NAIK_MACET_M = 0.05            # [m]
+# Robot macet saat turun (belum sampai bidang bawah dan poros roda turun kurang dari UJI2_KETUKAN_GESER_M selama
+# UJI2_KETUKAN_DIAM_S): diberi satu ketukan Kvel arah mundur selama UJI2_KETUKAN_S, paling banyak UJI2_KETUKAN_MAKS
+# kali. Bila tetap tidak sampai bawah dan sudah diam (UJI_STABIL_*), perekaman selesai dengan catatan "berhenti di
+# tanjakan" (BERHASIL, tidak KOMET). Ketukan terlihat di kolom CSV "arah" (-1).
+# Selesai: robot BERHENTI di bidang datar bawah = diam (UJI_STABIL_PSI_DEG, UJI_DIAM_GESER_M) UJI_STABIL_LAMA_S detik.
 UJI2_KETUKAN_DIAM_S = 1.0           # [s]
+UJI2_KETUKAN_GESER_M = 0.01         # [m]
 UJI2_KETUKAN_S = 0.2                # [s]
 UJI2_KETUKAN_MAKS = 5
 UJI2_BATAS_S = 120.0                # [s] ASUMSI: batas waktu satu percobaan UJI 2 sejak mulai direkam (lewat = GAGAL)

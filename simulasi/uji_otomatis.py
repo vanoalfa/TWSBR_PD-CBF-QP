@@ -10,14 +10,18 @@ Urutan (semua: mode gerak DIAM tanpa Kp_theta, constraint CBF-QP h1 .. h4, gain 
     UJI 2  tanjakan 7.5 deg, 2.41 m    : PD -> PD+CBF-QP 5 deg -> 10 deg -> 15 deg
 Satu percobaan UJI 1:
     robot diletakkan -> tenang UJI_TENANG_S (tidak direkam) -> mulai merekam -> UJI_SEBELUM_PUKUL_S -> dipukul dari
-    BELAKANG ke depan (seperti tombol O) dengan gaya F selama LAMA_DORONG -> direkam sampai robot stabil
+    BELAKANG ke depan (seperti tombol O) dengan gaya F selama LAMA_DORONG -> direkam sampai robot DIAM
     UJI_STABIL_LAMA_S detik (BERHASIL), KOMET (GAGAL), atau lewat UJI_STABIL_BATAS_S sejak pukulan (GAGAL)
+    DIAM = |psi| < UJI_STABIL_PSI_DEG dan poros roda bergeser < UJI_DIAM_GESER_M selama waktu itu (dari POSISI, jadi
+    getaran kecil roda tidak membuat robot dianggap belum diam).
 Satu percobaan UJI 2 (lintasan: bidang datar bawah -> tanjakan -> bidang datar atas, dibuat simulasi.buat_lintasan):
     robot diletakkan UJI2_DATAR_BAWAH_M sebelum tanjakan -> tenang (tidak direkam) -> mulai merekam -> diam
     UJI2_DIAM_AWAL_S -> NAIK (Kvel, arah maju) -> Kvel dilepas setelah poros roda UJI2_LEPAS_ATAS_M masuk bidang atas
-    -> diam UJI2_DIAM_ATAS_S -> MUNDUR (Kvel, arah mundur) HANYA di bidang atas, sampai poros roda melewati tepi atas
-    tanjakan -> Kvel dilepas, robot TURUN karena gravitasi (bila macet: ketukan Kvel arah mundur UJI2_KETUKAN_S, maks
-    UJI2_KETUKAN_MAKS kali) -> sampai bidang datar bawah dan stabil UJI_STABIL_LAMA_S detik (BERHASIL)
+    -> berhenti UJI2_DIAM_ATAS_S detik (waktu tetap, SELALU lanjut) -> MUNDUR (Kvel, arah mundur) HANYA di bidang atas,
+    sampai poros roda melewati tepi atas tanjakan -> Kvel dilepas, robot TURUN karena gravitasi (bila macet: ketukan
+    Kvel arah mundur UJI2_KETUKAN_S, maks UJI2_KETUKAN_MAKS kali) -> BERHENTI di bidang datar bawah: DIAM
+    UJI_STABIL_LAMA_S detik (BERHASIL). Tidak maju UJI2_NAIK_MACET_M dalam UJI2_NAIK_MACET_S saat naik = GAGAL
+    "tidak kuat naik".
 Berhasil -> disimpan, lanjut. Gagal -> diulang sampai UJI_PERCOBAAN_MAKS kali; yang disimpan hanya GAGAL terakhir.
 
 Gaya pukulan bandul (config.py bagian 11, sama dengan tabel Excel pengujian bandul):
@@ -34,6 +38,7 @@ program/atera_program/ise.py dimuat lewat path (tanpa salinan, sama seperti kalm
 pengujian di judul. Penyimpanan berjalan di proses terpisah supaya simulasi (dan rekaman layar) tidak tersendat.
 """
 
+import collections
 import csv
 import importlib.util
 import math
@@ -295,6 +300,8 @@ class UjiOtomatis:
         self.hasil_terakhir = "-"
         self.jumlah = {BERHASIL: 0, GAGAL: 0}
         self.path_ringkasan = ""
+        self.riwayat = collections.deque()     # (t sejak diletakkan, y poros, |psi|) 15 s terakhir (lihat diam())
+        self.t_jalan = 0.0                     # [s] waktu sejak robot diletakkan
 
         # Nilai terakhir (tampilan)
         self.x = [0.0, 0.0, 0.0, 0.0]
@@ -407,7 +414,7 @@ class UjiOtomatis:
         return hasil, sebab
 
     def jalankan_uji1(self):
-        """UJI 1: tenang -> rekam -> 1 s -> dipukul dari belakang -> sampai stabil."""
+        """UJI 1: tenang -> rekam -> 1 s -> dipukul dari belakang -> sampai DIAM UJI_STABIL_LAMA_S detik."""
         self.fase = "robot diletakkan, tenang %g s (belum direkam)" % config.UJI_TENANG_S
         self.jalan_selama(config.UJI_TENANG_S)
         self.mulai_rekam()
@@ -418,102 +425,110 @@ class UjiOtomatis:
         self.sim.dorong(1)                       # dari belakang, ke depan (seperti tombol O)
         print("  dipukul dari belakang di t = %.2f s: bandul %g deg -> F %.2f N selama %.3f s (impuls %.3f N s)"
               % (self.t_rekam, self.sudut, self.gaya, config.LAMA_DORONG, impuls_bandul(self.sudut)))
-        lama_stabil = 0.0
         t_pukul = 0.0
         while True:
-            self.fase = ("dipukul %.2f N, menunggu stabil %.0f / %g s (batas %g s, sudah %.0f s)"
-                         % (self.gaya, math.floor(lama_stabil), config.UJI_STABIL_LAMA_S, config.UJI_STABIL_BATAS_S,
-                            math.floor(t_pukul)))
-            x = self.siklus(0)
+            gerak = self.geser(min(t_pukul, config.UJI_STABIL_LAMA_S)) if t_pukul > 0.0 else None
+            self.fase = ("dipukul %.2f N, menunggu diam %g s (geser %s cm, batas %g cm) | sudah %.0f / %g s"
+                         % (self.gaya, config.UJI_STABIL_LAMA_S, "-" if gerak is None else "%.1f" % (gerak * 100.0),
+                            config.UJI_DIAM_GESER_M * 100.0, math.floor(t_pukul), config.UJI_STABIL_BATAS_S))
+            self.siklus(0)
             t_pukul = t_pukul + config.DT
-            if self.sim.sisa_dorong <= 0.0 and self.stabil(x):
-                lama_stabil = lama_stabil + config.DT
-            else:
-                lama_stabil = 0.0
-            if lama_stabil >= config.UJI_STABIL_LAMA_S - 0.5 * config.DT:
-                return BERHASIL, "stabil %g s" % config.UJI_STABIL_LAMA_S
+            if t_pukul >= config.UJI_STABIL_LAMA_S - 0.5 * config.DT and self.diam(config.UJI_STABIL_LAMA_S):
+                return BERHASIL, "diam %g s" % config.UJI_STABIL_LAMA_S
             if t_pukul >= config.UJI_STABIL_BATAS_S - 0.5 * config.DT:
-                return GAGAL, "tidak stabil dalam %g s sejak pukulan" % config.UJI_STABIL_BATAS_S
+                return GAGAL, "tidak diam dalam %g s sejak pukulan" % config.UJI_STABIL_BATAS_S
 
     def jalankan_uji2(self):
-        """UJI 2: diam -> naik (Kvel) -> berhenti di bidang atas -> mundur (Kvel) sampai tepi -> turun (gravitasi)."""
+        """UJI 2: diam -> NAIK (Kvel) -> berhenti di bidang atas UJI2_DIAM_ATAS_S detik -> MUNDUR (Kvel) sampai tepi
+        turunan -> TURUN karena gravitasi -> BERHENTI (diam) di bidang datar bawah."""
         lin = self.sim.lintasan
         dt = config.DT
+
+        def langkah(arah):
+            x = self.siklus(arah)
+            self.cek_waktu()
+            return x
+
         self.fase = "robot diletakkan %g m sebelum tanjakan, tenang %g s (belum direkam)" \
             % (config.UJI2_DATAR_BAWAH_M, config.UJI_TENANG_S)
         self.jalan_selama(config.UJI_TENANG_S)
         self.mulai_rekam()
         self.fase = "diam %g s di bidang datar bawah" % config.UJI2_DIAM_AWAL_S
-        self.jalan_selama(config.UJI2_DIAM_AWAL_S)
+        for _ in range(int(round(config.UJI2_DIAM_AWAL_S / dt))):
+            langkah(0)
 
-        # NAIK: Kvel arah maju sampai poros roda UJI2_LEPAS_ATAS_M masuk bidang datar atas
+        # 1. NAIK: Kvel arah maju sampai poros roda UJI2_LEPAS_ATAS_M masuk bidang datar atas. Bila poros tidak maju
+        #    UJI2_NAIK_MACET_M dalam UJI2_NAIK_MACET_S detik: GAGAL "tidak kuat naik".
         batas = lin["y_puncak"] + config.UJI2_LEPAS_ATAS_M
-        print("  naik dengan Kvel %g (arah maju) di t = %.2f s" % (self.params["Kvel"], self.t_rekam))
+        print("  NAIK dengan Kvel %g (arah maju) di t = %.2f s" % (self.params["Kvel"], self.t_rekam))
+        y_terjauh = self.y_poros()
+        t_terjauh = self.t_rekam
         while self.y_poros() < batas:
             self.fase = ("NAIK: Kvel %g arah maju | poros %.1f m dari awal tanjakan (Kvel dilepas di %.1f m)"
                          % (self.params["Kvel"], self.y_poros() - lin["y_mulai"], batas - lin["y_mulai"]))
-            self.siklus(1)
-            self.cek_waktu()
+            langkah(1)
+            y = self.y_poros()
+            if y > y_terjauh + config.UJI2_NAIK_MACET_M:
+                y_terjauh = y
+                t_terjauh = self.t_rekam
+            elif self.t_rekam - t_terjauh >= config.UJI2_NAIK_MACET_S:
+                return GAGAL, ("tidak kuat naik: tidak maju %g m dalam %g s, terjauh %.2f m dari awal tanjakan"
+                               % (config.UJI2_NAIK_MACET_M, config.UJI2_NAIK_MACET_S, y_terjauh - lin["y_mulai"]))
 
-        # BERHENTI di bidang atas: diam UJI2_DIAM_ATAS_S detik
-        print("  Kvel dilepas di bidang atas di t = %.2f s" % self.t_rekam)
-        lama_diam = 0.0
-        while lama_diam < config.UJI2_DIAM_ATAS_S - 0.5 * dt:
-            self.fase = "Kvel dilepas di bidang atas, menunggu robot diam %.1f / %g s" \
-                % (math.floor(lama_diam * 10.0) / 10.0, config.UJI2_DIAM_ATAS_S)
-            x = self.siklus(0)
-            self.cek_waktu()
-            lama_diam = lama_diam + dt if self.stabil(x) else 0.0
+        # 2. BERHENTI di bidang atas: Kvel dilepas, tunggu UJI2_DIAM_ATAS_S detik (waktu tetap), lalu SELALU mundur.
+        print("  Kvel dilepas di bidang atas di t = %.2f s, berhenti %g s" % (self.t_rekam, config.UJI2_DIAM_ATAS_S))
+        jumlah = int(round(config.UJI2_DIAM_ATAS_S / dt))
+        for i in range(jumlah):
+            self.fase = "BERHENTI di bidang atas (Kvel dilepas) %.1f / %g s, lalu mundur" \
+                % (math.floor(i * dt * 10.0) / 10.0, config.UJI2_DIAM_ATAS_S)
+            langkah(0)
 
-        # MUNDUR: Kvel arah mundur HANYA di bidang atas, sampai poros roda melewati tepi atas tanjakan
+        # 3. MUNDUR: Kvel arah mundur HANYA di bidang atas, sampai poros roda melewati tepi atas tanjakan
         batas = lin["y_puncak"] - config.UJI2_LEPAS_TURUN_M
-        print("  mundur dengan Kvel (arah mundur) di t = %.2f s" % self.t_rekam)
+        print("  MUNDUR dengan Kvel (arah mundur) di t = %.2f s" % self.t_rekam)
         while self.y_poros() > batas:
-            self.fase = "MUNDUR: Kvel %g arah mundur sampai tepi turunan (%.1f m lagi)" \
+            self.fase = "MUNDUR: Kvel %g arah mundur sampai tepi turunan (%.2f m lagi)" \
                 % (self.params["Kvel"], max(0.0, self.y_poros() - batas))
-            self.siklus(-1)
-            self.cek_waktu()
+            langkah(-1)
 
-        # TURUN karena gravitasi (Kvel dilepas); ketukan Kvel bila macet sebelum sampai bidang bawah
-        print("  Kvel dilepas di tepi turunan di t = %.2f s: turun karena gravitasi" % self.t_rekam)
+        # 4. TURUN karena gravitasi (Kvel dilepas). Macet (poros turun < UJI2_KETUKAN_GESER_M selama
+        #    UJI2_KETUKAN_DIAM_S, belum sampai bidang bawah) -> ketukan Kvel arah mundur UJI2_KETUKAN_S.
+        # 5. BERHENTI di bidang datar bawah: DIAM UJI_STABIL_LAMA_S detik -> BERHASIL.
+        print("  Kvel dilepas di tepi turunan di t = %.2f s: TURUN karena gravitasi" % self.t_rekam)
         self.fase = "TURUN karena gravitasi (Kvel dilepas) | ketukan Kvel %d / %d" \
             % (self.ketukan, config.UJI2_KETUKAN_MAKS)
         sisa_ketukan = 0.0
-        lama_pelan = 0.0
-        lama_stabil = 0.0
-        batas_pelan = math.radians(config.UJI_STABIL_DTHETA_DEG_S)
+        t_boleh_ketuk = self.t_rekam + config.UJI2_KETUKAN_DIAM_S
         while True:
             arah = -1 if sisa_ketukan > 0.0 else 0
-            x = self.siklus(arah)
-            self.cek_waktu()
+            langkah(arah)
             if sisa_ketukan > 0.0:
                 sisa_ketukan = sisa_ketukan - dt
-                lama_pelan = 0.0
-                lama_stabil = 0.0
+                t_boleh_ketuk = self.t_rekam + config.UJI2_KETUKAN_DIAM_S
                 continue
-            lama_stabil = lama_stabil + dt if self.stabil(x) else 0.0
             if self.y_poros() < lin["y_mulai"]:
-                # sudah di bidang datar bawah
-                self.fase = "sampai di bidang datar bawah, menunggu stabil %.0f / %g s" \
-                    % (math.floor(lama_stabil), config.UJI_STABIL_LAMA_S)
-                if lama_stabil >= config.UJI_STABIL_LAMA_S - 0.5 * dt:
-                    return BERHASIL, "stabil di bidang bawah" + (", %d ketukan Kvel" % self.ketukan
-                                                                  if self.ketukan else "")
+                gerak = self.geser(config.UJI_STABIL_LAMA_S)
+                self.fase = "sampai di bidang datar bawah, menunggu BERHENTI (diam %g s, geser %s cm)" \
+                    % (config.UJI_STABIL_LAMA_S, "-" if gerak is None else "%.1f" % (gerak * 100.0))
+                if self.diam(config.UJI_STABIL_LAMA_S):
+                    return BERHASIL, "berhenti di bidang bawah" + (", %d ketukan Kvel" % self.ketukan
+                                                                    if self.ketukan else "")
                 continue
-            lama_pelan = lama_pelan + dt if abs(x[1]) < batas_pelan else 0.0
+            y_lalu = self.posisi_lalu(config.UJI2_KETUKAN_DIAM_S)
+            macet = (self.t_rekam >= t_boleh_ketuk and y_lalu is not None
+                     and y_lalu - self.y_poros() < config.UJI2_KETUKAN_GESER_M)
             if self.ketukan < config.UJI2_KETUKAN_MAKS:
                 self.fase = "TURUN karena gravitasi (Kvel dilepas) | ketukan Kvel %d / %d" \
                     % (self.ketukan, config.UJI2_KETUKAN_MAKS)
-                if lama_pelan >= config.UJI2_KETUKAN_DIAM_S - 0.5 * dt:
+                if macet:
                     self.ketukan = self.ketukan + 1
                     sisa_ketukan = config.UJI2_KETUKAN_S
-                    lama_pelan = 0.0
                     print("  macet di t = %.2f s: ketukan Kvel arah mundur %d / %d (%g s)"
                           % (self.t_rekam, self.ketukan, config.UJI2_KETUKAN_MAKS, config.UJI2_KETUKAN_S))
             else:
-                self.fase = "berhenti di tanjakan setelah %d ketukan, menunggu stabil %.0f / %g s" \
-                    % (self.ketukan, math.floor(lama_stabil), config.UJI_STABIL_LAMA_S)
-                if lama_stabil >= config.UJI_STABIL_LAMA_S - 0.5 * dt:
+                self.fase = "berhenti di tanjakan setelah %d ketukan, menunggu diam %g s" \
+                    % (self.ketukan, config.UJI_STABIL_LAMA_S)
+                if self.diam(config.UJI_STABIL_LAMA_S):
                     return BERHASIL, "berhenti di tanjakan (%d ketukan Kvel)" % self.ketukan
 
     # ------------------------------------------------------------ satu siklus
@@ -535,6 +550,8 @@ class UjiOtomatis:
         self.cbf.pilih_barrier(self.nomor_h)
         sim.atur_mask_plot(self.mask)
         self.perekam.mulai(self.kontrol["mode"], ise.JENIS_PENGUJIAN)
+        self.riwayat = collections.deque()
+        self.t_jalan = 0.0
         self.waktu_berikutnya = time.time()
 
     def mulai_rekam(self):
@@ -640,6 +657,12 @@ class UjiOtomatis:
                                 u_PD, u, status_cbf, self.gain_rekam(), dorong, nilai_c, self.ekstra())
             self.psi_maks = max(self.psi_maks, abs(psi))
 
+        # Riwayat posisi poros roda dan |psi| (untuk diam(), geser(), posisi_lalu())
+        self.t_jalan = self.t_jalan + config.DT
+        self.riwayat.append((self.t_jalan, self.y_poros(), abs(psi)))
+        while self.riwayat and self.riwayat[0][0] < self.t_jalan - 15.0:
+            self.riwayat.popleft()
+
         self.x = x
         self.yaw = yaw
         self.u_PD = u_PD
@@ -657,11 +680,35 @@ class UjiOtomatis:
         for _ in range(int(round(lama / config.DT))):
             self.siklus(arah)
 
-    def stabil(self, x):
-        """Robot diam: |psi|, |dpsi|, |dtheta| di bawah batas UJI_STABIL_*."""
-        return (abs(x[2]) < math.radians(config.UJI_STABIL_PSI_DEG)
-                and abs(x[3]) < math.radians(config.UJI_STABIL_DPSI_DEG_S)
-                and abs(x[1]) < math.radians(config.UJI_STABIL_DTHETA_DEG_S))
+    def _jendela(self, lama):
+        """Isi riwayat `lama` detik terakhir, None bila riwayat belum sepanjang itu."""
+        if not self.riwayat or self.riwayat[-1][0] - self.riwayat[0][0] < lama - 0.5 * config.DT:
+            return None
+        batas = self.riwayat[-1][0] - lama - 0.5 * config.DT
+        return [isi for isi in self.riwayat if isi[0] >= batas]
+
+    def geser(self, lama):
+        """max - min posisi poros roda selama `lama` detik terakhir [m], None bila riwayat belum sepanjang itu."""
+        isi = self._jendela(lama)
+        if isi is None:
+            return None
+        semua = [y for _, y, _ in isi]
+        return max(semua) - min(semua)
+
+    def posisi_lalu(self, lama):
+        """Posisi poros roda `lama` detik yang lalu [m], None bila riwayat belum sepanjang itu."""
+        isi = self._jendela(lama)
+        return None if isi is None else isi[0][1]
+
+    def diam(self, lama):
+        """Robot DIAM selama `lama` detik terakhir: |psi| < UJI_STABIL_PSI_DEG terus-menerus dan poros roda bergeser
+        < UJI_DIAM_GESER_M. Dinilai dari posisi (bukan |dpsi| / |dtheta|), jadi getaran kecil roda tidak dihitung."""
+        isi = self._jendela(lama)
+        if isi is None:
+            return False
+        batas_psi = math.radians(config.UJI_STABIL_PSI_DEG)
+        semua = [y for _, y, _ in isi]
+        return max(semua) - min(semua) < config.UJI_DIAM_GESER_M and max(p for _, _, p in isi) < batas_psi
 
     def y_poros(self):
         """Letak poros roda searah lintasan (+Y dunia) [m]."""
@@ -724,9 +771,9 @@ class UjiOtomatis:
                 % (alpha, self.psi_max_deg(), ise.teks_mask(self.mask), self.zeta_cbf_deg)
         else:
             cbf = "CBF-QP  : tidak dipakai (kontrol PD saja)"
-        stabil = "STABIL  : |psi| < %g deg, |dpsi| < %g deg/s, |dtheta| < %g deg/s selama %g s | gagal = KOMET (|psi| > %g deg)" \
-            % (config.UJI_STABIL_PSI_DEG, config.UJI_STABIL_DPSI_DEG_S, config.UJI_STABIL_DTHETA_DEG_S,
-               config.UJI_STABIL_LAMA_S, config.SAFE_TILT_DEG)
+        stabil = "DIAM    : |psi| < %g deg dan poros bergeser < %g cm selama %g s | gagal = KOMET (|psi| > %g deg)" \
+            % (config.UJI_STABIL_PSI_DEG, config.UJI_DIAM_GESER_M * 100.0, config.UJI_STABIL_LAMA_S,
+               config.SAFE_TILT_DEG)
         hasil = "HASIL   : berhasil %d, gagal %d | terakhir: %s" \
             % (self.jumlah[BERHASIL], self.jumlah[GAGAL], self.hasil_terakhir)
         return [("PENGUJIAN OTOMATIS SIMULASI ATERA   (tekan U lagi untuk membatalkan)", config.WARNA_UJI_JUDUL),
@@ -780,7 +827,7 @@ class UjiOtomatis:
                        impuls_bandul(self.sudut), config.UJI_SEBELUM_PUKUL_S, self.percobaan_ke,
                        config.UJI_PERCOBAAN_MAKS, hasil, sebab))
         return ("SIMULASI PyBullet | UJI 2 tanjakan %g deg, panjang %g m (datar bawah %g m, datar atas %g m), mode DIAM | "
-                "naik Kvel %g arah maju, dilepas %g m di bidang atas, diam %g s | mundur Kvel sampai tepi turunan | "
+                "naik Kvel %g arah maju, dilepas %g m di bidang atas, berhenti %g s | mundur Kvel sampai tepi turunan | "
                 "turun karena gravitasi, ketukan Kvel %d x %g s | zeta model CBF-QP %g deg | percobaan %d / %d: %s (%s)"
                 % (config.UJI2_ZETA_DEG, config.UJI2_PANJANG_MIRING_M, config.UJI2_DATAR_BAWAH_M,
                    config.UJI2_DATAR_ATAS_M, self.params["Kvel"], config.UJI2_LEPAS_ATAS_M, config.UJI2_DIAM_ATAS_S,
