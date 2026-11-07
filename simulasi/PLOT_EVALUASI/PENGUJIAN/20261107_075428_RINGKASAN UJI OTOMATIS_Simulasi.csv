@@ -1,0 +1,3 @@
+waktu,kontrol,uji,sudut_bandul_deg,massa_bandul_kg,panjang_tali_m,lama_tumbukan_s,gaya_N,impuls_N_s,zeta_deg,psi_max_DEG,percobaan_ke,hasil,sebab,ketukan_turun,psi_maks_deg,durasi_rekam_s,file,Kp_psi,Kd_psi,Kp_theta,Kd_theta,Kvel,Alpha_1,Alpha_2,Alpha_3
+2026-11-07 07:54:39,PD,UJI 1,30,0.404,0.5,0.033,14.0350,0.4632,0,5,1,BERHASIL,stabil 5 s,,8.441,8.110,20261107_075439_PD_30_Simulasi_PENGUJIAN KE-01,12.12,2.27,0.15,0.32,-2,7.42,8.45,269.18
+2026-11-07 07:54:54,PD,UJI 1,40,0.404,0.5,0.033,18.5468,0.6120,0,5,1,BERHASIL,stabil 5 s,,10.893,10.115,20261107_075453_PD_40_Simulasi_PENGUJIAN KE-02,12.12,2.27,0.15,0.32,-2,7.42,8.45,269.18

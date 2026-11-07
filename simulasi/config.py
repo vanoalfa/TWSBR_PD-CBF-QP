@@ -103,8 +103,9 @@ Kd_psi = 02.27                      # [N m s/rad]
 Kp_theta = 0.15                     # [N m/rad]    hanya mode BALANCING tanpa W / S
 Kd_theta = 0.32                     # [N m s/rad]
 # Kvel*arah saat W / S ditahan. Kecepatan tunak di lantai datar: v = -R*Kvel*arah/Kd_theta
-# -> Kvel NEGATIF supaya W maju (Kd_theta 0.29: Kvel -1.16 -> 0.20 m/s), sama dengan robot fisik.
-Kvel = -1.16                        # [N m]
+# -> Kvel NEGATIF supaya W maju (Kd_theta 0.32: Kvel -2.00 -> 0.31 m/s), sama dengan robot fisik (-2.00).
+# Juga dipakai PENGUJIAN OTOMATIS Uji 2 (tombol U) untuk naik tanjakan.
+Kvel = -2.00                        # [N m]
 
 # Dengan error = setpoint - state dan u > 0 = roda ke depan, gain positif menstabilkan bila tandanya -1
 # (sama dengan apalah_bisa/tunning.py).
@@ -241,6 +242,11 @@ ISE_PLOT_DIR = "PLOT_EVALUASI"
 EVAL_PANEL = ["psi", "dpsi", "dtheta", "u", "fase_psi"]
 # True: setiap PENGUJIAN PD+CBF (tombol T) disimpan, dibuat juga gambar BANDING dengan PENGUJIAN PD terakhir hari itu.
 EVAL_BANDING_OTOMATIS = True
+# Waktu pulih di tabel metrik gambar format Data UJI (PENGUJIAN OTOMATIS, tombol U; sama dengan robot fisik,
+# program/atera_program/config.py): dari |psi| maksimum sampai |psi| < EVAL_PSI_PULIH_DEG terus-menerus
+# EVAL_PULIH_LAMA_S detik.
+EVAL_PSI_PULIH_DEG = 2.0            # [deg]
+EVAL_PULIH_LAMA_S = 1.0             # [s]
 
 # PENGUJIAN (tombol T) tanpa batas waktu: T mulai, T lagi selesai (sama dengan L3 robot fisik).
 # ASUMSI: satu rekaman PERBANDINGAN (tombol 3) = DURASI_PERBANDINGAN detik waktu simulasi sejak dorongan O / P, supaya
@@ -304,21 +310,22 @@ GAYA_DORONG_AWAL = 5.0      # [N] besar gaya dorongan (tombol O / P dan tuning_o
 
 # >>>>>>>>>> DORONGAN = PUKULAN BANDUL (UBAH DI SINI) <<<<<<<<<<
 # Simulasi memberi gaya konstan GAYA selama LAMA_DORONG, jadi impuls ke robot J = GAYA x LAMA_DORONG [N s].
-# Konversi dari pengujian bandul fisik ke gaya simulasi:
-#     dz  = l_bd * (1 - cos(phi_0))              tinggi jatuh titik berat bandul [m]
-#     v_1 = sqrt(2 * g * dz)                     kecepatan bandul sesaat sebelum memukul [m/s]
-#     v_2 = +/- sqrt(2 * g * l_bd * (1 - cos(phi_1)))   sesaat sesudah memukul (+ terus maju, - memantul) [m/s]
-#     J_bd = m_bd * (v_1 - v_2)                  impuls yang diterima robot [N s]
-#     F_bd = J_bd / LAMA_DORONG                  gaya simulasi (gaya_dorong) yang setara [N]
-#   m_bd  : massa bandul [kg]                    l_bd  : panjang tali, titik gantung ke titik berat bandul [m]
-#   phi_0 : sudut lepas dari vertikal [rad]      phi_1 : sudut ayun bandul setelah memukul (dari video) [rad]
-# Contoh: m_bd 2 kg, l_bd 0.5125 m, phi_0 30 deg -> v_1 = 1.161 m/s; bila phi_1 = 17 deg (terus maju)
-#         v_2 = 0.663 m/s, J_bd = 1.00 N s, F_bd = 1.00 / 0.015 = 66.4 N.
-# ASUMSI: lama kontak pukulan bandul ~15 ms (tidak diukur). Boleh dipakai karena jauh lebih singkat dari skala
-# waktu jatuh badan sqrt((m_b L^2 + j_psi) / (m_b g L)) ~ 0.145 s, sehingga yang menentukan robot jatuh hanya J.
+# Konversi dari pengujian bandul fisik ke gaya simulasi (sama dengan tabel Excel pengujian bandul, "F_impact"):
+#     v_1  = sqrt(2 * g * l_bd * (1 - cos(phi_0)))   kecepatan bandul sesaat sebelum memukul [m/s]
+#     J_bd = m_bd * v_1                              impuls yang diterima robot [N s]
+#                                                    (ASUMSI tabel: bandul berhenti setelah memukul, v_2 = 0)
+#     F_bd = J_bd / LAMA_DORONG                      gaya simulasi (gaya_dorong) yang setara [N]
+#   m_bd  : massa bandul [kg]   (BANDUL_MASSA_KG)          l_bd : panjang tali [m]   (BANDUL_PANJANG_TALI_M)
+#   phi_0 : sudut lepas bandul dari vertikal [rad]          g    : percepatan gravitasi [m/s^2] (config.g)
+#   (dipakai uji_otomatis.gaya_bandul(); BANDUL_* ada di bagian 13 PENGUJIAN OTOMATIS)
+# Contoh: m_bd 0.404 kg, l_bd 0.50 m, phi_0 30 deg -> v_1 = 1.146 m/s, J_bd = 0.463 N s, F_bd = 0.463 / 0.033 = 14.04 N.
+# Hasil 30 / 40 / 50 / 60 / 70 / 80 / 90 deg = 14.04 / 18.55 / 22.92 / 27.11 / 31.10 / 34.86 / 38.34 N.
+# ASUMSI: lama kontak pukulan bandul 0.033 s (= "Asumsi waktu tumbukan" di tabel Excel, tidak diukur). Masih jauh lebih
+# singkat dari skala waktu jatuh badan sqrt((m_b L^2 + j_psi) / (m_b g L)) ~ 0.145 s, sehingga yang menentukan robot
+# jatuh terutama J. LAMA_DORONG dipakai juga tombol O / P dan tuning_optuna.py (impulsnya = gaya x 0.033 s).
 # Rujukan: OpenStax University Physics Vol. 1 bab 9.2 (J = F_rata-rata x dt); Hessel dkk. 2006 dan Nikolov 2020
-# (lama kontak tumbukan dalam orde milidetik). Nilai lama 0.10 s memberi batas ~12.5 N (= 1.25 N s).
-LAMA_DORONG = 0.015         # [s] lama gaya dorongan bekerja (= lama kontak pukulan bandul)
+# (lama kontak tumbukan dalam orde milidetik).
+LAMA_DORONG = 0.033         # [s] lama gaya dorongan bekerja (= lama kontak pukulan bandul, Delta t tabel Excel)
 
 # Titik dorong: bidang DORONG_SISI x DORONG_SISI di sisi luar bagian ATAS badan.
 #   - tepi atas bidang = permukaan teratas badan (dihitung otomatis dari robot.urdf)
@@ -337,30 +344,38 @@ GESEKAN_PUTAR = 0.003       # gesekan roda saat robot berputar di tempat (yaw), 
 PSI_AWAL_DEG = 0.0          # [deg] kemiringan badan saat robot diletakkan
 URDF_PILIHAN = ["urdf/robot.urdf", "urdf/urdf/robot.urdf", "../urdf/urdf/robot.urdf"]   # relatif terhadap simulasi.py
 
-# Kamera
+# Kamera: DIAM, tampak sisi KANAN robot, diarahkan ke posisi awal robot. Diatur sekali saat simulasi mulai dan TIDAK
+# ikut robot, supaya arah gerak robot terlihat (dari sisi kanan, depan robot (+Y) ada di KANAN layar).
+# Mouse tetap bisa memutar / zoom kamera.
+# Yaw kamera PyBullet (sumbu Z ke atas): yaw = 0 -> kamera di sisi -Y titik tujuan, menghadap +Y; yaw positif memutar
+# kamera berlawanan jarum jam dilihat dari atas. Roda kanan ada di sisi +X dunia -> yaw = 90 deg (kamera di sisi +X,
+# menghadap -X). Sisi kiri robot: yaw = -90 deg. Pitch negatif = kamera melihat sedikit ke bawah.
 KAMERA_JARAK = 0.9          # [m]
-KAMERA_YAW = 60.0           # [deg]
+KAMERA_YAW = 90.0           # [deg]
 KAMERA_PITCH = -15.0        # [deg]
-KAMERA_BATAS_GESER = 0.25   # [m] kamera baru digeser bila robot sudah sejauh ini dari titik tengah layar
 
-# Bidang merah safety set (batas psi)
+# Bidang merah barrier psi (h1 di depan robot, h2 di belakang robot)
 # Bentuk | | : dua bidang (persegi panjang) TEGAK di depan dan di belakang robot, ikut berpindah bersama robot.
 # Letaknya dipilih supaya sisi terluar badan di ketinggian IMU tepat menyentuh bidang saat psi = +-psi_max:
 #     jarak mendatar dari poros = L_IMU*sin(psi_max) + JARAK_IMU_KE_SISI_LUAR*cos(psi_max)
+#     psi_max_DEG 5 / 10 / 15 deg -> 71 / 98 / 124 mm; ikut berubah saat psi_max_DEG diubah di jendela Kontrol
+# Hanya tampil di mode PD + CBF-QP: bidang depan bila h1 dipakai (dicentang), bidang belakang bila h2 dipakai.
+# Mode PD tanpa bidang.
+# Warna makin pekat saat psi mendekati barrier sisi itu. Opasitas = kanal a pada rgba PyBullet (0 = tembus pandang,
+# 1 = pekat; tanpa satuan, dipilih untuk tampilan saja, BUKAN Alpha CBF):
+#     opasitas = BIDANG_OPASITAS_MIN + (BIDANG_OPASITAS_MAKS - BIDANG_OPASITAS_MIN) * psi_dekat / psi_max
+#                                          psi_dekat = psi (bidang depan) atau -psi (bidang belakang), dijepit >= 0
+#     opasitas = BIDANG_OPASITAS_LANGGAR   bila psi melewati barrier sisi itu
 # ASUMSI: jarak IMU ke sisi terluar badan sama untuk sisi depan dan sisi belakang.
 JARAK_IMU_KE_SISI_LUAR = 0.044199   # [m] diukur di Fusion 360
 BIDANG_LEBAR = 0.36         # [m] searah poros roda
 BIDANG_TINGGI = 0.42        # [m] dari lantai ke atas
-BIDANG_WARNA = [1.0, 0.0, 0.0, 0.22]
-BIDANG_WARNA_LANGGAR = [1.0, 0.0, 0.0, 0.60]       # lebih gelap saat psi melewati batas
-
-# Kotak biru safety set jarak tempuh s (s_min <= s <= s_max, s = R*theta dari titik nol s).
-# Panjang kotak searah lintasan = s_max - s_min, lebar dan tinggi di bawah.
-# Kotak diam di dunia (tidak ikut robot), diletakkan di posisi awal robot, mengikuti kemiringan lantai.
-KUBUS_LEBAR = 1.0           # [m] searah poros roda
-KUBUS_TINGGI = 1.0          # [m] tegak lurus lantai
-KUBUS_WARNA = [0.10, 0.40, 1.0, 0.20]
-KUBUS_WARNA_LANGGAR = [0.10, 0.40, 1.0, 0.45]      # lebih gelap saat s melewati batas
+BIDANG_RGB = [1.0, 0.0, 0.0]        # merah
+BIDANG_OPASITAS_MIN = 0.10          # [-] psi = 0 (atau miring menjauhi bidang)
+BIDANG_OPASITAS_MAKS = 0.60         # [-] |psi| = psi_max (menyentuh barrier)
+BIDANG_OPASITAS_LANGGAR = 0.85      # [-] psi melewati barrier
+BIDANG_TINGKAT = 20         # jumlah anak tangga warna dari MIN ke MAKS. Warna hanya dikirim ke PyBullet bila
+                            # tingkatnya berubah, supaya simulasi tidak melambat.
 
 # Teks di jendela PyBullet
 WARNA_BIASA = [0.0, 0.0, 0.0]
@@ -574,3 +589,83 @@ OPTUNA_PENALTI_GAGAL = 10.0         # [per detik]
 # OPTUNA_STAGNANT_MIN x max(1, |skor terbaik acuan|). Riwayat study ikut dihitung. 0 = mati (atau --stagnant N).
 OPTUNA_STAGNANT = 300
 OPTUNA_STAGNANT_MIN = 1.0e-3
+
+# =============================================================================
+#                 13. PENGUJIAN OTOMATIS  (tombol U, uji_otomatis.py, dipanggil atera_main.py)
+# =============================================================================
+# Tekan U (jendela Kontrol atau jendela PyBullet): semua pengujian berjalan berurutan tanpa disentuh. U lagi = batal.
+#   UJI 1 (bidang datar, zeta 0)  : PD, PD+CBF-QP psi_max 5 / 10 / 15 deg; tiap kontrol dipukul bandul dari BELAKANG
+#                                   (ke depan, seperti tombol O) di tiap UJI1_SUDUT_BANDUL_DEG.
+#   UJI 2 (tanjakan UJI2_ZETA_DEG): keempat kontrol: diam -> naik (Kvel, arah maju) -> berhenti di bidang atas ->
+#                                   mundur (Kvel) sampai tepi turunan -> turun karena gravitasi -> stabil di bawah.
+# Semua: mode gerak DIAM (tanpa Kp_theta), constraint CBF-QP h1 .. h4, gain dari jendela Kontrol saat U ditekan.
+# Tiap percobaan: BERHASIL = robot stabil (kriteria UJI_STABIL_*), GAGAL = KOMET atau tidak stabil sampai batas waktu.
+# Berhasil -> disimpan, lanjut. Gagal -> diulang sampai UJI_PERCOBAAN_MAKS kali; yang disimpan hanya percobaan GAGAL
+# terakhir, lalu tetap lanjut.
+# Hasil (.csv + .png + .eps, gambar format Data UJI robot fisik = program/atera_program/ise.py, + panel PANEL/):
+#   PLOT_EVALUASI/PENGUJIAN/<PD | PDCBFQP5 | PDCBFQP10 | PDCBFQP15>/
+#       YYYYMMDD_HHmmSS_PD_30_Simulasi_PENGUJIAN KE-XX          (UJI 1, sudut bandul 30 deg)
+#       YYYYMMDD_HHmmSS_PD+CBFQP5_7-5_Simulasi_PENGUJIAN KE-XX  (UJI 2, kemiringan 7.5 deg)
+#   KE-XX melanjutkan nomor terbesar yang sudah ada di folder kontrol itu.
+#   Ringkasan semua percobaan: PLOT_EVALUASI/PENGUJIAN/YYYYMMDD_HHmmSS_RINGKASAN UJI OTOMATIS_Simulasi.csv
+UJI_PSI_MAX_DEG = [5.0, 10.0, 15.0]         # [deg] psi_max PD+CBF-QP yang diuji (urutan = urutan pengujian)
+UJI_PERCOBAAN_MAKS = 3                      # percobaan maksimum tiap sudut / tiap kontrol bila GAGAL
+
+# Bandul (pengujian robot fisik, tabel Excel). Rumus gaya: lihat bagian 11 (LAMA_DORONG = Delta t tumbukan).
+BANDUL_MASSA_KG = 0.404                     # [kg] m_bd, massa bandul
+BANDUL_PANJANG_TALI_M = 0.50                # [m]  l_bd, panjang tali (titik gantung ke titik berat bandul)
+UJI1_SUDUT_BANDUL_DEG = [30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]   # [deg] phi_0, sudut lepas bandul
+
+# Urutan waktu satu percobaan
+UJI_TENANG_S = 1.0                  # [s] robot diletakkan lalu dibiarkan tenang (TIDAK direkam)
+UJI_SEBELUM_PUKUL_S = 1.0           # [s] UJI 1: perekaman dimulai sekian detik sebelum pukulan
+UJI_JEDA_KOMET_S = 1.5              # [s] setelah KOMET: motor mati, robot dibiarkan jatuh (tidak direkam), lalu diulang
+# Robot "stabil (diam)" = |psi|, |dpsi|, |dtheta| di bawah batas ini terus-menerus UJI_STABIL_LAMA_S detik
+# (sama dengan syarat stabil tuning). Perekaman selesai saat robot stabil.
+UJI_STABIL_PSI_DEG = 5.0            # [deg]
+UJI_STABIL_DPSI_DEG_S = 5.0         # [deg/s]
+UJI_STABIL_DTHETA_DEG_S = 6.0       # [deg/s]
+UJI_STABIL_LAMA_S = 5.0             # [s]
+UJI_STABIL_BATAS_S = 30.0           # [s] UJI 1: batas tunggu stabil sejak pukulan. ASUMSI: lewat batas = GAGAL
+
+# UJI 2: lintasan dari posisi awal robot ke depan (+Y): bidang datar bawah -> tanjakan -> bidang datar atas.
+# Bidang datar bawah = lantai PyBullet. Tanjakan = papan tipis (seperti papan miring robot fisik) bersandar ke panggung
+# bidang datar atas. Lintasan baru muncul saat UJI 2 dimulai dan dihapus lagi setelah pengujian selesai.
+UJI2_ZETA_DEG = 7.5                 # [deg] kemiringan tanjakan
+UJI2_PANJANG_MIRING_M = 2.41        # [m]  panjang tanjakan (di sepanjang permukaan miring)
+UJI2_DATAR_BAWAH_M = 1.0            # [m]  jarak poros roda posisi awal ke awal tanjakan
+UJI2_DATAR_ATAS_M = 1.0             # [m]  panjang bidang datar atas
+UJI2_LEBAR_M = 0.8                  # [m]  lebar lintasan (searah poros roda)
+UJI2_TEBAL_PAPAN_M = 0.03           # [m]  tebal papan tanjakan
+UJI2_WARNA_PAPAN = [0.80, 0.64, 0.42, 1.0]
+UJI2_WARNA_PANGGUNG = [0.62, 0.62, 0.66, 1.0]
+# ASUMSI: model CBF-QP memakai zeta UJI2_CBF_ZETA_DEG selama UJI 2 (seperti robot fisik: zeta_DEG = 7.5 diisi di
+# config selama pengujian bidang miring, juga saat di bagian datar). Isi 0.0 bila CBF-QP tidak diberi tahu
+# kemiringan. Lantai PyBullet sendiri tetap datar (yang miring hanya papan tanjakan).
+UJI2_CBF_ZETA_DEG = 7.5             # [deg]
+UJI2_DIAM_AWAL_S = 1.0              # [s] diam di bidang datar bawah (direkam) sebelum naik
+UJI2_LEPAS_ATAS_M = 0.3             # [m] Kvel dilepas setelah poros roda sejauh ini masuk bidang datar atas
+UJI2_DIAM_ATAS_S = 1.0              # [s] di bidang atas: robot diam (batas UJI_STABIL_*) sekian detik, lalu mundur
+UJI2_LEPAS_TURUN_M = 0.0            # [m] mundur (Kvel) dilepas setelah poros roda melewati tepi atas tanjakan sejauh ini
+# Robot macet saat turun (belum sampai bidang bawah dan |dtheta| < UJI_STABIL_DTHETA_DEG_S selama UJI2_KETUKAN_DIAM_S):
+# diberi satu ketukan Kvel arah mundur selama UJI2_KETUKAN_S, paling banyak UJI2_KETUKAN_MAKS kali. Bila tetap tidak
+# sampai bawah dan sudah stabil, perekaman selesai dengan catatan "berhenti di tanjakan" (BERHASIL, tidak KOMET).
+# Ketukan terlihat di kolom CSV "arah" (-1).
+UJI2_KETUKAN_DIAM_S = 1.0           # [s]
+UJI2_KETUKAN_S = 0.2                # [s]
+UJI2_KETUKAN_MAKS = 5
+UJI2_BATAS_S = 120.0                # [s] ASUMSI: batas waktu satu percobaan UJI 2 sejak mulai direkam (lewat = GAGAL)
+
+# Kamera pengujian otomatis (DIAM selama satu jenis uji, yaw = KAMERA_YAW = sisi kanan robot). Mouse tetap bisa.
+UJI1_KAMERA_JARAK = 1.5             # [m]
+UJI1_KAMERA_TARGET = [0.0, 0.4, 0.15]   # [m] titik yang dilihat (dunia): 0.4 m di depan posisi awal robot
+UJI2_KAMERA_JARAK = 3.6             # [m] target = tengah lintasan (dihitung otomatis)
+UJI2_KAMERA_PITCH = -10.0           # [deg]
+
+# Tulisan pengujian otomatis di jendela PyBullet (blok bawah kiri; blok parameter tetap di kiri atas)
+TEKS_UJI_ATAS = -0.30               # posisi baris pertama (-1 bawah .. +1 atas layar)
+JARAK_BARIS_UJI = 0.055
+JUMLAH_BARIS_UJI_MAKS = 11
+UKURAN_TEKS_UJI = 1.25
+WARNA_UJI_JUDUL = [0.80, 0.25, 0.00]
+WARNA_UJI_SEKARANG = [0.05, 0.25, 0.70]
