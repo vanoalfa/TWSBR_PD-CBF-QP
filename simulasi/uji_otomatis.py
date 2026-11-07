@@ -25,8 +25,8 @@ Satu percobaan UJI 2 (lintasan: bidang datar bawah -> tanjakan -> bidang datar a
 Berhasil -> disimpan, lanjut. Gagal -> diulang sampai UJI_PERCOBAAN_MAKS kali; yang disimpan hanya GAGAL terakhir.
 
 Gaya pukulan bandul (config.py bagian 11, sama dengan tabel Excel pengujian bandul):
-    F = m_bd * sqrt(2 * g * l_bd * (1 - cos(phi_0))) / LAMA_DORONG          [N]
-    m_bd = BANDUL_MASSA_KG [kg], l_bd = BANDUL_PANJANG_TALI_M [m], phi_0 = sudut lepas bandul [rad],
+    F = m_bd * sqrt(2 * g * l_bd * (1 - cos(chi))) / LAMA_DORONG          [N]
+    m_bd = BANDUL_MASSA_KG [kg], l_bd = BANDUL_PANJANG_TALI_M [m], chi = sudut lepas bandul [rad],
     g = config.g [m/s^2], LAMA_DORONG = lama tumbukan [s] (ASUMSI 0.033 s, tabel Excel)
 
 Hasil (config.py bagian 13), .csv + .png + .eps (+ panel di subfolder PANEL/):
@@ -121,7 +121,7 @@ def daftar_kontrol():
 
 
 def kecepatan_bandul(sudut_deg):
-    """v_1 = sqrt(2 g l_bd (1 - cos phi_0)) [m/s]: kecepatan bandul sesaat sebelum memukul."""
+    """v_1 = sqrt(2 g l_bd (1 - cos chi)) [m/s]: kecepatan bandul sesaat sebelum memukul."""
     return math.sqrt(2.0 * config.g * config.BANDUL_PANJANG_TALI_M * (1.0 - math.cos(math.radians(sudut_deg))))
 
 
@@ -820,8 +820,8 @@ class UjiOtomatis:
         """Baris catatan di judul gambar (dibungkus per ' | ')."""
         if self.uji == UJI1:
             return ("SIMULASI PyBullet | UJI 1 bidang datar (zeta 0 deg), mode DIAM | bandul dipukul dari belakang | "
-                    "phi_0 %g deg | m_bd %g kg | l_bd %g m | lama tumbukan dt %g s | "
-                    "F = m_bd*sqrt(2*g*l_bd*(1-cos(phi_0)))/dt = %.2f N | impuls %.3f N s | dipukul di t = %g s | "
+                    "chi %g deg | m_bd %g kg | l_bd %g m | lama tumbukan dt %g s | "
+                    "F = m_bd*sqrt(2*g*l_bd*(1-cos(chi)))/dt = %.2f N | impuls %.3f N s | dipukul di t = %g s | "
                     "percobaan %d / %d: %s (%s)"
                     % (self.sudut, config.BANDUL_MASSA_KG, config.BANDUL_PANJANG_TALI_M, config.LAMA_DORONG, self.gaya,
                        impuls_bandul(self.sudut), config.UJI_SEBELUM_PUKUL_S, self.percobaan_ke,
@@ -885,7 +885,7 @@ class UjiOtomatis:
         print("UJI 1   : bidang datar, bandul dipukul dari belakang. m_bd %g kg, l_bd %g m, lama tumbukan %g s"
               % (config.BANDUL_MASSA_KG, config.BANDUL_PANJANG_TALI_M, config.LAMA_DORONG))
         for sudut in self.daftar_sudut:
-            print("          phi_0 %5.1f deg -> v_1 %.3f m/s, impuls %.3f N s, F %.2f N"
+            print("          chi %5.1f deg -> v_1 %.3f m/s, impuls %.3f N s, F %.2f N"
                   % (sudut, kecepatan_bandul(sudut), impuls_bandul(sudut), gaya_bandul(sudut)))
         print("UJI 2   : tanjakan %g deg, panjang %g m (datar bawah %g m, datar atas %g m), Kvel %g, zeta model "
               "CBF-QP %g deg" % (config.UJI2_ZETA_DEG, config.UJI2_PANJANG_MIRING_M, config.UJI2_DATAR_BAWAH_M,

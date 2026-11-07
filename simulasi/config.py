@@ -311,14 +311,14 @@ GAYA_DORONG_AWAL = 5.0      # [N] besar gaya dorongan (tombol O / P dan tuning_o
 # >>>>>>>>>> DORONGAN = PUKULAN BANDUL (UBAH DI SINI) <<<<<<<<<<
 # Simulasi memberi gaya konstan GAYA selama LAMA_DORONG, jadi impuls ke robot J = GAYA x LAMA_DORONG [N s].
 # Konversi dari pengujian bandul fisik ke gaya simulasi (sama dengan tabel Excel pengujian bandul, "F_impact"):
-#     v_1  = sqrt(2 * g * l_bd * (1 - cos(phi_0)))   kecepatan bandul sesaat sebelum memukul [m/s]
+#     v_1  = sqrt(2 * g * l_bd * (1 - cos(chi)))   kecepatan bandul sesaat sebelum memukul [m/s]
 #     J_bd = m_bd * v_1                              impuls yang diterima robot [N s]
 #                                                    (ASUMSI tabel: bandul berhenti setelah memukul, v_2 = 0)
 #     F_bd = J_bd / LAMA_DORONG                      gaya simulasi (gaya_dorong) yang setara [N]
 #   m_bd  : massa bandul [kg]   (BANDUL_MASSA_KG)          l_bd : panjang tali [m]   (BANDUL_PANJANG_TALI_M)
-#   phi_0 : sudut lepas bandul dari vertikal [rad]          g    : percepatan gravitasi [m/s^2] (config.g)
+#   chi : sudut lepas bandul dari vertikal [rad]          g    : percepatan gravitasi [m/s^2] (config.g)
 #   (dipakai uji_otomatis.gaya_bandul(); BANDUL_* ada di bagian 13 PENGUJIAN OTOMATIS)
-# Contoh: m_bd 0.404 kg, l_bd 0.50 m, phi_0 30 deg -> v_1 = 1.146 m/s, J_bd = 0.463 N s, F_bd = 0.463 / 0.033 = 14.04 N.
+# Contoh: m_bd 0.404 kg, l_bd 0.50 m, chi 30 deg -> v_1 = 1.146 m/s, J_bd = 0.463 N s, F_bd = 0.463 / 0.033 = 14.04 N.
 # Hasil 30 / 40 / 50 / 60 / 70 / 80 / 90 deg = 14.04 / 18.55 / 22.92 / 27.11 / 31.10 / 34.86 / 38.34 N.
 # ASUMSI: lama kontak pukulan bandul 0.033 s (= "Asumsi waktu tumbukan" di tabel Excel, tidak diukur). Masih jauh lebih
 # singkat dari skala waktu jatuh badan sqrt((m_b L^2 + j_psi) / (m_b g L)) ~ 0.145 s, sehingga yang menentukan robot
@@ -614,7 +614,7 @@ UJI_PERCOBAAN_MAKS = 3                      # percobaan maksimum tiap sudut / ti
 # Bandul (pengujian robot fisik, tabel Excel). Rumus gaya: lihat bagian 11 (LAMA_DORONG = Delta t tumbukan).
 BANDUL_MASSA_KG = 0.404                     # [kg] m_bd, massa bandul
 BANDUL_PANJANG_TALI_M = 0.50                # [m]  l_bd, panjang tali (titik gantung ke titik berat bandul)
-UJI1_SUDUT_BANDUL_DEG = [30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]   # [deg] phi_0, sudut lepas bandul
+UJI1_SUDUT_BANDUL_DEG = [30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]   # [deg] chi, sudut lepas bandul
 
 # Urutan waktu satu percobaan
 UJI_TENANG_S = 1.0                  # [s] robot diletakkan lalu dibiarkan tenang (TIDAK direkam)
