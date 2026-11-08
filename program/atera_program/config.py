@@ -36,7 +36,7 @@ j_psi = 0.02337        # [kg m^2]  momen inersia badan terhadap CoM badan
 g = 9.81               # [m/s^2]
 N_WHEEL = 2
 
-zeta_DEG = 7.5                      # [deg] kemiringan bidang yang dipakai model CBF-QP dan DOB: 0.0 (datar), 8.0
+zeta_DEG = 0.0                      # [deg] kemiringan bidang yang dipakai model CBF-QP dan DOB: 0.0 (datar), 8.0
                                     #       (menanjak ke DEPAN robot), -8.0 (robot menghadap turunan). Isi sesuai
                                     #       bidang sebelum menjalankan program (= simulasi CBF_TAHU_ZETA = True).
 zeta = math.radians(zeta_DEG)
