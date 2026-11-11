@@ -1,8 +1,12 @@
 """atera_main.py - Program utama ATERA (SEMENTARA, untuk simulasi PyBullet dengan keyboard).
 
 Jalankan:
-    python3 atera_main.py            tanpa plot realtime
-    python3 atera_main.py --plot     dengan jendela plot realtime
+    python3 atera_main.py                 jendela PyBullet + jendela Kontrol + jendela plot realtime
+    python3 atera_main.py --tanpa-plot    tanpa jendela plot realtime (--plot tetap diterima, sama dengan bawaan)
+
+PENGUJIAN OTOMATIS (tombol U, uji_otomatis.py): UJI 1 pukulan bandul 30 .. 90 deg di bidang datar dan UJI 2 tanjakan
+7.5 deg, untuk PD dan PD + CBF-QP psi_max 5 / 10 / 15 deg, berurutan tanpa disentuh. U lagi = batal. Hasil di
+PLOT_EVALUASI/PENGUJIAN/<PD | PDCBFQP5 | PDCBFQP10 | PDCBFQP15>/ (config.py bagian 13).
 
 Mode kontrol PD / PD + CBF-QP dipilih dengan tombol di jendela Kontrol (atau keyboard 1 / 2). Mode awal = PD.
 Mengganti mode: data perekaman biasa disimpan, lalu robot diletakkan ulang (seperti R) dengan mode baru.
@@ -46,14 +50,15 @@ import pybullet
 import config
 import ise
 import model
+import uji_otomatis
 from pd_control import MODE_BALANCING, MODE_BEBAS, MODE_DIAM, PDControl
 from simulasi import NAMA_ALPHA, Simulasi
 
 BANTUAN = """
 ====================== ATERA - simulasi PyBullet ======================
 MENJALANKAN
-  python3 atera_main.py           tanpa plot realtime
-  python3 atera_main.py --plot    dengan jendela plot realtime
+  python3 atera_main.py                jendela PyBullet, Kontrol, dan plot realtime
+  python3 atera_main.py --tanpa-plot   tanpa jendela plot realtime
 
 TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya dengan mouse;
         keyboard di jendela PyBullet juga tetap bisa sebagai cadangan)
@@ -72,6 +77,10 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
            dan arah) dipasang di posisi sekarang. Mati: kembali DIAM. Saat BEBAS: langsung BALANCING.
   F        mode BEBAS nyala / mati (robot fisik: Tombol A): tanpa PD heading dan Kp_theta, A / D = selisih torsi
            TORSI_BELOK. Mati: kembali DIAM.
+  U        PENGUJIAN OTOMATIS: semua pengujian berurutan (UJI 1 bandul %s deg di bidang datar, lalu UJI 2
+           tanjakan %g deg %g m) untuk PD, PD+CBF-QP %s deg. Gain = nilai jendela Kontrol saat U ditekan.
+           Selama berjalan tombol lain diabaikan; U lagi = batal, Q = batal lalu keluar. Hasil:
+           PLOT_EVALUASI/PENGUJIAN/<PD | PDCBFQP..>/YYYYMMDD_HHmmSS_PD_30_Simulasi_PENGUJIAN KE-XX (.csv .png .eps)
   O        dorong robot ke depan
   P        dorong robot ke belakang
   E        simpan data dan plot ISE sekarang; robot tetap berjalan, perekaman baru dimulai
@@ -106,7 +115,8 @@ HASIL ISE (folder PLOT_EVALUASI/PERCOBAAN, /PENGUJIAN, /PERBANDINGAN, file .csv 
   tambahkan --pengujian / --perbandingan untuk hasil tombol T / 3, contoh:  python3 ise.py --daftar --perbandingan
 =======================================================================
 """ % (config.DURASI_PERBANDINGAN, -config.R * config.Kvel / config.Kd_theta if config.Kd_theta > 0.0 else float("nan"),
-       config.YAW_RATE_BELOK)
+       config.YAW_RATE_BELOK, " ".join("%g" % s for s in config.UJI1_SUDUT_BANDUL_DEG), config.UJI2_ZETA_DEG,
+       config.UJI2_PANJANG_MIRING_M, " / ".join("%g" % s for s in config.UJI_PSI_MAX_DEG))
 
 
 def simpan_ise(perekam):
@@ -208,7 +218,8 @@ def data_ekstra(pd, cbf, mode):
 
 def main():
     parser = argparse.ArgumentParser(add_help=False)
-    parser.add_argument("--plot", action="store_true")
+    parser.add_argument("--plot", action="store_true")              # bawaan sekarang: plot selalu dibuka
+    parser.add_argument("--tanpa-plot", action="store_true")
     parser.add_argument("-h", "--help", action="store_true")
     pilihan, lainnya = parser.parse_known_args()
 
@@ -236,7 +247,7 @@ def main():
         print("CBF-QP TIDAK BISA DIPAKAI -> %s: %s" % (type(kesalahan).__name__, kesalahan))
         print("Simulasi tetap jalan, hanya mode PD.")
 
-    sim = Simulasi(gui=True, plot=pilihan.plot, judul=mode)
+    sim = Simulasi(gui=True, plot=not pilihan.tanpa_plot, judul=mode)
     sim.cbf_ada = cbf is not None
     pembanding = {ise.MODE_PD: "", ise.MODE_PD_CBF: ""}       # nama file PERBANDINGAN pembanding tiap mode
     sim.teks_pembanding = teks_pembanding(pembanding)
@@ -310,6 +321,42 @@ def main():
             if "q" in tombol_baru:
                 print("Tombol Q: keluar dan simpan.")
                 break
+
+            # ------------------------------------------- PENGUJIAN OTOMATIS (tombol U)
+            if "u" in tombol_baru:
+                alasan = uji_otomatis.cek_siap(cbf)
+                if alasan != "":
+                    print("PENGUJIAN OTOMATIS tidak bisa dimulai: %s" % alasan)
+                else:
+                    # Yang sedang berjalan disimpan / dibatalkan dulu (sama seperti mengganti mode kontrol).
+                    if pengujian_berjalan:
+                        print("PENGUJIAN (T) disimpan dulu sebelum PENGUJIAN OTOMATIS.")
+                        simpan_uji(perekam_uji)
+                        pengujian_berjalan = False
+                    if banding_berjalan:
+                        print("Rekaman perbandingan yang sedang berjalan dibatalkan (tidak disimpan).")
+                        banding_berjalan = False
+                    if mode_banding:
+                        print("PEREKAM PERBANDINGAN dimatikan.")
+                        mode_banding = False
+                    else:
+                        simpan_ise(perekam)
+                    sim.plot_tahan = False
+                    hasil_uji = uji_otomatis.UjiOtomatis(sim, pd, cbf, params).jalankan()
+                    # Kembali ke keadaan biasa: mode kontrol sebelum U, robot diletakkan ulang, constraint dari
+                    # kotak centang, psi_max / Alpha / gain dari jendela Kontrol (siklus berikutnya).
+                    sim.atur_mode(mode)
+                    letakkan_ulang(sim, perekam, mode, pd, cbf)
+                    komet = False
+                    t = 0.0
+                    centang_dipakai = None
+                    mask_dipakai = None
+                    waktu_berikutnya = time.time()
+                    if hasil_uji == uji_otomatis.KELUAR:
+                        print("Tombol Q saat PENGUJIAN OTOMATIS: keluar.")
+                        break
+                    print("Kembali ke mode biasa: %s, robot diletakkan ulang." % mode)
+                    continue
 
             if "banding" in tombol_baru:
                 if not mode_banding:
@@ -690,6 +737,7 @@ def main():
             simpan_ise(perekam)
         else:
             print("Tidak ada pengujian / rekaman perbandingan yang belum disimpan.")
+        uji_otomatis.tunggu_simpan()          # file PENGUJIAN OTOMATIS yang masih ditulis di proses terpisah
         sim.cetak_params()
         sim.tutup()
 

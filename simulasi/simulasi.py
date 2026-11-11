@@ -12,10 +12,14 @@ File ini hanya mengurus simulasinya:
         d. batas arus bergantung kecepatan roda (back-EMF, SIM_BATAS_KECEPATAN): arus yang bisa masuk
            turun linear dari batas arus sampai 0 di kecepatan no-load DDSM115 (200 rpm = 20.9 rad/s)
     - jendela "ATERA - Kontrol" (Qt): tombol mode kontrol PD / PD + CBF-QP, tombol W A S D B F O P,
-      dan kolom angka parameter (input utama). B = mode BALANCING, F = mode BEBAS
+      dan kolom angka parameter (input utama). B = mode BALANCING, F = mode BEBAS, U = PENGUJIAN OTOMATIS
+    - lintasan UJI 2 pengujian otomatis (buat_lintasan / hapus_lintasan, dipakai uji_otomatis.py)
+    - catatan pengujian otomatis: blok tulisan di jendela PyBullet dan panel catatan di jendela plot
     - plot realtime: kurva sekarang + kurva PEMBANDING (pengujian terakhir tiap mode: PD ungu, PD+CBF biru)
     - keyboard di jendela PyBullet (input cadangan, tombolnya sama)
-    - tampilan di jendela PyBullet: teks parameter dan bidang merah safety set
+    - tampilan di jendela PyBullet: teks parameter, kamera DIAM tampak sisi kanan robot (tidak ikut robot, supaya
+      arah gerak robot terlihat), dan bidang merah barrier psi (ikut robot, hanya di mode PD + CBF-QP, jaraknya
+      ikut psi_max_DEG, warnanya makin pekat saat psi mendekati psi_max)
     - jendela plot realtime (hanya bila dijalankan dengan --plot)
 Kontrolnya ada di atera_main.py.
 
@@ -65,6 +69,37 @@ DAFTAR_PARAMS = [(_nama, config.DESIMAL.get(_nama, config.DESIMAL_ALPHA))
 
 FOLDER_INI = os.path.dirname(os.path.abspath(__file__))
 PILIHAN_URDF = [os.path.join(FOLDER_INI, path) for path in config.URDF_PILIHAN]
+
+# Nama mode kontrol PD + CBF-QP (= ise.MODE_PD_CBF). ise tidak di-import di sini karena ise memasang backend
+# matplotlib "Agg" saat di-import.
+MODE_PD_CBF = "PD+CBF"
+# Tempat bidang merah disembunyikan (jauh di bawah lantai): mode PD, atau barrier sisi itu tidak dicentang.
+TEMPAT_SEMBUNYI = [0.0, 0.0, -5.0]
+
+
+def tingkat_bidang(psi, psi_max, sisi):
+    """Tingkat kepekatan warna bidang merah barrier psi (bilangan bulat):
+        0 .. BIDANG_TINGKAT : naik linear dengan psi / psi_max ke arah bidang itu (0 = psi 0 atau miring menjauh,
+                              BIDANG_TINGKAT = tepat di psi_max)
+        BIDANG_TINGKAT + 1  : psi melewati barrier sisi itu
+    sisi = +1 bidang depan (h1, psi <= psi_max), -1 bidang belakang (h2, psi >= -psi_max)."""
+    if psi_max <= 0.0 or not math.isfinite(psi):
+        return 0
+    rasio = sisi * psi / psi_max
+    if rasio > 1.0:
+        return config.BIDANG_TINGKAT + 1
+    return int(round(max(0.0, rasio) * config.BIDANG_TINGKAT))
+
+
+def warna_bidang(tingkat):
+    """rgba bidang merah untuk satu tingkat kepekatan (lihat tingkat_bidang). Opasitas = kanal a pada rgba PyBullet
+    (0 = tembus pandang, 1 = pekat), bukan Alpha CBF."""
+    if tingkat > config.BIDANG_TINGKAT:
+        opasitas = config.BIDANG_OPASITAS_LANGGAR
+    else:
+        opasitas = config.BIDANG_OPASITAS_MIN + (config.BIDANG_OPASITAS_MAKS - config.BIDANG_OPASITAS_MIN) \
+            * tingkat / config.BIDANG_TINGKAT
+    return list(config.BIDANG_RGB) + [opasitas]
 
 
 def batas_arus_kecepatan(arus, w):
@@ -336,6 +371,7 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
         Gambar 2 : dtheta terhadap waktu (theta tidak digambar: posisi roda terus bertambah saat robot berjalan)
         Gambar 3 : sumbu X = s = R*theta, sumbu Y = 0
         bawah    : arus tiap motor terhadap waktu
+        catatan  : catatan pengujian otomatis (kontrol, uji, bandul, gain, status), kiriman ("CATATAN", list teks)
     Yang digambar hanya data config.PLOT_RENTANG detik terakhir. Titik hitam = keadaan sekarang.
     Batas sumbu tetap (config.PLOT_BATAS). Barrier hanya psi, dpsi, dtheta, s: merah = constraint CBF yang dicentang
     (kotak psi ikut psi_max_DEG di Kontrol), abu-abu = tidak dicentang. Hitam = batas KOMET, kuning / oranye =
@@ -361,12 +397,18 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
             jawaban.put(("gagal", "matplotlib tidak punya backend jendela (pip install PyQt5)"))
             return
 
-        fig = plt.figure(figsize=(10.0, 9.0))
-        kisi = fig.add_gridspec(3, 2, height_ratios=[1.6, 0.5, 0.9])
+        fig = plt.figure(figsize=(10.0, 11.0))
+        kisi = fig.add_gridspec(4, 2, height_ratios=[1.6, 0.5, 0.9, 0.95])
         gambar1 = fig.add_subplot(kisi[0, 0])
         gambar2 = fig.add_subplot(kisi[0, 1])
         gambar3 = fig.add_subplot(kisi[1, :])
         ax_arus = fig.add_subplot(kisi[2, :])
+        # Panel catatan pengujian otomatis (tulisan saja, tanpa sumbu)
+        ax_catatan = fig.add_subplot(kisi[3, :])
+        ax_catatan.axis("off")
+        teks_catatan = ax_catatan.text(0.0, 1.0, "Catatan PENGUJIAN OTOMATIS tampil di sini (tekan U).",
+                                       transform=ax_catatan.transAxes, ha="left", va="top", family="monospace",
+                                       fontsize=7.5)
         warna = {ise.MODE_PD: config.PLOT_WARNA_PD, ise.MODE_PD_CBF: config.PLOT_WARNA_PD_CBF}
         mode_plot = judul if judul in warna else ise.MODE_PD
 
@@ -452,6 +494,11 @@ def proses_plot(antrean, jawaban, berhenti, judul, daftar_backend, platform):
                 except Exception:
                     break
                 for isi in kiriman:
+                    if isi[0] == "CATATAN":
+                        # Catatan pengujian otomatis (list baris teks)
+                        teks_catatan.set_text("\n".join(isi[1]))
+                        ada_baru = True
+                        continue
                     if isi[0] == "MODE":
                         # Mode kontrol diganti: warna kurva sekarang ikut mode baru.
                         mode_plot = isi[1] if isi[1] in warna else ise.MODE_PD
@@ -543,7 +590,8 @@ class JendelaKontrol:
     """Jendela Qt "ATERA - Kontrol":
         - paling atas : tombol mode kontrol PD (ungu) / PD + CBF-QP (biru) (keyboard 1 / 2), perekam perbandingan
                         (keyboard 3), dan kotak centang constraint CBF-QP yang dipakai (h1 .. h4)
-        - bagian atas : tombol W A S D, B F, O P (bisa diklik / ditahan dengan mouse, atau ditekan di keyboard)
+        - bagian atas : tombol W A S D, B F, O P, Q R E T, U (bisa diklik / ditahan dengan mouse, atau ditekan di
+                        keyboard). U = PENGUJIAN OTOMATIS (uji_otomatis.py)
         - bagian bawah: kolom angka tiap parameter (dua blok: gain + lingkungan, dan Alpha). Kolom berwarna = beda dari config.py
 
     Nilai awal parameter dari config.py. Nilai di jendela ini TIDAK ditulis ke config.py; salin sendiri
@@ -558,13 +606,13 @@ class JendelaKontrol:
         # Tombol ditahan, dipisah menurut sumbernya. Ditahan = keyboard ATAU mouse.
         self.tahan_keyboard = {}
         self.tahan_mouse = {}
-        for huruf in ("w", "a", "s", "d", "o", "p", "b", "f", "q", "r", "e", "t"):
+        for huruf in ("w", "a", "s", "d", "o", "p", "b", "f", "q", "r", "e", "t", "u"):
             self.tahan_keyboard[huruf] = False
             self.tahan_mouse[huruf] = False
         self.tahan_terkirim = None
         self.status = {"judul": "", "mode_gerak": MODE_DIAM, "tahan": {}, "dorong": "dorong: -", "arah_dorong": 0,
                        "komet": False, "mode_pengujian": False, "pengujian": "", "cbf_ada": True,
-                       "pembanding": "", "mode_banding": False}
+                       "pembanding": "", "mode_banding": False, "uji_otomatis": False}
 
         self.root = None               # jendela Qt; None bila gagal dibuat atau sudah ditutup
         self.sedang_atur_centang = False
@@ -637,12 +685,13 @@ class JendelaKontrol:
         kisi_tombol = QtWidgets.QGridLayout()
         susunan.addLayout(kisi_tombol)
         letak = {"w": (0, 1), "a": (1, 0), "s": (1, 1), "d": (1, 2),
-                 "b": (0, 4), "f": (0, 5), "o": (1, 4), "p": (1, 5), "q": (0, 7), "r": (1, 7), "e": (0, 8), "t": (1, 8)}
+                 "b": (0, 4), "f": (0, 5), "o": (1, 4), "p": (1, 5), "q": (0, 7), "r": (1, 7), "e": (0, 8), "t": (1, 8),
+                 "u": (0, 10)}
         keterangan = {"w": "W\nmaju", "a": "A\nkiri", "s": "S\nmundur", "d": "D\nkanan",
                       "b": "B\nmode BALANCING", "f": "F\nmode BEBAS", "o": "O\ndorong depan", "p": "P\ndorong belakang",
                       "q": "Q\nkeluar + simpan", "r": "R\nreset robot", "e": "E\nsimpan data",
-                      "t": "T\npengujian"}
-        for huruf in ("w", "a", "s", "d", "b", "f", "o", "p", "q", "r", "e", "t"):
+                      "t": "T\npengujian", "u": "U\nuji otomatis"}
+        for huruf in ("w", "a", "s", "d", "b", "f", "o", "p", "q", "r", "e", "t", "u"):
             tombol = QtWidgets.QPushButton(keterangan[huruf])
             tombol.setFixedSize(92, 46)
             tombol.setFocusPolicy(QtCore.Qt.NoFocus)        # tombol tidak merebut keyboard
@@ -652,6 +701,9 @@ class JendelaKontrol:
             self.tombol[huruf] = tombol
         kisi_tombol.setColumnMinimumWidth(3, 24)
         kisi_tombol.setColumnMinimumWidth(6, 24)
+        kisi_tombol.setColumnMinimumWidth(9, 24)
+        self.tombol["u"].setToolTip("PENGUJIAN OTOMATIS: UJI 1 (pukulan bandul) dan UJI 2 (tanjakan) untuk PD dan "
+                                    "PD + CBF-QP 5 / 10 / 15 deg. Tekan lagi untuk membatalkan.")
         self.tombol["q"].setStyleSheet("color: #b3261e")
         self.tombol["r"].setStyleSheet("color: #b3261e")
 
@@ -738,7 +790,8 @@ class JendelaKontrol:
         self.kode_tombol = {QtCore.Qt.Key_W: "w", QtCore.Qt.Key_A: "a", QtCore.Qt.Key_S: "s",
                             QtCore.Qt.Key_D: "d", QtCore.Qt.Key_B: "b", QtCore.Qt.Key_F: "f", QtCore.Qt.Key_O: "o",
                             QtCore.Qt.Key_P: "p", QtCore.Qt.Key_Q: "q",
-                            QtCore.Qt.Key_R: "r", QtCore.Qt.Key_E: "e", QtCore.Qt.Key_T: "t"}
+                            QtCore.Qt.Key_R: "r", QtCore.Qt.Key_E: "e", QtCore.Qt.Key_T: "t",
+                            QtCore.Qt.Key_U: "u"}
 
         self.root = jendela
         for nama in self.nilai:
@@ -797,8 +850,8 @@ class JendelaKontrol:
         else:
             sebelumnya = self.tahan_keyboard[huruf] or self.tahan_mouse[huruf]
             self.tahan_mouse[huruf] = ditekan
-        # B F O P Q R E T: dikirim sekali saat mulai ditekan
-        if ditekan and not sebelumnya and huruf in ("b", "f", "o", "p", "q", "r", "e", "t"):
+        # B F O P Q R E T U: dikirim sekali saat mulai ditekan
+        if ditekan and not sebelumnya and huruf in ("b", "f", "o", "p", "q", "r", "e", "t", "u"):
             self.kirim(("tombol", huruf))
         self.kirim_tahan()
         self.tampilkan_status(self.status)
@@ -861,8 +914,11 @@ class JendelaKontrol:
         self.tombol["p"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_TEKAN, "white") if menyala_p else "")
 
         mode_banding = status.get("mode_banding", False)
+        uji_otomatis = status.get("uji_otomatis", False)
         self.tombol["t"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_UJI, "white")
-                                       if status.get("mode_pengujian", False) and not mode_banding else "")
+                                       if status.get("mode_pengujian", False) and not mode_banding
+                                       and not uji_otomatis else "")
+        self.tombol["u"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_UJI, "white") if uji_otomatis else "")
         self.tombol_mode["banding"].setStyleSheet(self.gaya_tombol(config.WARNA_QT_BANDING, "white")
                                                   if mode_banding else "")
 
@@ -1050,11 +1106,17 @@ class Simulasi:
         self.setengah_lebar = config.JARAK_TEKS
         self.setengah_tinggi = config.JARAK_TEKS
         self.giliran_baris = 0
-        self.bidang_depan = None
-        self.bidang_belakang = None
-        self.bidang_langgar = {"depan": False, "belakang": False}
-        self.kubus_jarak = None
-        self.kubus_langgar = False
+        # Bidang merah barrier psi (lihat gambar_bidang_safety_set)
+        self.bidang = {}               # {+1: bidang depan (h1), -1: bidang belakang (h2)}: id benda PyBullet
+        self.bidang_tingkat = {}       # tingkat kepekatan warna yang sedang tampil tiap bidang
+        self.bidang_letak = {}         # (posisi, orientasi) yang sedang dipakai tiap bidang
+        self.mask_cbf = None           # constraint CBF-QP yang dipakai (list bool h1 ..), dari atur_mask_plot
+
+        # Lintasan UJI 2 pengujian otomatis (buat_lintasan): None = tidak ada
+        self.lintasan = None           # dict ukuran lintasan (dunia)
+        self.lintasan_benda = []       # id benda PyBullet lintasan
+        self.catatan_terkirim = None   # catatan pengujian otomatis terakhir yang dikirim ke plot
+        self.posisi_awal_badan = None  # posisi pusat massa badan saat pertama diletakkan (target kamera awal)
 
         # Jendela Kontrol
         self.kontrol = None
@@ -1100,11 +1162,12 @@ class Simulasi:
                   "(puncak badan %.1f mm), %.1f mm dari garis tengah badan."
                   % (config.DORONG_SISI * 1000, config.DORONG_SISI * 1000, self.tinggi_dorong * 1000, self.tinggi_atas * 1000,
                      config.JARAK_IMU_KE_SISI_LUAR * 1000))
+            # Kamera DIAM tampak sisi kanan robot, diarahkan ke posisi awal robot. Hanya diatur sekali di sini
+            # (tidak ikut robot), supaya arah gerak robot terlihat. Mouse tetap bisa memutar / zoom.
             posisi, _ = p.getBasePositionAndOrientation(self.robot)
-            p.resetDebugVisualizerCamera(cameraDistance=config.KAMERA_JARAK, cameraYaw=config.KAMERA_YAW,
-                                         cameraPitch=config.KAMERA_PITCH, cameraTargetPosition=posisi)
+            self.posisi_awal_badan = [float(v) for v in posisi]
+            self.kamera_awal()
             self.buat_bidang_safety_set()
-            self.buat_kubus_jarak()
             self.buat_bidang_dorong()
             self.buat_jangkar_teks()
             self.kontrol = PenghubungKontrol()
@@ -1157,7 +1220,6 @@ class Simulasi:
         self.normal = np.array([0.0, -math.sin(self.zeta), math.cos(self.zeta)])
         p.resetBasePositionAndOrientation(self.lantai, [0.0, 0.0, 0.0],
                                           p.getQuaternionFromEuler([self.zeta, 0.0, 0.0]))
-        self.atur_kubus_jarak()
         self.reset()
 
     def tinggi_lantai(self, titik):
@@ -1318,9 +1380,12 @@ class Simulasi:
         return list(self.centang_awal)
 
     def atur_mask_plot(self, mask):
-        """Constraint CBF aktif ke plot realtime (barrier aktif merah, tidak aktif abu-abu)."""
+        """Constraint CBF aktif (list bool h1 ..):
+            - ke plot realtime (barrier aktif merah, tidak aktif abu-abu)
+            - ke bidang merah barrier psi di jendela PyBullet (bidang depan tampil bila h1 dipakai, belakang bila h2)"""
+        self.mask_cbf = [bool(m) for m in mask]
         if self.plot is not None:
-            self.plot_kiriman.append(("MASK", [bool(m) for m in mask]))
+            self.plot_kiriman.append(("MASK", list(self.mask_cbf)))
 
     def atur_mode(self, mode):
         """Mode kontrol diganti (tombol PD / PD + CBF-QP): jendela Kontrol dan warna kurva plot ikut."""
@@ -1432,7 +1497,7 @@ class Simulasi:
     def baca_keyboard(self):
         """Baca tombol dari jendela Kontrol (utama) dan dari keyboard di jendela PyBullet (cadangan).
 
-        Mengembalikan daftar tombol yang baru ditekan: 'b', 'f', 'o', 'p', 'q', 'r', 'e', 't',
+        Mengembalikan daftar tombol yang baru ditekan: 'b', 'f', 'o', 'p', 'q', 'r', 'e', 't', 'u',
         'mode_pd' (tombol PD / keyboard 1), 'mode_cbf' (tombol PD + CBF-QP / keyboard 2),
         'banding' (perekam perbandingan / keyboard 3).
         Tombol gerak (ditahan) disimpan di:
@@ -1471,7 +1536,7 @@ class Simulasi:
         self.arah = int(self.ditahan["w"]) - int(self.ditahan["s"])
         self.belok = int(self.ditahan["d"]) - int(self.ditahan["a"])
 
-        for huruf in ("b", "f", "o", "p", "q", "r", "e", "t"):
+        for huruf in ("b", "f", "o", "p", "q", "r", "e", "t", "u"):
             if baru_ditekan(huruf) and huruf not in hasil:
                 hasil.append(huruf)
         for angka, kunci in (("1", "mode_pd"), ("2", "mode_cbf"), ("3", "banding")):
@@ -1508,78 +1573,152 @@ class Simulasi:
                 self.dorong_menyala[sisi] = menyala
                 p.changeVisualShape(bidang, -1, rgbaColor=config.DORONG_WARNA_AKTIF if menyala else config.DORONG_WARNA)
 
-    # ------------------------------------------------- bidang merah safety set
+    # ------------------------------------------------- bidang merah barrier psi
     def buat_bidang_safety_set(self):
-        """Dua bidang merah transparan berbentuk | | di depan dan di belakang robot (lihat config.JARAK_IMU_KE_SISI_LUAR).
-        Hanya gambar (tanpa collision), jadi tidak memengaruhi fisika."""
+        """Dua bidang merah transparan berbentuk | | : di depan robot (h1, psi <= psi_max) dan di belakang robot
+        (h2, psi >= -psi_max). Hanya gambar (tanpa collision), jadi tidak memengaruhi fisika."""
         setengah = [config.BIDANG_LEBAR / 2.0, 0.001, config.BIDANG_TINGGI / 2.0]
-        hasil = []
-        for _ in range(2):
-            bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=config.BIDANG_WARNA)
-            hasil.append(p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1, baseVisualShapeIndex=bentuk,
-                                           basePosition=[0.0, 0.0, -5.0]))
-        self.bidang_depan = hasil[0]
-        self.bidang_belakang = hasil[1]
+        for sisi in (1, -1):
+            bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=warna_bidang(0))
+            self.bidang[sisi] = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1,
+                                                  baseVisualShapeIndex=bentuk, basePosition=TEMPAT_SEMBUNYI)
+            self.bidang_tingkat[sisi] = 0
+            self.bidang_letak[sisi] = None
         self.gambar_bidang_safety_set()
 
+    def barrier_psi_dipakai(self, sisi):
+        """True bila barrier psi sisi itu dipakai CBF-QP: sisi +1 = h1, -1 = h2 (nomor dari config.CBF_BARRIER_H).
+        Sebelum atera_main.py mengirim mask (atur_mask_plot), keduanya dianggap dipakai."""
+        if self.mask_cbf is None:
+            return True
+        atas, bawah = config.CBF_BARRIER_H["psi"]
+        indeks = (atas if sisi > 0 else bawah) - 1
+        return indeks < len(self.mask_cbf) and self.mask_cbf[indeks]
+
     def gambar_bidang_safety_set(self):
-        if self.bidang_depan is None:
+        """Letak dan warna bidang merah barrier psi (dipanggil dari tampilkan()):
+            - IKUT robot: di depan dan di belakang poros roda, searah depan robot (mendatar), berdiri di lantai
+              (atau di permukaan lintasan UJI 2 bila bidangnya berada di atas lintasan)
+            - jarak mendatar dari poros = L_IMU*sin(psi_max) + JARAK_IMU_KE_SISI_LUAR*cos(psi_max), jadi ikut berubah
+              saat psi_max_DEG diubah di jendela Kontrol (sisi terluar badan di ketinggian IMU tepat menyentuh bidang
+              saat psi = +-psi_max)
+            - hanya tampil di mode PD + CBF-QP: bidang depan bila h1 dipakai, bidang belakang bila h2 dipakai
+            - warna makin pekat saat psi mendekati barrier sisi itu (tingkat_bidang), paling pekat saat melewatinya
+        PyBullet hanya dipanggil bila letak atau tingkat warnanya berubah."""
+        if len(self.bidang) == 0:
             return
-        posisi_link, rot = self.pose_badan()
-        poros = posisi_link + rot @ self.poros_badan
+        psi_max = float(config.psi_max)
+        jarak = config.L_IMU * math.sin(psi_max) + config.JARAK_IMU_KE_SISI_LUAR * math.cos(psi_max)
+        poros = self.posisi_poros()
         _, _, depan = self.sumbu_badan()                    # arah depan robot, mendatar
         atas = np.array([0.0, 0.0, 1.0])
         sumbu_datar = np.cross(depan, atas)                 # arah poros roda, mendatar
-        matriks = np.column_stack([sumbu_datar, depan, atas])
-        orientasi = quaternion_dari_matriks(matriks)
-        psi = self.x_terakhir[2]          # psi hasil Kalman, sama dengan yang dibaca kontrol
+        orientasi = quaternion_dari_matriks(np.column_stack([sumbu_datar, depan, atas]))
+        psi = float(self.x_terakhir[2])   # psi hasil Kalman, sama dengan yang dibaca kontrol
 
-        # Jarak mendatar bidang dari poros roda
-        jarak = config.L_IMU * math.sin(config.psi_max) + config.JARAK_IMU_KE_SISI_LUAR * math.cos(config.psi_max)
+        for sisi, bidang in self.bidang.items():
+            tampil = self.judul == MODE_PD_CBF and self.barrier_psi_dipakai(sisi)
+            if tampil:
+                pusat = poros + sisi * jarak * depan
+                pusat[2] = self.tinggi_tanah(pusat) + 0.5 * config.BIDANG_TINGGI       # berdiri di lantai / lintasan
+                letak = ([float(v) for v in pusat], [float(v) for v in orientasi])
+            else:
+                letak = (list(TEMPAT_SEMBUNYI), [0.0, 0.0, 0.0, 1.0])
+            if letak != self.bidang_letak.get(sisi):
+                self.bidang_letak[sisi] = letak
+                p.resetBasePositionAndOrientation(bidang, letak[0], letak[1])
 
-        for nama, bidang, tanda in (("depan", self.bidang_depan, 1.0), ("belakang", self.bidang_belakang, -1.0)):
-            pusat = poros + tanda * jarak * depan
-            pusat[2] = self.tinggi_lantai(pusat) + 0.5 * config.BIDANG_TINGGI      # bidang berdiri di lantai
-            p.resetBasePositionAndOrientation(bidang, pusat.tolist(), orientasi)
+            tingkat = tingkat_bidang(psi, psi_max, sisi) if tampil else 0
+            if tingkat != self.bidang_tingkat.get(sisi):
+                self.bidang_tingkat[sisi] = tingkat
+                p.changeVisualShape(bidang, -1, rgbaColor=warna_bidang(tingkat))
 
-            langgar = psi > config.psi_max if nama == "depan" else psi < config.psi_min
-            if langgar != self.bidang_langgar[nama]:
-                self.bidang_langgar[nama] = langgar
-                p.changeVisualShape(bidang, -1, rgbaColor=config.BIDANG_WARNA_LANGGAR if langgar else config.BIDANG_WARNA)
+    # ------------------------------------------------ lintasan UJI 2 dan kamera
+    def posisi_poros(self):
+        """Titik tengah poros roda (koordinat dunia) [m]."""
+        posisi_link, rot = self.pose_badan()
+        return posisi_link + rot @ self.poros_badan
 
-    # ----------------------------------------------- kotak biru safety set jarak s
-    def buat_kubus_jarak(self):
-        """Kotak biru transparan = daerah s_min <= s <= s_max. Hanya gambar, tanpa collision.
-        Tidak dibuat bila config.py belum punya s_max / s_min."""
-        if not hasattr(config, "s_max") or not hasattr(config, "s_min"):
-            print("Kotak jarak tidak digambar: s_max / s_min belum ada di config.py.")
-            return
-        panjang = config.s_max - config.s_min
-        setengah = [config.KUBUS_LEBAR / 2.0, panjang / 2.0, config.KUBUS_TINGGI / 2.0]
-        bentuk = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=config.KUBUS_WARNA)
-        self.kubus_jarak = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1, baseVisualShapeIndex=bentuk,
-                                             basePosition=[0.0, 0.0, -5.0])
-        self.atur_kubus_jarak()
+    def tinggi_lintasan(self, titik):
+        """Tinggi (z) permukaan lintasan UJI 2 di bawah titik (x, y) [m], None bila titik tidak di atas lintasan."""
+        lin = self.lintasan
+        if lin is None or abs(titik[0]) > 0.5 * lin["lebar"]:
+            return None
+        y = titik[1]
+        if lin["y_mulai"] <= y <= lin["y_puncak"]:
+            return (y - lin["y_mulai"]) * math.tan(lin["zeta"])
+        if lin["y_puncak"] < y <= lin["y_akhir"]:
+            return lin["tinggi"]
+        return None
 
-    def atur_kubus_jarak(self):
-        """Letakkan kotak di posisi awal robot (s = 0 di titik (0, 0, 0)), searah lintasan dan mengikuti lantai."""
-        if self.kubus_jarak is None:
-            return
-        arah_lintasan = np.array([0.0, math.cos(self.zeta), math.sin(self.zeta)])   # +Y dunia, sepanjang lantai
-        tengah_s = 0.5 * (config.s_max + config.s_min)
-        pusat = tengah_s * arah_lintasan + 0.5 * config.KUBUS_TINGGI * self.normal
-        p.resetBasePositionAndOrientation(self.kubus_jarak, pusat.tolist(),
-                                          p.getQuaternionFromEuler([self.zeta, 0.0, 0.0]))
+    def tinggi_tanah(self, titik):
+        """Tinggi permukaan yang diinjak di bawah titik (x, y): lantai, atau lintasan UJI 2 bila lebih tinggi [m]."""
+        z = self.tinggi_lantai(titik)
+        z_lintasan = self.tinggi_lintasan(titik)
+        return z if z_lintasan is None else max(z, z_lintasan)
 
-    def warnai_kubus_jarak(self):
-        """Kotak lebih gelap bila s = R*theta di luar batas."""
-        if self.kubus_jarak is None:
-            return
-        jarak = model.hitung_s(self.x_terakhir)
-        langgar = jarak > config.s_max or jarak < config.s_min
-        if langgar != self.kubus_langgar:
-            self.kubus_langgar = langgar
-            p.changeVisualShape(self.kubus_jarak, -1, rgbaColor=config.KUBUS_WARNA_LANGGAR if langgar else config.KUBUS_WARNA)
+    def buat_lintasan(self, y_mulai, zeta_deg, panjang_miring, datar_atas, lebar, tebal, warna_papan, warna_panggung):
+        """Lintasan UJI 2 searah +Y dunia (depan robot saat diletakkan), di atas lantai datar:
+            y < y_mulai                 : lantai PyBullet (bidang datar bawah)
+            y_mulai .. y_puncak         : papan tanjakan zeta_deg, panjang_miring [m] di sepanjang permukaannya
+            y_puncak .. y_akhir         : panggung (bidang datar atas) setinggi puncak tanjakan, panjang datar_atas [m]
+        Papan = kotak tipis (tebal [m]) yang diputar zeta terhadap sumbu X: tepi bawah permukaannya tepat di lantai
+        (y_mulai, z = 0) dan tepi atasnya tepat di sudut depan panggung (tanpa celah atau tangga)."""
+        self.hapus_lintasan()
+        zeta = math.radians(zeta_deg)
+        dy = panjang_miring * math.cos(zeta)
+        tinggi = panjang_miring * math.sin(zeta)
+        y_puncak = y_mulai + dy
+        y_akhir = y_puncak + datar_atas
+        self.lintasan = {"y_mulai": float(y_mulai), "y_puncak": float(y_puncak), "y_akhir": float(y_akhir),
+                         "tinggi": float(tinggi), "zeta": float(zeta), "lebar": float(lebar),
+                         "panjang_miring": float(panjang_miring)}
+        normal = np.array([0.0, -math.sin(zeta), math.cos(zeta)])           # normal permukaan papan
+        tengah_permukaan = np.array([0.0, y_mulai + 0.5 * dy, 0.5 * tinggi])
+        benda = [
+            # papan tanjakan
+            ([0.5 * lebar, 0.5 * panjang_miring, 0.5 * tebal], tengah_permukaan - 0.5 * tebal * normal,
+             p.getQuaternionFromEuler([zeta, 0.0, 0.0]), warna_papan),
+            # panggung bidang datar atas (berdiri di lantai)
+            ([0.5 * lebar, 0.5 * datar_atas, 0.5 * tinggi], np.array([0.0, 0.5 * (y_puncak + y_akhir), 0.5 * tinggi]),
+             [0.0, 0.0, 0.0, 1.0], warna_panggung),
+        ]
+        for setengah, pusat, orientasi, warna in benda:
+            bentuk = p.createCollisionShape(p.GEOM_BOX, halfExtents=setengah)
+            tampak = p.createVisualShape(p.GEOM_BOX, halfExtents=setengah, rgbaColor=warna)
+            nomor = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=bentuk, baseVisualShapeIndex=tampak,
+                                      basePosition=[float(v) for v in pusat], baseOrientation=list(orientasi))
+            p.changeDynamics(nomor, -1, lateralFriction=config.GESEKAN_RODA)
+            self.lintasan_benda.append(nomor)
+        return self.lintasan
+
+    def hapus_lintasan(self):
+        """Hapus lintasan UJI 2 (bila ada)."""
+        for nomor in self.lintasan_benda:
+            try:
+                p.removeBody(nomor)
+            except Exception:
+                pass
+        self.lintasan_benda = []
+        self.lintasan = None
+
+    def atur_kamera(self, jarak, yaw, pitch, target):
+        """Pasang kamera (diam sampai diatur lagi; mouse tetap bisa memutar / zoom)."""
+        if self.gui:
+            p.resetDebugVisualizerCamera(cameraDistance=float(jarak), cameraYaw=float(yaw), cameraPitch=float(pitch),
+                                         cameraTargetPosition=[float(v) for v in target])
+
+    def kamera_awal(self):
+        """Kamera bawaan config.py (KAMERA_*), diarahkan ke posisi awal robot."""
+        target = self.posisi_awal_badan if self.posisi_awal_badan is not None else [0.0, 0.0, 0.15]
+        self.atur_kamera(config.KAMERA_JARAK, config.KAMERA_YAW, config.KAMERA_PITCH, target)
+
+    def kirim_catatan(self, baris):
+        """Catatan pengujian otomatis (list teks) ke panel catatan jendela plot (hanya bila berubah)."""
+        baris = [str(b) for b in baris]
+        if self.plot is not None and baris != self.catatan_terkirim:
+            self.catatan_terkirim = baris
+            self.plot_kiriman.append(("CATATAN", baris))
 
     # ------------------------------------------------- teks di jendela PyBullet
     # PyBullet hanya bisa menulis teks di ruang 3D. Supaya teks tetap di tempat yang sama di layar,
@@ -1627,23 +1766,32 @@ class Simulasi:
                                                      parentObjectUniqueId=self.jangkar)
         return True
 
-    def gambar_teks(self, baris):
-        """Blok parameter di kiri atas jendela PyBullet. (Visual tombol ada di jendela Kontrol.)"""
-        # Blok parameter. Baris yang isinya berubah ditulis bergiliran, config.BARIS_PER_TAMPIL baris tiap panggilan.
-        isi_baris = list(baris[:config.JUMLAH_BARIS_MAKS])
-        while len(isi_baris) < config.JUMLAH_BARIS_MAKS:
-            isi_baris.append(" ")
-        ditulis = 0
-        for _ in range(config.JUMLAH_BARIS_MAKS):
-            i = self.giliran_baris
-            self.giliran_baris = (self.giliran_baris + 1) % config.JUMLAH_BARIS_MAKS
-            if isi_baris[i] == " " and ("baris%d" % i) not in self.id_teks:
-                continue                # baris kosong yang belum pernah dipakai
-            if isi_baris[i].startswith(("TUNING", "komet", "PENGUJIAN")):
+    def gambar_teks(self, baris, baris_uji=None):
+        """Blok parameter di kiri atas jendela PyBullet (baris: list teks), dan blok PENGUJIAN OTOMATIS di kiri bawah
+        (baris_uji: list (teks, warna rgb), None / [] = tidak ada). (Visual tombol ada di jendela Kontrol.)
+        Baris yang isinya berubah ditulis bergiliran (kedua blok satu giliran), config.BARIS_PER_TAMPIL baris tiap
+        panggilan. Baris blok uji jarang berubah, jadi hampir tidak menambah beban."""
+        isi = []
+        for i in range(config.JUMLAH_BARIS_MAKS):
+            teks = baris[i] if i < len(baris) else " "
+            if teks.startswith(("TUNING", "komet", "PENGUJIAN")):
                 warna = config.WARNA_PERINGATAN
             else:
                 warna = config.WARNA_BIASA
-            if self.tulis("baris%d" % i, isi_baris[i], -0.96, 0.90 - config.JARAK_BARIS * i, warna):
+            isi.append(("baris%d" % i, teks, 0.90 - config.JARAK_BARIS * i, warna, 1.2))
+        baris_uji = baris_uji or []
+        for i in range(config.JUMLAH_BARIS_UJI_MAKS):
+            teks, warna = baris_uji[i] if i < len(baris_uji) else (" ", config.WARNA_BIASA)
+            isi.append(("uji%d" % i, teks, config.TEKS_UJI_ATAS - config.JARAK_BARIS_UJI * i, list(warna),
+                        config.UKURAN_TEKS_UJI))
+        ditulis = 0
+        for _ in range(len(isi)):
+            i = self.giliran_baris % len(isi)
+            self.giliran_baris = (i + 1) % len(isi)
+            kunci, teks, sy, warna, ukuran = isi[i]
+            if teks == " " and kunci not in self.id_teks:
+                continue                # baris kosong yang belum pernah dipakai
+            if self.tulis(kunci, teks, -0.96, sy, warna, ukuran):
                 ditulis = ditulis + 1
                 if ditulis >= config.BARIS_PER_TAMPIL:
                     break
@@ -1689,34 +1837,31 @@ class Simulasi:
         self.plot_kiriman = []
 
     # ---------------------------------------------------------------- tampilan
-    def tampilkan(self, baris, mode_gerak, komet=False, pengujian="", banding=False):
-        """Perbarui semua tampilan. Dipanggil dari atera_main.py beberapa kali per detik.
+    def tampilkan(self, baris, mode_gerak, komet=False, pengujian="", banding=False, baris_uji=None,
+                  uji_otomatis=False):
+        """Perbarui semua tampilan. Dipanggil dari atera_main.py (dan uji_otomatis.py) beberapa kali per detik.
 
         baris          : daftar teks parameter (ditulis di kiri atas jendela PyBullet)
         mode_gerak     : MODE_DIAM, MODE_BALANCING, atau MODE_BEBAS (pd_control.py)
         komet          : True = KOMET, motor dimatikan (ditampilkan di jendela Kontrol)
         pengujian      : teks status mode pengujian / perekam perbandingan ("" = tidak dalam mode itu)
         banding        : True = perekam perbandingan (tombol 3) menyala
+        baris_uji      : blok tulisan PENGUJIAN OTOMATIS di kiri bawah jendela PyBullet, list (teks, warna rgb)
+        uji_otomatis   : True = PENGUJIAN OTOMATIS (tombol U) sedang berjalan (tombol U menyala di jendela Kontrol)
         """
         if not self.gui:
             return
         self.hitung_tampil = self.hitung_tampil + 1
 
-        # Kamera mengikuti robot, tetapi baru digeser bila robot sudah jauh dari tengah layar.
+        # Kamera DIAM (tidak ikut robot, diatur sekali di __init__): di sini hanya dibaca untuk meletakkan teks.
         # Jarak dan sudut pandang tetap bisa diatur dengan mouse.
-        posisi, _ = p.getBasePositionAndOrientation(self.robot)
         kamera = p.getDebugVisualizerCamera()
         tengah = kamera[11]
-        if np.linalg.norm(np.array(posisi) - np.array(tengah)) > config.KAMERA_BATAS_GESER:
-            tengah = posisi
-            p.resetDebugVisualizerCamera(cameraDistance=kamera[10], cameraYaw=kamera[8], cameraPitch=kamera[9],
-                                         cameraTargetPosition=tengah)
 
         self.gambar_bidang_safety_set()
-        self.warnai_kubus_jarak()
         self.gambar_bidang_dorong()
         self.atur_jangkar_teks(kamera, tengah)
-        self.gambar_teks(baris)
+        self.gambar_teks(baris, baris_uji)
 
         # Status untuk jendela Kontrol: tombol mana yang menyala, mode, dan dorongan.
         if self.kontrol is not None:
@@ -1732,7 +1877,7 @@ class Simulasi:
                                        "arah_dorong": arah_dorong, "komet": bool(komet),
                                        "mode_pengujian": pengujian != "", "pengujian": pengujian,
                                        "cbf_ada": self.cbf_ada, "pembanding": self.teks_pembanding,
-                                       "mode_banding": bool(banding)})
+                                       "mode_banding": bool(banding), "uji_otomatis": bool(uji_otomatis)})
         if self.hitung_tampil % config.PLOT_SETIAP == 0:
             self.gambar_plot()
 
