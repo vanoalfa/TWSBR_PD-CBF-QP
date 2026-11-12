@@ -14,6 +14,8 @@ File ini hanya mengurus simulasinya:
     - jendela "ATERA - Kontrol" (Qt): tombol mode kontrol PD / PD + CBF-QP, tombol W A S D B F O P,
       dan kolom angka parameter (input utama). B = mode BALANCING, F = mode BEBAS, U = PENGUJIAN OTOMATIS
     - lintasan UJI 2 pengujian otomatis (buat_lintasan / hapus_lintasan, dipakai uji_otomatis.py)
+    - FOTO PENGUJIAN (tombol 6 / 7, alurnya di atera_main.FotoPengujian): bandul, robot bayangan, lintasan berwarna,
+      kamera foto, getCameraImage + PNG BERSIH (tanpa teks) dan ANOTASI (garis, busur, teks). Bagian "FOTO" di bawah.
     - catatan pengujian otomatis: blok tulisan di jendela PyBullet dan panel catatan di jendela plot
     - plot realtime: kurva sekarang + kurva PEMBANDING (pengujian terakhir tiap mode: PD ungu, PD+CBF biru)
     - keyboard di jendela PyBullet (input cadangan, tombolnya sama)
@@ -66,6 +68,7 @@ NAMA_GAIN = ["Kp_psi", "Kd_psi", "Kp_theta", "Kd_theta", "Kvel"] + NAMA_ALPHA
 # Parameter di jendela Kontrol: (nama, jumlah desimal). Isinya dari config.DESIMAL dan config.DESIMAL_ALPHA.
 DAFTAR_PARAMS = [(_nama, config.DESIMAL.get(_nama, config.DESIMAL_ALPHA))
                  for _nama in NAMA_GAIN + ["Gaya_dorong", "zeta_DEG", "psi_max_DEG"]]
+DAFTAR_PARAMS.append(("chi_DEG", 1))    # sudut lepas bandul FOTO tombol 6 [deg] (bukan nilai config.py)
 
 FOLDER_INI = os.path.dirname(os.path.abspath(__file__))
 PILIHAN_URDF = [os.path.join(FOLDER_INI, path) for path in config.URDF_PILIHAN]
@@ -75,6 +78,45 @@ PILIHAN_URDF = [os.path.join(FOLDER_INI, path) for path in config.URDF_PILIHAN]
 MODE_PD_CBF = "PD+CBF"
 # Tempat bidang merah disembunyikan (jauh di bawah lantai): mode PD, atau barrier sisi itu tidak dicentang.
 TEMPAT_SEMBUNYI = [0.0, 0.0, -5.0]
+
+
+def warna_hex(teks, alpha=1.0):
+    """'#FF9191' -> [1.0, 0.569, 0.569, alpha] (rgba PyBullet)."""
+    teks = teks.lstrip("#")
+    return [int(teks[i:i + 2], 16) / 255.0 for i in (0, 2, 4)] + [float(alpha)]
+
+
+# =============================================================================
+# FOTO PENGUJIAN (tombol 6 = dipukul bandul di bidang datar, 7 = naik bidang miring; alur di atera_main.py)
+# Semua nilai FOTO_* hanya untuk GAMBAR (benda visual tanpa collision, kamera, warna): fisika dan kontrol tidak
+# berubah. ASUMSI: ditaruh di sini (bukan config.py) karena tugas ini hanya mengubah atera_main.py dan simulasi.py.
+# Hasil: PLOT_EVALUASI/FOTO/<PD | PDCBFQP10 | ...>/YYYYMMDD_HHmmSS_<kontrol>_<uji>_Simulasi_FOTO KE-XX_BERSIH.png
+#                                                                                         ..._ANOTASI.png
+#        <uji> = sudut bandul chi (mis. 60) untuk tombol 6, 7-5 (UJI2_ZETA_DEG) untuk tombol 7.
+# =============================================================================
+FOTO_FOLDER = os.path.join(FOLDER_INI, "PLOT_EVALUASI", "FOTO")
+FOTO_UKURAN_PUKUL = (1920, 1080)   # [px] (lebar, tinggi) PNG tombol 6
+FOTO_UKURAN_MIRING = (2560, 900)    # [px] (lebar, tinggi) PNG tombol 7 (lebar, karena lintasan panjang)
+# Bagian gambar tempat benda-benda harus muat (kiri, kanan, bawah, atas; 0 .. 1 dari lebar / tinggi gambar). Sisanya
+# untuk blok info (atas) dan grafik kecil (kanan atas, tombol 6) di PNG ANOTASI, supaya tidak menutupi benda.
+FOTO_KOTAK_PUKUL = (0.03, 0.69, 0.04, 0.78)
+FOTO_KOTAK_MIRING = (0.02, 0.98, 0.06, 0.74)
+FOTO_FOV_DEG = 20.0                 # [deg] sudut pandang vertikal kamera foto. Kecil = hampir tanpa perspektif
+FOTO_PITCH_DEG = -4.0               # [deg] kamera hampir tepat dari samping (yaw = config.KAMERA_YAW, sisi kanan)
+FOTO_CHI_AWAL_DEG = 60.0            # [deg] chi awal di jendela Kontrol (kolom chi_DEG)
+FOTO_JENDELA_PUNCAK_S = 2.5         # [s] tombol 6: |psi| maksimum dicari selama sekian detik setelah pukulan
+FOTO_BOLA_JARI_M = 0.023            # [m] ASUMSI: bandul bola baja 0.404 kg -> r = (3 m / (4 pi 7850))^(1/3) = 0.023 m
+FOTO_TALI_JARI_M = 0.0012           # [m] jari-jari tali (gambar)
+FOTO_WARNA_BOLA = [0.20, 0.27, 0.42, 1.0]
+FOTO_WARNA_TALI = [0.12, 0.12, 0.12, 1.0]
+FOTO_WARNA_GANTUNGAN = [0.25, 0.25, 0.25, 1.0]
+FOTO_WARNA_BAYANGAN = [0.72, 0.72, 0.78, 0.30]     # robot / bandul bayangan (transparan)
+FOTO_TITIK_BUSUR = 16               # jumlah titik kecil lintasan ayunan bandul (chi -> 0)
+FOTO_WARNA_TANJAKAN = warna_hex("#FF9191")           # papan bidang miring
+FOTO_WARNA_DATAR = warna_hex("#FFE55C")              # bidang datar lintasan (bawah dan atas)
+FOTO_JALUR_BAWAH_BELAKANG_M = 0.5   # [m] ASUMSI: jalur kuning datar bawah mulai sekian m di belakang posisi awal robot
+FOTO_BAYANGAN_TUJUAN = True         # tombol 7: robot bayangan tegak di bidang atas (penanda tujuan, BUKAN hasil uji)
+FOTO_SISI_ANOTASI_M = 0.20          # [m] garis anotasi robot digeser ke sisi kamera (di luar roda) supaya terlihat
 
 
 def tingkat_bidang(psi, psi_max, sisi):
@@ -100,6 +142,88 @@ def warna_bidang(tingkat):
         opasitas = config.BIDANG_OPASITAS_MIN + (config.BIDANG_OPASITAS_MAKS - config.BIDANG_OPASITAS_MIN) \
             * tingkat / config.BIDANG_TINGKAT
     return list(config.BIDANG_RGB) + [opasitas]
+
+
+# ----------------------------------------------------------------------------- FOTO: proyeksi dan gambar anotasi
+def proyeksi_layar(titik, view, proj, lebar, tinggi):
+    """Titik dunia (N x 3) -> piksel (N x 2) pada gambar getCameraImage dengan matriks view / proj yang sama
+    (matriks PyBullet = 16 angka urutan kolom). Piksel (0, 0) = kiri atas."""
+    titik = np.atleast_2d(np.asarray(titik, dtype=float))
+    matriks = np.array(proj, dtype=float).reshape(4, 4).T @ np.array(view, dtype=float).reshape(4, 4).T
+    klip = np.c_[titik, np.ones(len(titik))] @ matriks.T
+    ndc = klip[:, :3] / klip[:, 3:4]
+    return np.c_[(ndc[:, 0] + 1.0) * 0.5 * lebar, (1.0 - ndc[:, 1]) * 0.5 * tinggi]
+
+
+def foto_simpan_bersih(rgb, path):
+    """PNG BERSIH: hasil getCameraImage apa adanya (tanpa teks / garis anotasi)."""
+    from matplotlib import image as mpimg
+    mpimg.imsave(path, rgb)
+
+
+def foto_simpan_anotasi(rgb, view, proj, anotasi, path):
+    """PNG ANOTASI: hasil getCameraImage + garis, busur, panah, teks (titik dunia diproyeksikan dengan kamera yang
+    sama, jadi tepat di tempatnya) + blok info kiri atas + grafik kecil (opsional). Tanpa pyplot (aman dengan backend
+    apa pun). anotasi (dict, semua kunci opsional):
+        garis : list {"titik": N x 3, "warna": rgb, "tebal": px, "putus": bool}
+        panah : list {"dari": 3, "ke": 3, "warna": rgb, "tebal": px}
+        teks  : list {"posisi": 3, "teks": str, "warna": rgb, "ukuran": pt, "geser": (dx, dy) px, "ha": "left"}
+        info  : list (teks, rgb, tebal)  -> blok kiri atas
+        grafik: {"t", "y", "t_tanda", "y_tanda", "batas", "judul", "label_y", "t_pukul"}
+    """
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    from matplotlib.figure import Figure
+
+    tinggi, lebar = rgb.shape[:2]
+    skala = lebar / 1920.0                      # ukuran huruf ikut lebar gambar
+    fig = Figure(figsize=(lebar / 100.0, tinggi / 100.0), dpi=100)
+    FigureCanvasAgg(fig)
+    ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    ax.imshow(rgb, interpolation="none")
+    ax.set_xlim(0, lebar)
+    ax.set_ylim(tinggi, 0)
+    ax.axis("off")
+
+    def piksel(titik):
+        return proyeksi_layar(titik, view, proj, lebar, tinggi)
+
+    for g in anotasi.get("garis", []):
+        xy = piksel(g["titik"])
+        ax.plot(xy[:, 0], xy[:, 1], color=g.get("warna", (0, 0, 0)), lw=g.get("tebal", 2.0),
+                ls="--" if g.get("putus", False) else "-", solid_capstyle="round", zorder=3)
+    for a in anotasi.get("panah", []):
+        xy = piksel([a["dari"], a["ke"]])
+        ax.annotate("", xy=tuple(xy[1]), xytext=tuple(xy[0]), zorder=4,
+                    arrowprops=dict(arrowstyle="-|>", color=a.get("warna", (0, 0, 0)), lw=a.get("tebal", 3.0),
+                                    mutation_scale=28, shrinkA=0, shrinkB=0))
+    for t in anotasi.get("teks", []):
+        xy = piksel([t["posisi"]])[0]
+        dx, dy = t.get("geser", (0, 0))
+        ax.text(xy[0] + dx, xy[1] + dy, t["teks"], color=t.get("warna", (0, 0, 0)), fontsize=t.get("ukuran", 15) * skala,
+                fontweight="bold", ha=t.get("ha", "left"), va=t.get("va", "center"), zorder=5,
+                bbox=dict(boxstyle="round,pad=0.25", fc="white", ec="none", alpha=0.75))
+    for i, (teks, warna, tebal) in enumerate(anotasi.get("info", [])):
+        fig.text(0.010, 1.0 - (14.0 + 38.0 * i) * skala / tinggi, teks, color=warna, fontsize=15 * skala,
+                 family="monospace",
+                 fontweight="bold" if tebal else "normal", va="top", ha="left",
+                 bbox=dict(boxstyle="square,pad=0.2", fc="white", ec="none", alpha=0.70))
+
+    grafik = anotasi.get("grafik")
+    if grafik is not None and len(grafik["t"]) > 1:
+        kecil = fig.add_axes([0.715, 0.56, 0.27, 0.30])
+        kecil.patch.set_alpha(0.88)
+        kecil.plot(grafik["t"], grafik["y"], color=(0.0, 0.31, 0.69), lw=1.8)
+        if grafik.get("batas") is not None:
+            kecil.axhline(grafik["batas"], color=(0.85, 0.0, 0.0), ls=":", lw=1.5)
+        if grafik.get("t_pukul") is not None:
+            kecil.axvline(grafik["t_pukul"], color=(0.04, 0.54, 0.16), ls="--", lw=1.2)
+        kecil.plot([grafik["t_tanda"]], [grafik["y_tanda"]], "o", ms=12, mfc="none", mec=(0.8, 0.0, 0.0), mew=2.5)
+        kecil.set_title(grafik.get("judul", ""), fontsize=13)
+        kecil.set_xlabel("t (s)", fontsize=12)
+        kecil.set_ylabel(grafik.get("label_y", ""), fontsize=12)
+        kecil.tick_params(labelsize=11)
+        kecil.grid(alpha=0.3)
+    fig.savefig(path, dpi=100)
 
 
 def batas_arus_kecepatan(arus, w):
@@ -173,6 +297,8 @@ def nilai_awal_params():
     for nama, _ in DAFTAR_PARAMS:
         if nama == "Gaya_dorong":
             nilai[nama] = float(config.GAYA_DORONG_AWAL)
+        elif nama == "chi_DEG":
+            nilai[nama] = float(FOTO_CHI_AWAL_DEG)
         else:
             nilai[nama] = float(getattr(config, nama))
     return nilai
@@ -197,6 +323,8 @@ def cetak_nilai(nilai, awal):
         teks = "%s = %s" % (nama, tulis_angka(nama, nilai[nama]))
         if nama == "Gaya_dorong":
             teks = "# %s N (GAYA_DORONG_AWAL di config.py)" % teks
+        if nama == "chi_DEG":
+            teks = "# %s deg (FOTO_CHI_AWAL_DEG di simulasi.py, tombol 6)" % teks
         if abs(nilai[nama] - awal[nama]) > 1e-9:
             teks = "%-28s # berubah, sebelumnya %s" % (teks, tulis_angka(nama, awal[nama]))
         print(teks, flush=True)
@@ -642,13 +770,20 @@ class JendelaKontrol:
         baris_mode.addWidget(label)
         self.tombol_mode = {}
         for kunci, teks in (("mode_pd", "1  |  PD"), ("mode_cbf", "2  |  PD + CBF-QP"),
-                            ("banding", "3  |  rekam perbandingan")):
+                            ("banding", "3  |  rekam perbandingan"), ("foto_pukul", "6  |  foto dipukul"),
+                            ("foto_miring", "7  |  foto bidang miring")):
             tombol = QtWidgets.QPushButton(teks)
-            tombol.setFixedSize(170 if kunci == "banding" else 150, 34)
+            tombol.setFixedSize(150 if kunci in ("mode_pd", "mode_cbf") else 170, 34)
             tombol.setFocusPolicy(QtCore.Qt.NoFocus)
             if kunci == "banding":
                 tombol.setToolTip("Nyala / mati perekam perbandingan: R lalu O / P = mulai rekam, disimpan otomatis "
                                   "dan jadi pembanding mode itu")
+            elif kunci == "foto_pukul":
+                tombol.setToolTip("FOTO: bidang datar, dipukul bandul chi_DEG, freeze + PNG di |psi| maksimum "
+                                  "(mode kontrol sekarang)")
+            elif kunci == "foto_miring":
+                tombol.setToolTip("FOTO: naik bidang miring %g deg, freeze + PNG saat poros roda di tengah tanjakan "
+                                  "(mode kontrol sekarang)" % config.UJI2_ZETA_DEG)
             else:
                 tombol.setToolTip("Ganti mode kontrol: data sekarang disimpan, lalu robot diletakkan ulang")
             tombol.clicked.connect(lambda dicentang=False, k=kunci: self.kirim(("tombol", k)))
@@ -786,7 +921,8 @@ class JendelaKontrol:
 
         self.saringan = Saringan(self)
         self.app.installEventFilter(self.saringan)
-        self.kode_mode = {QtCore.Qt.Key_1: "mode_pd", QtCore.Qt.Key_2: "mode_cbf", QtCore.Qt.Key_3: "banding"}
+        self.kode_mode = {QtCore.Qt.Key_1: "mode_pd", QtCore.Qt.Key_2: "mode_cbf", QtCore.Qt.Key_3: "banding",
+                          QtCore.Qt.Key_6: "foto_pukul", QtCore.Qt.Key_7: "foto_miring"}
         self.kode_tombol = {QtCore.Qt.Key_W: "w", QtCore.Qt.Key_A: "a", QtCore.Qt.Key_S: "s",
                             QtCore.Qt.Key_D: "d", QtCore.Qt.Key_B: "b", QtCore.Qt.Key_F: "f", QtCore.Qt.Key_O: "o",
                             QtCore.Qt.Key_P: "p", QtCore.Qt.Key_Q: "q",
@@ -1117,6 +1253,8 @@ class Simulasi:
         self.lintasan_benda = []       # id benda PyBullet lintasan
         self.catatan_terkirim = None   # catatan pengujian otomatis terakhir yang dikirim ke plot
         self.posisi_awal_badan = None  # posisi pusat massa badan saat pertama diletakkan (target kamera awal)
+        self.foto_benda = []           # id benda visual FOTO (bandul, jalur, robot bayangan), dihapus foto_bersihkan
+        self.foto_bandul = None        # dict id dan ukuran bandul FOTO (foto_buat_bandul)
 
         # Jendela Kontrol
         self.kontrol = None
@@ -1499,7 +1637,7 @@ class Simulasi:
 
         Mengembalikan daftar tombol yang baru ditekan: 'b', 'f', 'o', 'p', 'q', 'r', 'e', 't', 'u',
         'mode_pd' (tombol PD / keyboard 1), 'mode_cbf' (tombol PD + CBF-QP / keyboard 2),
-        'banding' (perekam perbandingan / keyboard 3).
+        'banding' (perekam perbandingan / keyboard 3), 'foto_pukul' (keyboard 6), 'foto_miring' (keyboard 7).
         Tombol gerak (ditahan) disimpan di:
             self.arah  : +1 maju (W), -1 mundur (S), 0 lepas
             self.belok : -1 kiri (A), +1 kanan (D), 0 lepas
@@ -1539,7 +1677,8 @@ class Simulasi:
         for huruf in ("b", "f", "o", "p", "q", "r", "e", "t", "u"):
             if baru_ditekan(huruf) and huruf not in hasil:
                 hasil.append(huruf)
-        for angka, kunci in (("1", "mode_pd"), ("2", "mode_cbf"), ("3", "banding")):
+        for angka, kunci in (("1", "mode_pd"), ("2", "mode_cbf"), ("3", "banding"), ("6", "foto_pukul"),
+                             ("7", "foto_miring")):
             if baru_ditekan(angka) and kunci not in hasil:
                 hasil.append(kunci)
         return hasil
@@ -1712,6 +1851,215 @@ class Simulasi:
         """Kamera bawaan config.py (KAMERA_*), diarahkan ke posisi awal robot."""
         target = self.posisi_awal_badan if self.posisi_awal_badan is not None else [0.0, 0.0, 0.15]
         self.atur_kamera(config.KAMERA_JARAK, config.KAMERA_YAW, config.KAMERA_PITCH, target)
+
+    # ----------------------------------------------- FOTO PENGUJIAN (tombol 6 / 7, alur di atera_main.FotoPengujian)
+    # Semua benda FOTO hanya VISUAL (tanpa collision, massa 0): fisika robot tidak berubah.
+    def foto_visual(self, bentuk, warna, posisi, orientasi=(0.0, 0.0, 0.0, 1.0), **ukuran):
+        """Buat satu benda visual FOTO (dihapus foto_bersihkan). Mengembalikan id benda."""
+        tampak = p.createVisualShape(bentuk, rgbaColor=list(warna), **ukuran)
+        nomor = p.createMultiBody(baseMass=0.0, baseCollisionShapeIndex=-1, baseVisualShapeIndex=tampak,
+                                  basePosition=[float(v) for v in posisi], baseOrientation=list(orientasi))
+        self.foto_benda.append(nomor)
+        return nomor
+
+    def foto_pasang_segmen(self, nomor, a, b):
+        """Letakkan silinder FOTO (sumbu z lokalnya) di antara titik a dan b."""
+        a = np.asarray(a, dtype=float)
+        b = np.asarray(b, dtype=float)
+        arah = (b - a) / np.linalg.norm(b - a)
+        bantu = np.array([1.0, 0.0, 0.0]) if abs(arah[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+        sumbu_x = np.cross(bantu, arah)
+        sumbu_x = sumbu_x / np.linalg.norm(sumbu_x)
+        sumbu_y = np.cross(arah, sumbu_x)
+        p.resetBasePositionAndOrientation(nomor, (0.5 * (a + b)).tolist(),
+                                          quaternion_dari_matriks(np.column_stack([sumbu_x, sumbu_y, arah])))
+
+    def foto_buat_bandul(self, gantungan, maju, sumbu_roda, chi):
+        """Bandul FOTO (gambar saja; gaya pukulan tetap applyExternalForce = beri_gaya_dorong):
+            - gantungan (batang kecil searah sumbu roda) di titik gantung
+            - bandul bayangan (transparan) di posisi lepas chi + titik-titik lintasan ayunannya
+            - tali + bola yang bergerak (foto_atur_bandul)
+        gantungan [m] dunia, maju = arah depan robot (mendatar), chi = sudut lepas [rad] ke BELAKANG robot."""
+        panjang = config.BANDUL_PANJANG_TALI_M
+        jari = FOTO_BOLA_JARI_M
+        gantungan = np.asarray(gantungan, dtype=float)
+        maju = np.asarray(maju, dtype=float) / np.linalg.norm(maju)
+        sumbu = np.asarray(sumbu_roda, dtype=float) / np.linalg.norm(sumbu_roda)
+        atas = np.array([0.0, 0.0, 1.0])
+
+        def titik_bola(phi):
+            return gantungan + panjang * (-math.sin(phi) * maju - math.cos(phi) * atas)
+
+        self.foto_visual(p.GEOM_BOX, FOTO_WARNA_GANTUNGAN, gantungan + 0.008 * atas,
+                         quaternion_dari_matriks(np.column_stack([sumbu, maju, atas])), halfExtents=[0.06, 0.008, 0.008])
+        lepas = titik_bola(chi)
+        self.foto_visual(p.GEOM_SPHERE, FOTO_WARNA_BAYANGAN, lepas, radius=jari)
+        tali_lepas = self.foto_visual(p.GEOM_CYLINDER, FOTO_WARNA_BAYANGAN, gantungan, radius=FOTO_TALI_JARI_M,
+                                      length=panjang - jari)
+        self.foto_pasang_segmen(tali_lepas, gantungan, gantungan + (panjang - jari) / panjang * (lepas - gantungan))
+        for k in range(1, FOTO_TITIK_BUSUR):
+            self.foto_visual(p.GEOM_SPHERE, [0.30, 0.30, 0.30, 0.55], titik_bola(chi * k / FOTO_TITIK_BUSUR),
+                             radius=0.0035)
+        tali = self.foto_visual(p.GEOM_CYLINDER, FOTO_WARNA_TALI, gantungan, radius=FOTO_TALI_JARI_M,
+                                length=panjang - jari)
+        bola = self.foto_visual(p.GEOM_SPHERE, FOTO_WARNA_BOLA, lepas, radius=jari)
+        self.foto_bandul = {"gantungan": gantungan, "maju": maju, "panjang": panjang, "jari": jari, "tali": tali,
+                            "bola": bola, "titik_bola": titik_bola, "chi": float(chi)}
+        self.foto_atur_bandul(chi)
+
+    def foto_atur_bandul(self, phi):
+        """Sudut bandul FOTO [rad] dari garis vertikal (+ = ke belakang robot)."""
+        b = self.foto_bandul
+        if b is None:
+            return
+        bola = b["titik_bola"](phi)
+        p.resetBasePositionAndOrientation(b["bola"], bola.tolist(), [0.0, 0.0, 0.0, 1.0])
+        self.foto_pasang_segmen(b["tali"], b["gantungan"],
+                                b["gantungan"] + (b["panjang"] - b["jari"]) / b["panjang"] * (bola - b["gantungan"]))
+
+    def foto_jalur_bawah(self, lin):
+        """Jalur kuning (FOTO_WARNA_DATAR) di bidang datar bawah lintasan UJI 2, dari FOTO_JALUR_BAWAH_BELAKANG_M di
+        belakang posisi awal robot sampai kaki tanjakan. Hanya gambar, tebal 0.8 mm di atas lantai."""
+        y_awal = -FOTO_JALUR_BAWAH_BELAKANG_M
+        panjang = lin["y_mulai"] - y_awal
+        self.foto_visual(p.GEOM_BOX, FOTO_WARNA_DATAR, [0.0, y_awal + 0.5 * panjang, 0.0004],
+                         halfExtents=[0.5 * lin["lebar"], 0.5 * panjang, 0.0004])
+
+    def ambil_pose(self):
+        """Pose robot sekarang (frame pusat massa PyBullet + sudut kedua roda + state terakhir)."""
+        posisi, orientasi = p.getBasePositionAndOrientation(self.robot)
+        roda = [p.getJointState(self.robot, j)[0] for j in (self.joint_kiri, self.joint_kanan)]
+        return {"posisi": list(posisi), "orientasi": list(orientasi), "roda": roda, "x": np.array(self.x_terakhir)}
+
+    def pasang_pose(self, pose):
+        """FREEZE: robot dipindah ke pose tersimpan dan didiamkan (fisika TIDAK dilanjutkan setelahnya). Bidang merah
+        dan bidang dorong ikut digambar ulang."""
+        p.resetBasePositionAndOrientation(self.robot, pose["posisi"], pose["orientasi"])
+        p.resetBaseVelocity(self.robot, [0.0, 0.0, 0.0], [0.0, 0.0, 0.0])
+        for joint, sudut in zip((self.joint_kiri, self.joint_kanan), pose["roda"]):
+            p.resetJointState(self.robot, joint, sudut, 0.0)
+        self.x_terakhir = np.array(pose["x"])
+        self.sisa_dorong = 0.0
+        if self.gui:
+            self.gambar_bidang_safety_set()
+            self.gambar_bidang_dorong()
+
+    def pose_tegak(self, poros, psi=0.0):
+        """Pose (frame pusat massa) robot dengan titik tengah poros roda di `poros` [m] dan sudut badan psi [rad],
+        menghadap +Y dunia (rumus sama dengan reset)."""
+        orientasi_link = p.getQuaternionFromEuler([math.pi / 2.0 + psi - self.sudut_com, 0.0, math.pi])
+        rot = np.array(p.getMatrixFromQuaternion(orientasi_link)).reshape(3, 3)
+        posisi_link = np.asarray(poros, dtype=float) - rot @ self.poros_badan
+        posisi, orientasi = p.multiplyTransforms(posisi_link.tolist(), orientasi_link,
+                                                 self.inersia_pos, self.inersia_orn)
+        return list(posisi), list(orientasi)
+
+    def foto_bayangan(self, posisi, orientasi, roda=(0.0, 0.0)):
+        """Robot bayangan FOTO: salinan robot.urdf, diam (fixed base), tanpa collision, transparan
+        (FOTO_WARNA_BAYANGAN). posisi / orientasi = frame pusat massa (ambil_pose / pose_tegak)."""
+        nomor = p.loadURDF(self.path_urdf, useFixedBase=True, flags=p.URDF_USE_INERTIA_FROM_FILE)
+        self.foto_benda.append(nomor)
+        p.resetBasePositionAndOrientation(nomor, list(posisi), list(orientasi))
+        for link in [-1] + list(range(p.getNumJoints(nomor))):
+            p.setCollisionFilterGroupMask(nomor, link, 0, 0)
+            p.changeVisualShape(nomor, link, rgbaColor=FOTO_WARNA_BAYANGAN)
+        for joint, sudut in zip((self.joint_kiri, self.joint_kanan), roda):
+            p.resetJointState(nomor, joint, sudut, 0.0)
+        return nomor
+
+    def foto_kamera(self, titik, ukuran, kotak):
+        """Kamera FOTO: yaw config.KAMERA_YAW (sisi kanan robot, sama dengan kamera biasa), pitch FOTO_PITCH_DEG,
+        sudut pandang FOTO_FOV_DEG. Jarak dan target dihitung supaya SEMUA titik (dunia) masuk ke bagian gambar
+        kotak = (kiri, kanan, bawah, atas) [0 .. 1], ukuran = (lebar, tinggi) [px]. Kamera jendela PyBullet ikut
+        diarahkan ke tempat yang sama. Mengembalikan (view, proj, mata): matriks getCameraImage dan letak kamera."""
+        titik = np.asarray(titik, dtype=float)
+        yaw = float(config.KAMERA_YAW)
+        pitch = float(FOTO_PITCH_DEG)
+        aspek = ukuran[0] / float(ukuran[1])
+        kiri, kanan_k, bawah, atas_k = kotak
+        tan_v = math.tan(0.5 * math.radians(FOTO_FOV_DEG))
+        target = 0.5 * (titik.min(axis=0) + titik.max(axis=0))
+        for _ in range(4):                       # geser target ke tengah titik-titik (dilihat dari kamera)
+            V = np.array(p.computeViewMatrixFromYawPitchRoll(target.tolist(), 1.0, yaw, pitch, 0.0, 2)).reshape(4, 4).T
+            kanan, atas, belakang = V[0, :3], V[1, :3], V[2, :3]
+            relatif = titik - target
+            xs = relatif @ kanan
+            ys = relatif @ atas
+            target = target + 0.5 * (xs.min() + xs.max()) * kanan + 0.5 * (ys.min() + ys.max()) * atas
+        relatif = titik - target
+        xs = relatif @ kanan
+        ys = relatif @ atas
+        dekat = max(0.0, float((relatif @ belakang).max()))          # titik yang lebih dekat ke kamera dari target
+        # Lebar / tinggi gambar penuh di jarak d = 2 d tan_v aspek / 2 d tan_v; benda harus muat di bagian kotak.
+        jarak = max((ys.max() - ys.min()) / (2.0 * tan_v * (atas_k - bawah)),
+                    (xs.max() - xs.min()) / (2.0 * tan_v * aspek * (kanan_k - kiri))) + dekat
+        # Tengah benda digeser ke tengah kotak (target = tengah gambar).
+        target = target - (0.5 * (kiri + kanan_k) - 0.5) * 2.0 * jarak * tan_v * aspek * kanan \
+            - (0.5 * (bawah + atas_k) - 0.5) * 2.0 * jarak * tan_v * atas
+        view = p.computeViewMatrixFromYawPitchRoll(target.tolist(), jarak, yaw, pitch, 0.0, 2)
+        proj = p.computeProjectionMatrixFOV(FOTO_FOV_DEG, aspek, 0.05, 4.0 * jarak + 5.0)
+        mata = target + jarak * belakang
+        if self.gui:
+            kamera = p.getDebugVisualizerCamera()
+            tan_gui = 1.0 / kamera[3][5] if kamera[3][5] != 0.0 else tan_v
+            p.resetDebugVisualizerCamera(cameraDistance=jarak * tan_v / tan_gui, cameraYaw=yaw, cameraPitch=pitch,
+                                         cameraTargetPosition=target.tolist())
+        return list(view), list(proj), mata
+
+    def foto_hapus_debug(self):
+        """Hapus semua teks / garis debug PyBullet (teks parameter ditulis ulang otomatis oleh tampilkan)."""
+        p.removeAllUserDebugItems()
+        self.id_teks = {}
+        self.isi_teks = {}
+
+    def foto_ambil(self, view, proj, ukuran):
+        """getCameraImage ukuran = (lebar, tinggi) dari kamera FOTO -> (rgb uint8 tinggi x lebar x 3, nama renderer).
+        Teks / garis debug dihapus dulu supaya tidak ikut. Renderer OpenGL (sama dengan jendela PyBullet, ada bayangan);
+        bila gagal, TinyRenderer (lebih lambat, tampilan sedikit berbeda)."""
+        self.foto_hapus_debug()
+        kesalahan = None
+        for renderer, nama in ((p.ER_BULLET_HARDWARE_OPENGL, "OpenGL"), (p.ER_TINY_RENDERER, "TinyRenderer")):
+            try:
+                hasil = p.getCameraImage(int(ukuran[0]), int(ukuran[1]), viewMatrix=view, projectionMatrix=proj, shadow=1,
+                                         renderer=renderer)
+                rgb = np.reshape(np.asarray(hasil[2], dtype=np.uint8), (hasil[1], hasil[0], 4))[:, :, :3]
+                if rgb.max() > 0:                # gambar hitam semua = renderer gagal diam-diam
+                    return np.ascontiguousarray(rgb), nama
+                kesalahan = RuntimeError("gambar %s hitam semua" % nama)
+            except Exception as galat:
+                kesalahan = galat
+        raise RuntimeError("getCameraImage gagal: %s" % kesalahan)
+
+    def foto_tampilkan_anotasi(self, anotasi):
+        """Garis dan teks anotasi di jendela PyBullet (saat FREEZE), titik dunia sama dengan PNG ANOTASI."""
+        if not self.gui:
+            return
+        for g in anotasi.get("garis", []):
+            titik = np.asarray(g["titik"], dtype=float)
+            warna = list(g.get("warna", (0, 0, 0)))[:3]
+            for i in range(len(titik) - 1):
+                if g.get("putus", False) and i % 2 == 1:
+                    continue
+                p.addUserDebugLine(titik[i].tolist(), titik[i + 1].tolist(), lineColorRGB=warna,
+                                   lineWidth=max(1.0, g.get("tebal", 2.0)))
+        for a in anotasi.get("panah", []):
+            p.addUserDebugLine(list(a["dari"]), list(a["ke"]), lineColorRGB=list(a.get("warna", (0, 0, 0)))[:3],
+                               lineWidth=max(1.0, a.get("tebal", 3.0)))
+        for t in anotasi.get("teks", []):
+            p.addUserDebugText(t["teks"].replace("\n", "  "), list(t["posisi"]),
+                               textColorRGB=list(t.get("warna", (0, 0, 0)))[:3], textSize=1.3)
+
+    def foto_bersihkan(self):
+        """Hapus semua benda FOTO (bandul, jalur, robot bayangan) dan anotasinya."""
+        for nomor in self.foto_benda:
+            try:
+                p.removeBody(nomor)
+            except Exception:
+                pass
+        self.foto_benda = []
+        self.foto_bandul = None
+        if self.gui and p.isConnected():
+            self.foto_hapus_debug()
 
     def kirim_catatan(self, baris):
         """Catatan pengujian otomatis (list teks) ke panel catatan jendela plot (hanya bila berubah)."""

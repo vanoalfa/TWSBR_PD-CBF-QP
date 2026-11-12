@@ -8,6 +8,11 @@ PENGUJIAN OTOMATIS (tombol U, uji_otomatis.py): UJI 1 pukulan bandul 30 .. 90 de
 7.5 deg, untuk PD dan PD + CBF-QP psi_max 5 / 10 / 15 deg, berurutan tanpa disentuh. U lagi = batal. Hasil di
 PLOT_EVALUASI/PENGUJIAN/<PD | PDCBFQP5 | PDCBFQP10 | PDCBFQP15>/ (config.py bagian 13).
 
+FOTO PENGUJIAN (tombol 6 / 7, kelas FotoPengujian di bawah, mode kontrol = yang sedang dipilih):
+    6  bidang datar, dipukul bandul chi_DEG (jendela Kontrol) -> FREEZE + PNG di |psi| maksimum
+    7  naik bidang miring UJI2_ZETA_DEG (tanjakan merah muda, bidang datar kuning) -> FREEZE + PNG di tengah tanjakan
+    PNG BERSIH + ANOTASI di PLOT_EVALUASI/FOTO/<PD | PDCBFQP..>/ (FOTO_* di simulasi.py).
+
 Mode kontrol PD / PD + CBF-QP dipilih dengan tombol di jendela Kontrol (atau keyboard 1 / 2). Mode awal = PD.
 Mengganti mode: data perekaman biasa disimpan, lalu robot diletakkan ulang (seperti R) dengan mode baru.
 Semua perintah dan tombol dicetak di terminal saat program mulai.
@@ -43,13 +48,17 @@ Jenis perekaman ISE:
 import argparse
 import math
 import os
+import re
 import time
+from datetime import datetime
 
+import numpy as np
 import pybullet
 
 import config
 import ise
 import model
+import simulasi
 import uji_otomatis
 from pd_control import MODE_BALANCING, MODE_BEBAS, MODE_DIAM, PDControl
 from simulasi import NAMA_ALPHA, Simulasi
@@ -81,6 +90,11 @@ TOMBOL (keyboard di jendela "ATERA - Kontrol", atau klik / tahan tombolnya denga
            tanjakan %g deg %g m) untuk PD, PD+CBF-QP %s deg. Gain = nilai jendela Kontrol saat U ditekan.
            Selama berjalan tombol lain diabaikan; U lagi = batal, Q = batal lalu keluar. Hasil:
            PLOT_EVALUASI/PENGUJIAN/<PD | PDCBFQP..>/YYYYMMDD_HHmmSS_PD_30_Simulasi_PENGUJIAN KE-XX (.csv .png .eps)
+  6        FOTO dipukul (mode kontrol sekarang): bidang datar, bandul chi_DEG (jendela Kontrol, awal %g deg) dilepas
+           dan memukul dari belakang. FREEZE di |psi| MAKSIMUM, PNG BERSIH + ANOTASI disimpan.
+  7        FOTO bidang miring (mode kontrol sekarang): naik tanjakan %g deg dengan Kvel. FREEZE saat poros roda di
+           TENGAH tanjakan, PNG BERSIH + ANOTASI disimpan. Hasil 6 / 7: PLOT_EVALUASI/FOTO/<PD | PDCBFQP..>/
+           Saat FREEZE: 6 / 7 foto lagi, 1 / 2 ganti mode, R / U kembali, Q keluar. Selama berjalan: U batal.
   O        dorong robot ke depan
   P        dorong robot ke belakang
   E        simpan data dan plot ISE sekarang; robot tetap berjalan, perekaman baru dimulai
@@ -116,7 +130,8 @@ HASIL ISE (folder PLOT_EVALUASI/PERCOBAAN, /PENGUJIAN, /PERBANDINGAN, file .csv 
 =======================================================================
 """ % (config.DURASI_PERBANDINGAN, -config.R * config.Kvel / config.Kd_theta if config.Kd_theta > 0.0 else float("nan"),
        config.YAW_RATE_BELOK, " ".join("%g" % s for s in config.UJI1_SUDUT_BANDUL_DEG), config.UJI2_ZETA_DEG,
-       config.UJI2_PANJANG_MIRING_M, " / ".join("%g" % s for s in config.UJI_PSI_MAX_DEG))
+       config.UJI2_PANJANG_MIRING_M, " / ".join("%g" % s for s in config.UJI_PSI_MAX_DEG),
+       simulasi.FOTO_CHI_AWAL_DEG, config.UJI2_ZETA_DEG)
 
 
 def simpan_ise(perekam):
@@ -216,6 +231,387 @@ def data_ekstra(pd, cbf, mode):
             "slack": cbf.slack if (cbf is not None and mode == ise.MODE_PD_CBF) else 0.0}
 
 
+# =============================================================================
+# FOTO PENGUJIAN (tombol 6 / 7)
+# =============================================================================
+FOTO_PUKUL = "foto_pukul"          # tombol 6: Pengujian 1, bidang datar, dipukul bandul
+FOTO_MIRING = "foto_miring"        # tombol 7: Pengujian 2, naik bidang miring
+POLA_FOTO = re.compile(r"_FOTO KE-(\d+)_(?:BERSIH|ANOTASI)\.png$")
+BIRU = (0.0, 0.31, 0.69)
+JINGGA = (0.80, 0.42, 0.0)
+MERAH = (0.80, 0.0, 0.0)
+HITAM = (0.0, 0.0, 0.0)
+
+
+def nama_foto(folder, kode_kontrol, kode_uji):
+    """YYYYMMDD_HHmmSS_<kode_kontrol>_<kode_uji>_Simulasi_FOTO KE-XX (KE-XX = nomor terbesar di folder + 1)."""
+    os.makedirs(folder, exist_ok=True)
+    nomor = [int(c.group(1)) for c in (POLA_FOTO.search(f) for f in os.listdir(folder)) if c]
+    sekarang = datetime.now()
+    return "%s_%s_%s_Simulasi_FOTO KE-%02d" % (sekarang.strftime("%Y%m%d_%H%M%S"), kode_kontrol, kode_uji,
+                                               max(nomor, default=0) + 1)
+
+
+def busur(pusat, jari, sudut_awal, sudut_akhir, maju, turun=False, jumlah=40):
+    """Titik busur (dunia) di bidang (maju, atas): sudut [rad] diukur dari garis vertikal KE ATAS (turun = True:
+    dari garis vertikal KE BAWAH, seperti tali bandul) ke arah `maju`."""
+    atas = np.array([0.0, 0.0, -1.0 if turun else 1.0])
+    return np.array([np.asarray(pusat) + jari * (math.sin(a) * maju + math.cos(a) * atas)
+                     for a in np.linspace(sudut_awal, sudut_akhir, jumlah)])
+
+
+class FotoPengujian(uji_otomatis.UjiOtomatis):
+    """FOTO PENGUJIAN dari simulasi PyBullet (tombol 6 / 7), dengan mode kontrol yang SEDANG dipilih (1 / 2):
+        6  Pengujian 1: bidang datar, bandul chi_DEG (jendela Kontrol) dilepas dan memukul badan dari belakang
+           (gaya = uji_otomatis.gaya_bandul, sama dengan tombol U). |psi| dicari selama FOTO_JENDELA_PUNCAK_S detik
+           setelah pukulan, lalu FREEZE di pose |psi| MAKSIMUM (robot dikembalikan ke pose itu).
+        7  Pengujian 2: lintasan datar (kuning) -> tanjakan UJI2_ZETA_DEG (merah muda) -> datar atas (kuning), naik
+           dengan Kvel (arah maju), FREEZE saat poros roda tepat di TENGAH tanjakan (panjang miring / 2).
+    Saat FREEZE: PNG BERSIH (getCameraImage) dan ANOTASI disimpan di PLOT_EVALUASI/FOTO/<kontrol>/, garis dan teks
+    anotasi tampil di jendela PyBullet, simulasi berhenti sampai tombol ditekan:
+        6 / 7 = foto lagi, 1 / 2 = ganti mode kontrol, R / U = kembali ke simulasi biasa, Q = keluar.
+    Loop kontrol (siklus, letakkan, KOMET, gain, constraint h1 .. h4 C_MODE DIAM) memakai UjiOtomatis tanpa diubah;
+    data tidak direkam ke CSV (hanya gambar). Selama berjalan: U = batal, Q = batal lalu keluar."""
+
+    def __init__(self, sim, pd, cbf, params, mode, jenis):
+        super().__init__(sim, pd, cbf, params)
+        if mode == ise.MODE_PD:
+            kontrol = {"label": "PD", "mode": ise.MODE_PD, "psi_max_deg": None, "folder": "PD", "kode": "PD"}
+        else:
+            derajat = float(params["psi_max_DEG"])
+            kode = uji_otomatis.angka_kode(derajat)
+            kontrol = {"label": "PD+CBF-QP %g deg" % derajat, "mode": ise.MODE_PD_CBF, "psi_max_deg": derajat,
+                       "folder": "PDCBFQP" + kode, "kode": "PD+CBFQP" + kode}
+        self.daftar_kontrol = [kontrol]
+        self.kontrol = kontrol
+        self.jenis = jenis
+        self.chi_deg = float(params.get("chi_DEG", simulasi.FOTO_CHI_AWAL_DEG))
+        self.percobaan_ke = 1
+        self.judul_foto = "FOTO 6 (dipukul)" if jenis == FOTO_PUKUL else "FOTO 7 (bidang miring)"
+
+    # ------------------------------------------------------------------ urutan
+    def jalankan(self):
+        """Mengembalikan (SELESAI / BATAL / KELUAR, tombol yang ditekan saat FREEZE untuk diproses atera_main)."""
+        sim = self.sim
+        zeta_simpan = (config.zeta_DEG, config.zeta)
+        lantai_simpan = sim.zeta
+        hasil = uji_otomatis.SELESAI
+        lanjut = []
+        print("")
+        print("[%s] kontrol %s | %s" % (self.judul_foto, self.kontrol["label"],
+                                         ("bandul chi %g deg -> F %.2f N" % (self.chi_deg,
+                                                                             uji_otomatis.gaya_bandul(self.chi_deg)))
+                                         if self.jenis == FOTO_PUKUL else
+                                         ("tanjakan %g deg, %g m, Kvel %g" % (config.UJI2_ZETA_DEG,
+                                                                              config.UJI2_PANJANG_MIRING_M,
+                                                                              self.params["Kvel"]))))
+        try:
+            if abs(sim.zeta) > 1e-12:
+                print("Lantai dibuat datar untuk FOTO (zeta lantai %.1f deg -> 0)." % math.degrees(sim.zeta))
+                sim.ubah_zeta(0.0)
+            sim.hapus_lintasan()
+            sim.foto_bersihkan()
+            foto = self.foto_pukul() if self.jenis == FOTO_PUKUL else self.foto_miring()
+            self.simpan(foto)
+            lanjut = self.tunggu_freeze(foto)
+            if "q" in lanjut:
+                hasil = uji_otomatis.KELUAR
+        except uji_otomatis.Batal as alasan:
+            hasil = uji_otomatis.KELUAR if str(alasan) == "q" else uji_otomatis.BATAL
+            print("%s dibatalkan (%s)." % (self.judul_foto, "Q: keluar" if hasil == uji_otomatis.KELUAR else "U"))
+        finally:
+            config.zeta_DEG, config.zeta = zeta_simpan
+            try:
+                sim.foto_bersihkan()
+                sim.hapus_lintasan()
+                if abs(sim.zeta - lantai_simpan) > 1e-12:
+                    sim.ubah_zeta(lantai_simpan)
+                sim.kamera_awal()
+            except Exception:
+                pass                     # jendela PyBullet sudah ditutup
+        return hasil, [t for t in lanjut if t != "q"]
+
+    # ------------------------------------------------------- tombol 6: dipukul
+    def foto_pukul(self):
+        sim = self.sim
+        dt = config.DT
+        self.uji = uji_otomatis.UJI1
+        self.sudut = self.chi_deg
+        self.gaya = uji_otomatis.gaya_bandul(self.chi_deg)
+        self.zeta_cbf_deg = 0.0
+        self.letakkan()
+        self.fase = "robot diletakkan, tenang %g s" % config.UJI_TENANG_S
+        self.jalan_selama(config.UJI_TENANG_S)
+
+        # Bandul: bola menyentuh bidang dorong sisi BELAKANG badan saat tali tegak (phi = 0).
+        pusat_pukul, sumbu_roda, _, maju_badan = sim.bidang_dorong(-1)
+        maju = np.array([maju_badan[0], maju_badan[1], 0.0])
+        maju = maju / np.linalg.norm(maju)
+        atas = np.array([0.0, 0.0, 1.0])
+        chi = math.radians(self.chi_deg)
+        panjang = config.BANDUL_PANJANG_TALI_M
+        jari = simulasi.FOTO_BOLA_JARI_M
+        bola_kena = pusat_pukul - (jari + 0.002) * maju
+        gantungan = bola_kena + panjang * atas
+        sim.foto_buat_bandul(gantungan, maju, sumbu_roda, chi)
+        lepas = gantungan + panjang * (-math.sin(chi) * maju - math.cos(chi) * atas)
+        poros = sim.posisi_poros()
+        jarak_bidang = config.L_IMU * math.sin(config.psi_max) + config.JARAK_IMU_KE_SISI_LUAR * math.cos(config.psi_max)
+        titik = [gantungan + 0.03 * atas, lepas - (jari + 0.03) * maju, poros - config.R * atas,
+                 poros + (jarak_bidang + 0.12) * maju + 0.45 * atas, poros + (sim.tinggi_atas + 0.06) * atas,
+                 poros + 0.30 * maju - (config.R + 0.17) * atas, poros - 0.45 * maju - (config.R + 0.17) * atas]
+        ukuran = simulasi.FOTO_UKURAN_PUKUL
+        view, proj, mata = sim.foto_kamera(titik, ukuran, simulasi.FOTO_KOTAK_PUKUL)
+        geser = np.array([math.copysign(simulasi.FOTO_SISI_ANOTASI_M, mata[0] - poros[0]), 0.0, 0.0])
+
+        # Ayunan bandul (kinematika bandul sederhana, hanya gambar): dari chi sampai tegak, lalu memukul.
+        self.fase = "bandul dilepas dari chi %g deg" % self.chi_deg
+        phi, omega, h = chi, 0.0, dt / 10.0
+        riwayat = []                                     # (siklus ke, psi PyBullet [deg])
+        while phi > 0.0:
+            for _ in range(10):
+                omega = omega - config.g / panjang * math.sin(phi) * h
+                phi = phi + omega * h
+                if phi <= 0.0:
+                    break
+            sim.foto_atur_bandul(max(phi, 0.0))
+            self.siklus(0)
+            riwayat.append((self.siklus_ke, math.degrees(sim.baca_psi_benar()[0])))
+        sim.foto_atur_bandul(0.0)                        # ASUMSI (tabel Excel): bandul berhenti setelah memukul
+        pose_pukul = sim.ambil_pose()
+        siklus_pukul = self.siklus_ke
+        sim.gaya_dorong = self.gaya
+        sim.dorong(1)                                    # dari belakang ke depan (seperti tombol O / tombol U)
+        print("  dipukul: chi %g deg -> F %.2f N selama %.3f s (bola %.2f m/s)"
+              % (self.chi_deg, self.gaya, config.LAMA_DORONG, abs(omega) * panjang))
+
+        # Cari |psi| maksimum (psi SEBENARNYA PyBullet = kemiringan yang terlihat di gambar)
+        puncak, pose_puncak, t_puncak, komet = -1.0, None, 0.0, ""
+        t = 0.0
+        while t < simulasi.FOTO_JENDELA_PUNCAK_S - 0.5 * dt:
+            self.fase = "dipukul, mencari |psi| maksimum %.1f / %g s (puncak sementara %.2f deg)" \
+                % (t, simulasi.FOTO_JENDELA_PUNCAK_S, math.degrees(max(puncak, 0.0)))
+            try:
+                self.siklus(0)
+            except uji_otomatis.Komet as sebab:
+                komet = str(sebab)
+            t = t + dt
+            psi_benar = sim.baca_psi_benar()[0]
+            riwayat.append((self.siklus_ke, math.degrees(psi_benar)))
+            if abs(psi_benar) > puncak:
+                puncak, pose_puncak, t_puncak = abs(psi_benar), sim.ambil_pose(), t
+                psi_puncak = psi_benar
+            if komet:
+                break
+
+        # FREEZE di pose |psi| maksimum + robot bayangan saat dipukul
+        sim.pasang_pose(pose_puncak)
+        sim.foto_bayangan(pose_pukul["posisi"], pose_pukul["orientasi"], pose_pukul["roda"])
+        poros = sim.posisi_poros()
+        psi_imu = float(pose_puncak["x"][2])
+        print("  FREEZE: |psi| maksimum %.2f deg (IMU + Kalman %.2f deg) di t = %.3f s setelah dipukul%s"
+              % (math.degrees(puncak), math.degrees(psi_imu), t_puncak, ("  [KOMET: %s]" % komet) if komet else ""))
+
+        # Anotasi
+        arah_badan = math.sin(psi_puncak) * maju + math.cos(psi_puncak) * atas
+        poros_a = poros + geser
+        poros_pukul = sim_poros_dari_pose(sim, pose_pukul) + geser
+        anotasi = {
+            "garis": [
+                {"titik": [poros_a, poros_a + 0.40 * atas], "warna": HITAM, "tebal": 1.8, "putus": True},
+                {"titik": [poros_a, poros_a + 0.38 * arah_badan], "warna": BIRU, "tebal": 3.0},
+                {"titik": busur(poros_a, 0.24, 0.0, psi_puncak, maju), "warna": BIRU, "tebal": 3.0},
+                # busur chi: di bidang ayunan bandul (tidak digeser), dari tali tegak ke tali saat dilepas
+                {"titik": busur(gantungan, 0.15, 0.0, -chi, maju, turun=True), "warna": JINGGA, "tebal": 3.0},
+            ],
+            "teks": [
+                {"posisi": poros_a + 0.42 * atas, "teks": "ψ maks = %.1f°" % math.degrees(puncak), "warna": BIRU,
+                 "ukuran": 20, "ha": "center", "va": "bottom"},
+                {"posisi": busur(gantungan, 0.19, -0.5 * chi, -0.5 * chi, maju, turun=True, jumlah=1)[0],
+                 "teks": "χ", "warna": JINGGA, "ukuran": 22, "ha": "center"},
+                {"posisi": poros_pukul - 0.09 * atas - 0.04 * maju, "teks": "t = 0 s (dipukul)", "warna": (0.3, 0.3, 0.3),
+                 "ukuran": 14, "ha": "center"},
+                {"posisi": poros_a - 0.15 * atas, "teks": "t = %.3f s (ψ maks)" % t_puncak, "warna": BIRU,
+                 "ukuran": 14, "ha": "center"},
+            ],
+            "info": [
+                ("PENGUJIAN 1 - DIPUKUL BANDUL | simulasi PyBullet | bidang datar ζ = 0°", HITAM, True),
+                ("Kontrol %s | χ = %g° -> F = %.2f N selama %.3f s (m_bd %g kg, l_bd %g m)"
+                 % (self.kontrol["label"], self.chi_deg, self.gaya, config.LAMA_DORONG, config.BANDUL_MASSA_KG,
+                    config.BANDUL_PANJANG_TALI_M), HITAM, False),
+                ("FREEZE |ψ| maksimum: t = %.3f s setelah dipukul | ψ PyBullet %.2f° | ψ IMU+Kalman %.2f°"
+                 % (t_puncak, math.degrees(puncak), math.degrees(abs(psi_imu))), BIRU, True),
+                ("Robot transparan = saat dipukul (t = 0 s), robot solid = saat |ψ| maksimum", (0.3, 0.3, 0.3), False),
+            ],
+            "grafik": {"t": [(k - siklus_pukul) * config.DT for k, _ in riwayat],
+                       "y": [abs(v) for _, v in riwayat], "t_tanda": t_puncak, "y_tanda": math.degrees(puncak),
+                       "batas": self.kontrol["psi_max_deg"], "t_pukul": 0.0,
+                       "judul": "|ψ| PyBullet (°), lingkaran = FREEZE", "label_y": "|ψ| (°)"},
+        }
+        if komet:
+            anotasi["info"].append(("KOMET (robot jatuh): %s -> freeze di |ψ| terbesar sebelum KOMET" % komet,
+                                    MERAH, True))
+        return {"view": view, "proj": proj, "ukuran": ukuran, "anotasi": anotasi,
+                "kode_uji": uji_otomatis.angka_kode(self.chi_deg),
+                "ringkas": "|psi| maks %.2f deg di t = %.3f s" % (math.degrees(puncak), t_puncak)}
+
+    # ------------------------------------------------- tombol 7: bidang miring
+    def foto_miring(self):
+        sim = self.sim
+        dt = config.DT
+        self.uji = uji_otomatis.UJI2
+        self.sudut = None
+        self.gaya = 0.0
+        self.zeta_cbf_deg = float(config.UJI2_CBF_ZETA_DEG)
+        lin = sim.buat_lintasan(config.UJI2_DATAR_BAWAH_M, config.UJI2_ZETA_DEG, config.UJI2_PANJANG_MIRING_M,
+                                config.UJI2_DATAR_ATAS_M, config.UJI2_LEBAR_M, config.UJI2_TEBAL_PAPAN_M,
+                                simulasi.FOTO_WARNA_TANJAKAN, simulasi.FOTO_WARNA_DATAR)
+        sim.foto_jalur_bawah(lin)
+        self.letakkan()
+        self.fase = "robot diletakkan, tenang %g s" % config.UJI_TENANG_S
+        self.jalan_selama(config.UJI_TENANG_S)
+        pose_awal = sim.ambil_pose()
+
+        atas = np.array([0.0, 0.0, 1.0])
+        maju = np.array([0.0, 1.0, 0.0])
+        zeta = lin["zeta"]
+        y_tengah = lin["y_mulai"] + 0.5 * (lin["y_puncak"] - lin["y_mulai"])
+        y_awal = -simulasi.FOTO_JALUR_BAWAH_BELAKANG_M
+        titik = [[0.0, y_awal, -0.24], [0.0, lin["y_akhir"], -0.24], [0.0, lin["y_akhir"], lin["tinggi"] + 0.42],
+                 [0.0, y_awal, 0.42]]
+        ukuran = simulasi.FOTO_UKURAN_MIRING
+        view, proj, mata = sim.foto_kamera(titik, ukuran, simulasi.FOTO_KOTAK_MIRING)
+        sisi = math.copysign(1.0, mata[0])
+        geser_robot = np.array([sisi * simulasi.FOTO_SISI_ANOTASI_M, 0.0, 0.0])
+        geser_jalur = np.array([sisi * (0.5 * lin["lebar"] + 0.01), 0.0, 0.0])
+
+        # NAIK dengan Kvel (arah maju) sampai poros roda di tengah tanjakan
+        print("  NAIK dengan Kvel %g (arah maju), freeze di y = %.3f m (tengah tanjakan)" % (self.params["Kvel"], y_tengah))
+        t, gagal = 0.0, ""
+        y_terjauh, t_terjauh = self.y_poros(), 0.0
+        while self.y_poros() < y_tengah:
+            self.fase = "NAIK: poros %.2f m dari kaki tanjakan, freeze di %.3f m" \
+                % (self.y_poros() - lin["y_mulai"], y_tengah - lin["y_mulai"])
+            try:
+                self.siklus(1)
+            except uji_otomatis.Komet as sebab:
+                gagal = "KOMET (%s)" % sebab
+                break
+            t = t + dt
+            if self.y_poros() > y_terjauh + config.UJI2_NAIK_MACET_M:
+                y_terjauh, t_terjauh = self.y_poros(), t
+            elif t - t_terjauh >= config.UJI2_NAIK_MACET_S:
+                gagal = "tidak kuat naik (tidak maju %g m dalam %g s)" % (config.UJI2_NAIK_MACET_M,
+                                                                          config.UJI2_NAIK_MACET_S)
+                break
+
+        # FREEZE di sini + robot bayangan di posisi awal (dan tujuan, bila FOTO_BAYANGAN_TUJUAN)
+        pose = sim.ambil_pose()
+        sim.pasang_pose(pose)
+        sim.foto_bayangan(pose_awal["posisi"], pose_awal["orientasi"], pose_awal["roda"])
+        poros = sim.posisi_poros()
+        if simulasi.FOTO_BAYANGAN_TUJUAN:
+            posisi, orientasi = sim.pose_tegak([poros[0], lin["y_puncak"] + config.UJI2_LEPAS_ATAS_M,
+                                                lin["tinggi"] + config.R + 0.001])
+            sim.foto_bayangan(posisi, orientasi)
+        psi_benar = sim.baca_psi_benar()[0]
+        psi_imu = float(pose["x"][2])
+        dari_kaki = (poros[1] - lin["y_mulai"]) / math.cos(zeta)
+        print("  FREEZE: poros %.3f m dari kaki tanjakan (di permukaan), psi %.2f deg (IMU + Kalman %.2f deg), "
+              "t = %.2f s sejak naik%s" % (dari_kaki, math.degrees(psi_benar), math.degrees(psi_imu), t,
+                                           ("  [GAGAL: %s]" % gagal) if gagal else ""))
+
+        # Anotasi
+        kaki = np.array([0.0, lin["y_mulai"], 0.0]) + geser_jalur
+        poros_a = poros + geser_robot
+        arah_badan = math.sin(psi_benar) * maju + math.cos(psi_benar) * atas
+        anotasi = {
+            "garis": [
+                # Pengujian 2: hanya penanda biru (garis badan + busur psi), garis merah / hitam dihapus
+                {"titik": [poros_a, poros_a + 0.38 * arah_badan], "warna": BIRU, "tebal": 3.0},
+                {"titik": busur(poros_a, 0.22, 0.0, psi_benar, maju), "warna": BIRU, "tebal": 3.0},
+            ],
+            "teks": [
+                {"posisi": kaki + 0.95 * (math.cos(0.5 * zeta) * maju + math.sin(0.5 * zeta) * atas), "teks": "ζ",
+                 "warna": HITAM, "ukuran": 22, "ha": "left"},
+                {"posisi": poros_a + 0.42 * atas, "teks": "ψ = %.1f°" % math.degrees(psi_benar), "warna": BIRU,
+                 "ukuran": 20, "ha": "center", "va": "bottom"},
+            ],
+            "info": [
+                ("PENGUJIAN 2 - BIDANG MIRING | simulasi PyBullet | ζ = %g°, panjang %g m"
+                 % (config.UJI2_ZETA_DEG, config.UJI2_PANJANG_MIRING_M), HITAM, True),
+                ("Kontrol %s | naik dengan Kvel %g (arah maju) | zeta model CBF-QP %g°"
+                 % (self.kontrol["label"], self.params["Kvel"], self.zeta_cbf_deg), HITAM, False),
+                ("FREEZE di tengah tanjakan: %.3f m dari kaki tanjakan, t = %.2f s sejak naik"
+                 % (dari_kaki, t), BIRU, True),
+                ("ψ PyBullet %.2f° | ψ IMU+Kalman %.2f° (terhadap vertikal) | robot transparan = posisi awal%s"
+                 % (math.degrees(psi_benar), math.degrees(psi_imu),
+                    " dan tujuan" if simulasi.FOTO_BAYANGAN_TUJUAN else ""), (0.3, 0.3, 0.3), False),
+            ],
+        }
+        if gagal:
+            anotasi["info"].append(("GAGAL sebelum tengah tanjakan: %s -> freeze di sini" % gagal, MERAH, True))
+        return {"view": view, "proj": proj, "ukuran": ukuran, "anotasi": anotasi,
+                "kode_uji": uji_otomatis.angka_kode(config.UJI2_ZETA_DEG),
+                "ringkas": "%.3f m dari kaki tanjakan, psi %.2f deg" % (dari_kaki, math.degrees(psi_benar))}
+
+    # ------------------------------------------------------- simpan + FREEZE
+    def simpan(self, foto):
+        folder = os.path.join(simulasi.FOTO_FOLDER, self.kontrol["folder"])
+        nama = nama_foto(folder, self.kontrol["kode"], foto["kode_uji"])
+        path = os.path.join(folder, nama)
+        try:
+            rgb, renderer = self.sim.foto_ambil(foto["view"], foto["proj"], foto["ukuran"])
+            simulasi.foto_simpan_bersih(rgb, path + "_BERSIH.png")
+            simulasi.foto_simpan_anotasi(rgb, foto["view"], foto["proj"], foto["anotasi"], path + "_ANOTASI.png")
+            print("  FOTO tersimpan (%dx%d, %s): %s_BERSIH.png dan _ANOTASI.png"
+                  % (rgb.shape[1], rgb.shape[0], renderer, path))
+            foto["tersimpan"] = nama
+        except Exception as kesalahan:
+            print("  FOTO GAGAL disimpan -> %s: %s" % (type(kesalahan).__name__, kesalahan))
+            foto["tersimpan"] = ""
+
+    def tunggu_freeze(self, foto):
+        """FREEZE: simulasi berhenti (tidak ada step), anotasi tampil di jendela PyBullet (mouse tetap bisa memutar
+        kamera). Mengembalikan tombol yang ditekan: [] (R / U), ["q"], atau [6 / 7 / 1 / 2] untuk atera_main."""
+        sim = self.sim
+        sim.foto_tampilkan_anotasi(foto["anotasi"])
+        petunjuk = "6 / 7 foto lagi | 1 / 2 ganti mode | R / U kembali | Q keluar"
+        print("  FREEZE (%s). Tombol: %s" % (foto["ringkas"], petunjuk))
+        teks_kontrol = "FREEZE %s | %s | %s" % (self.judul_foto, self.kontrol["label"], petunjuk)
+        baris = ["FREEZE %s | %s | %s" % (self.judul_foto, self.kontrol["label"], foto["ringkas"]),
+                 "PNG: %s" % (foto["tersimpan"] or "GAGAL (lihat terminal)"), petunjuk]
+        while sim.masih_terbuka():
+            tombol = sim.baca_keyboard()
+            sim.baca_params()
+            for kunci in ("q", FOTO_PUKUL, FOTO_MIRING, "mode_pd", "mode_cbf"):
+                if kunci in tombol:
+                    return [kunci]
+            if "r" in tombol or "u" in tombol:
+                return []
+            sim.tampilkan(baris, MODE_DIAM, False, teks_kontrol, False, None, False)
+            time.sleep(0.05)
+        return ["q"]
+
+    def tampil(self):
+        """Tampilan selama FOTO berjalan (dipanggil UjiOtomatis.siklus tiap 10 siklus)."""
+        x = self.x
+        baris = ["%s | %s | mode DIAM | CBF: %s" % (self.judul_foto, self.kontrol["label"], self.status_cbf),
+                 "psi %+.1f / %.1f deg    dpsi %+.2f rad/s" % (math.degrees(x[2]), config.psi_max_DEG, x[3]),
+                 "theta %+.2f rad    dtheta %+.2f rad/s    u %+.3f N m" % (x[0], x[1], self.u),
+                 "STATUS: " + self.fase, "U = batal, Q = keluar"]
+        self.sim.tampilkan(baris, MODE_DIAM, False, "%s | %s | U = batal" % (self.judul_foto, self.kontrol["label"]),
+                           False, None, True)
+
+
+def sim_poros_dari_pose(sim, pose):
+    """Titik tengah poros roda (dunia) untuk pose tersimpan (frame pusat massa) [m]."""
+    posisi_link, orientasi_link = pybullet.multiplyTransforms(pose["posisi"], pose["orientasi"],
+                                                              sim.inersia_balik[0], sim.inersia_balik[1])
+    rot = np.array(pybullet.getMatrixFromQuaternion(orientasi_link)).reshape(3, 3)
+    return np.array(posisi_link) + rot @ sim.poros_badan
+
+
 def main():
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--plot", action="store_true")              # bawaan sekarang: plot selalu dibuka
@@ -309,11 +705,13 @@ def main():
     waktu_ukur = time.time()
     siklus_ukur = 0
     kecepatan = 1.0
+    tombol_tertunda = []           # tombol yang ditekan saat FREEZE FOTO, diproses di siklus berikutnya
 
     try:
         while sim.masih_terbuka():
             # ----------------------------------------------------------- keyboard
-            tombol_baru = sim.baca_keyboard()
+            tombol_baru = sim.baca_keyboard() + tombol_tertunda
+            tombol_tertunda = []
             # Parameter dibaca sesudah keyboard dan sebelum tombol diproses, supaya gaya dorong yang
             # dicetak saat O / P ditekan adalah nilai terbaru dari jendela Kontrol.
             params = sim.baca_params()
@@ -322,15 +720,23 @@ def main():
                 print("Tombol Q: keluar dan simpan.")
                 break
 
-            # ------------------------------------------- PENGUJIAN OTOMATIS (tombol U)
-            if "u" in tombol_baru:
-                alasan = uji_otomatis.cek_siap(cbf)
+            # ------------------------------- PENGUJIAN OTOMATIS (tombol U) / FOTO PENGUJIAN (tombol 6 / 7)
+            jenis_foto = None
+            for kunci in (FOTO_PUKUL, FOTO_MIRING):
+                if kunci in tombol_baru:
+                    jenis_foto = kunci
+            if "u" in tombol_baru or jenis_foto is not None:
+                nama_uji = "PENGUJIAN OTOMATIS" if jenis_foto is None else "FOTO PENGUJIAN"
+                if jenis_foto is None:
+                    alasan = uji_otomatis.cek_siap(cbf)
+                else:
+                    alasan = "" if cbf is not None else "CBF-QP gagal disiapkan (lihat pesan saat program mulai)."
                 if alasan != "":
-                    print("PENGUJIAN OTOMATIS tidak bisa dimulai: %s" % alasan)
+                    print("%s tidak bisa dimulai: %s" % (nama_uji, alasan))
                 else:
                     # Yang sedang berjalan disimpan / dibatalkan dulu (sama seperti mengganti mode kontrol).
                     if pengujian_berjalan:
-                        print("PENGUJIAN (T) disimpan dulu sebelum PENGUJIAN OTOMATIS.")
+                        print("PENGUJIAN (T) disimpan dulu sebelum %s." % nama_uji)
                         simpan_uji(perekam_uji)
                         pengujian_berjalan = False
                     if banding_berjalan:
@@ -342,7 +748,10 @@ def main():
                     else:
                         simpan_ise(perekam)
                     sim.plot_tahan = False
-                    hasil_uji = uji_otomatis.UjiOtomatis(sim, pd, cbf, params).jalankan()
+                    if jenis_foto is None:
+                        hasil_uji = uji_otomatis.UjiOtomatis(sim, pd, cbf, params).jalankan()
+                    else:
+                        hasil_uji, tombol_tertunda = FotoPengujian(sim, pd, cbf, params, mode, jenis_foto).jalankan()
                     # Kembali ke keadaan biasa: mode kontrol sebelum U, robot diletakkan ulang, constraint dari
                     # kotak centang, psi_max / Alpha / gain dari jendela Kontrol (siklus berikutnya).
                     sim.atur_mode(mode)
@@ -353,7 +762,7 @@ def main():
                     mask_dipakai = None
                     waktu_berikutnya = time.time()
                     if hasil_uji == uji_otomatis.KELUAR:
-                        print("Tombol Q saat PENGUJIAN OTOMATIS: keluar.")
+                        print("Tombol Q saat %s: keluar." % nama_uji)
                         break
                     print("Kembali ke mode biasa: %s, robot diletakkan ulang." % mode)
                     continue
